@@ -1,0 +1,8 @@
+
+==============================================================================
+musl libc
+
+Linked into the binary by the x86_64-unknown-linux-musl target. Not a crate,
+so cargo-about does not see it. Upstream: https://musl.libc.org
+==============================================================================
+

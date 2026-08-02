@@ -1,0 +1,109 @@
+Name: cockpit-shr-rs
+Version: %{VERSION}
+Release: 1%{?dist}
+Summary: Cockpit dashboard for the SHR-RS RAID manager
+License: LGPL-2.1-or-later
+URL: https://github.com/heavycaffeiner/shr-rs
+
+# distributions which ship nodejs-esbuild can rebuild the bundle during package build
+%if 0%{?fedora} >= 42
+%define rebuild_bundle 1
+%endif
+
+Source0: %{name}-%{version}.tar.xz
+# Only the rebuild_bundle path below unpacks the node cache. Declaring it
+# unconditionally would make rpmbuild demand the file on EL9 too, where it is
+# never read -- and where it cannot even be produced: Cockpit's
+# `tools/node-modules runtime-tar` rejects any package whose files `file --mime`
+# calls architecture dependent, and EL9's file(1) reports PatternFly's
+# patternfly.css / patternfly-base.css as application/csv.
+%if %{defined rebuild_bundle}
+Source1: %{name}-node-%{version}.tar.xz
+%endif
+
+BuildArch: noarch
+# %%{nodejs_arches} comes from nodejs-srpm-macros, which is only in the
+# buildroot when the bundle is rebuilt here. Everywhere else this build never
+# touches node, and an undefined macro would be left literal and fail the
+# parse -- EL10 has no nodejs-srpm-macros by default.
+%if %{defined rebuild_bundle} && ! 0%{?suse_version}
+ExclusiveArch: %{nodejs_arches} noarch
+%endif
+BuildRequires: make
+BuildRequires: gettext
+# appstream-util only validates the metainfo file in %%check; it produces
+# nothing that ends up in the package. rpmbuild enforces BuildRequires, so
+# naming it where it does not exist -- EL10 ships no libappstream-glib in the
+# default buildroot -- would fail the build over an optional check. Required
+# only where it is known to be present; %%check skips itself otherwise.
+%if 0%{?suse_version}
+# Suse's package has a different name
+BuildRequires: appstream-glib
+%else
+%if 0%{?fedora} || 0%{?rhel} == 9
+BuildRequires: libappstream-glib
+%endif
+%endif
+%if 0%{?rhel} && 0%{?rhel} <= 8
+BuildRequires: libappstream-glib-devel
+%endif
+%if %{defined rebuild_bundle}
+BuildRequires: /usr/bin/node
+BuildRequires: nodejs-esbuild
+%endif
+
+Requires: cockpit-bridge
+Requires: shr-rs
+
+%{NPM_PROVIDES}
+
+%description
+Cockpit web dashboard for the SHR-RS RAID manager: live drive, mdadm array,
+group and band panels with per-band sync progress and scrub history, plus a
+group-creation wizard and an operations panel (scrub, expand, disk replace,
+recompress, snapshot, schedule install, destroy).
+
+Every destructive action requires a dry-run preview first and confirmation by
+typing the exact group name, and runs with superuser: "require" -- so an
+unprivileged Cockpit session cannot reach any write path.
+
+%prep
+%autosetup -n %{name}
+%if %{defined rebuild_bundle}
+%setup -q -D -T -a 1 -n %{name}
+%endif
+
+%build
+%if %{defined rebuild_bundle}
+rm -rf dist
+# HACK: node module packaging is broken in Fedora ≤ 43; should be in
+# common location, not major version specific one
+NODE_ENV=production NODE_PATH=/usr/lib/node_modules:$(echo /usr/lib/node_modules_*) ./build.js
+%else
+# Use pre-built bundle on distributions without nodejs-esbuild
+%endif
+
+
+%install
+%make_install PREFIX=/usr
+
+# drop source maps, they are large and just for debugging
+find %{buildroot}%{_datadir}/cockpit/ -name '*.map' | xargs --no-run-if-empty rm --verbose
+
+%check
+# Guarded, not required: see the BuildRequires comment above. cockpit/Makefile
+# guards the identical call the same way when it builds the dist tarball.
+if command -v appstream-util >/dev/null 2>&1; then
+    appstream-util validate-relax --nonet %{buildroot}/%{_datadir}/metainfo/*
+fi
+
+# this can't be meaningfully tested during package build; tests happen through
+# FMF (see plans/all.fmf) during package gating
+
+%files
+%doc README.md
+%license LICENSE dist/THIRD-PARTY-NOTICES.txt dist/index.js.LEGAL.txt
+%{_datadir}/cockpit/*
+%{_datadir}/metainfo/*
+
+%changelog

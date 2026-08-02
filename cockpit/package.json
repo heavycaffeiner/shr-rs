@@ -1,0 +1,53 @@
+{
+  "name": "shr-rs",
+  "description": "Cockpit dashboard for the SHR-RS RAID manager",
+  "type": "module",
+  "main": "index.js",
+  "author": "heavycaffeiner",
+  "license": "LGPL-2.1-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/heavycaffeiner/shr-rs.git"
+  },
+  "engines": {
+    "node": ">= 22.18.0"
+  },
+  "scripts": {
+    "watch": "node ./build.js --watch",
+    "build": "node ./build.js",
+    "test": "node --test src/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "eslint": "eslint src/",
+    "eslint:fix": "eslint --fix src/"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "18.3.13",
+    "@types/react-dom": "18.3.1",
+    "@types/react-test-renderer": "18.3.1",
+    "@typescript-eslint/eslint-plugin": "8.63.0",
+    "esbuild-wasm": "0.28.1",
+    "eslint": "8.57.1",
+    "eslint-config-standard": "17.1.0",
+    "eslint-config-standard-jsx": "11.0.0",
+    "eslint-config-standard-react": "13.0.0",
+    "eslint-plugin-import": "2.32.0",
+    "eslint-plugin-node": "11.1.0",
+    "eslint-plugin-promise": "6.6.0",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "4.6.2",
+    "qunit": "2.26.0",
+    "react-test-renderer": "18.3.1",
+    "typescript": "6.0.3"
+  },
+  "dependencies": {
+    "@patternfly/patternfly": "6.6.0",
+    "@patternfly/react-core": "6.6.0",
+    "@patternfly/react-icons": "6.6.0",
+    "@patternfly/react-styles": "6.6.0",
+    "@patternfly/react-table": "6.6.0",
+    "esbuild": "0.28.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

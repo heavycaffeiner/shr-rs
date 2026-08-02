@@ -1,0 +1,411 @@
+# This file must live at the repository root -- GitHub reads workflows only
+# from the top-level .github/, never from a subdirectory.
+#
+# Shape:
+#
+#   meta ─┬─ binary (musl)  ─┬─ rpm [el9, el10] ─┐
+#         └─ plugin (node)  ─┼─ deb  (debian)    ┼─ release
+#                            └─ arch (archlinux) ┘
+#
+# Everything downstream of `binary` and `plugin` is packaging metadata around
+# two artifacts that are already built: a statically linked musl binary, which
+# is correct on every distribution, and a prebuilt JavaScript bundle, which is
+# noarch/all/any. That is why one build feeds four package families.
+#
+# The bundle is built on the runner rather than inside a distro container
+# because package.json requires node >= 22.18.0: Debian 12 ships 18, and EL10
+# has no `dnf module` to switch streams with. Building it once also guarantees
+# every package ships byte-identical JavaScript.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+  # Validate the whole matrix without cutting a tag. The `release` job is
+  # gated on the push event, so a dispatch run builds and smoke-installs
+  # everything and publishes nothing.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp packages with (digits and dots only)'
+        required: false
+        default: '0.0.0'
+
+permissions:
+  contents: read
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          if [ "$EVENT" = push ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="$INPUT_VERSION"
+          fi
+          # rpm Version:, Arch pkgver and a deb upstream version all forbid a
+          # dash, and rpm additionally forbids most punctuation. Rejecting it
+          # here beats discovering it three jobs later, and keeps a dispatch
+          # input out of any shell that follows.
+          case "$V" in
+            ''|*[!0-9.]*) echo "invalid version: '$V'" >&2; exit 1 ;;
+          esac
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+  # Ubuntu, not one of the containers below: this repo builds with rustup and
+  # the musl target, which no distro's packaged rust carries.
+  binary:
+    runs-on: ubuntu-latest
+    needs: meta
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up the musl target
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          rustup component add clippy
+          # .cargo/config.toml links the musl target with rust-lld, which ships
+          # inside the toolchain rather than on PATH.
+          echo "$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin" >> "$GITHUB_PATH"
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --release --target x86_64-unknown-linux-musl --workspace
+
+      # The binary is statically linked, so every crate in the graph is
+      # redistributed inside it and MIT/Apache-2.0 both require their notices
+      # come along. Generated here from the Cargo.lock being shipped rather
+      # than committed, so it cannot describe a dependency set that no longer
+      # exists. about.toml pins the target and the accepted license set: a new
+      # dependency under anything unvetted fails this step.
+      #
+      # --features cli is not optional -- cargo-about's binary is behind it,
+      # and `cargo install cargo-about` alone installs no executable at all.
+      - name: Generate third-party notices
+        run: |
+          set -eux
+          cargo install cargo-about --locked --features cli
+          cargo about generate --config about.toml about.hbs -o THIRD-PARTY-NOTICES.txt
+          # musl libc is linked in as well, and cargo-about only sees crates.
+          # The header lives in its own file rather than a heredoc: this is a
+          # YAML block scalar, so an unindented delimiter would end it early
+          # and the workflow would not parse at all.
+          cat packaging/notices/musl-HEADER.txt \
+              packaging/notices/musl-COPYRIGHT.txt >> THIRD-PARTY-NOTICES.txt
+
+      # Assembled once here rather than per packaging job: this tarball is the
+      # rpm Source0, the Arch source=(), the input to build-deb.sh, and a
+      # release artifact in its own right.
+      - name: Assemble the engine tarball
+        run: |
+          set -eux
+          D="shr-rs-${VERSION}"
+          mkdir -p "$D/packaging"
+          install -m0755 target/x86_64-unknown-linux-musl/release/shr-rs "$D/shr-rs"
+          cp packaging/shr-rs.service "$D/packaging/"
+          cp README.md LICENSE-MIT LICENSE-APACHE THIRD-PARTY-NOTICES.txt "$D/"
+          tar czf "${D}-x86_64.tar.gz" "$D"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-tarball
+          path: shr-rs-*-x86_64.tar.gz
+          if-no-files-found: error
+
+  # The Cockpit dist tarball, which carries dist/, the generated rpm spec and
+  # the generated Arch PKGBUILD -- everything the three packaging jobs need.
+  plugin:
+    runs-on: ubuntu-latest
+    needs: meta
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # cockpit/Makefile packs `git ls-files` and dates the tarball with
+          # `git show --format=%at`.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check
+        working-directory: cockpit
+        run: |
+          set -eux
+          npm install --ignore-scripts
+          npm test
+          npm run typecheck
+          npm run eslint
+
+      # VERSION is overridden because the Makefile derives it from
+      # `git describe`, which would yield the tag verbatim ("v0.1.0").
+      - name: Build the dist tarball
+        working-directory: cockpit
+        run: make dist VERSION="${VERSION}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-tarball
+          path: cockpit/cockpit-shr-rs-*.tar.xz
+          if-no-files-found: error
+
+  rpm:
+    runs-on: ubuntu-latest
+    needs: [meta, binary, plugin]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - el: 9
+            image: quay.io/centos/centos:stream9
+          - el: 10
+            image: quay.io/centos/centos:stream10
+    container:
+      image: ${{ matrix.image }}
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - name: Install build tooling
+        run: |
+          set -eux
+          # git must land before actions/checkout, or checkout falls back to a
+          # tarball download.
+          dnf -y install rpm-build systemd-rpm-macros make gawk sed diffutils \
+                         gettext git-core xz tar findutils
+          # Optional: appstream-util validates the plugin's metainfo file in
+          # %check, and both the spec and cockpit/Makefile skip that check
+          # when it is missing. Not in the EL10 default buildroot.
+          dnf -y install libappstream-glib || true
+
+      - uses: actions/checkout@v4
+
+      - name: Pacify git's repository ownership check
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-tarball
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-tarball
+
+      - name: Build the shr-rs RPM
+        run: |
+          set -eux
+          sed "s/%{VERSION}/${VERSION}/" packaging/shr-rs.spec.in > shr-rs.spec
+          rpmbuild -bb \
+            --define "_sourcedir $PWD" \
+            --define "_rpmdir $PWD/out" \
+            --define "_builddir $PWD/rpmbuild" \
+            --define "_buildrootdir $PWD/buildroot" \
+            shr-rs.spec
+
+      # The spec is generated by cockpit/Makefile (it interpolates the version
+      # and the bundled-npm Provides) and travels inside the dist tarball, so
+      # it is unpacked from there rather than regenerated without node.
+      - name: Build the cockpit-shr-rs RPM
+        run: |
+          set -eux
+          tar xf "cockpit-shr-rs-${VERSION}.tar.xz" --strip-components=1 \
+            cockpit-shr-rs/cockpit-shr-rs.spec
+          rpmbuild -bb \
+            --define "_sourcedir $PWD" \
+            --define "_rpmdir $PWD/out" \
+            --define "_builddir $PWD/rpmbuild" \
+            --define "_buildrootdir $PWD/buildroot" \
+            cockpit-shr-rs.spec
+
+      - name: Collect
+        run: |
+          set -eux
+          mkdir -p artifacts
+          find out -name '*.rpm' -exec mv -v {} artifacts/ \;
+          ls -l artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-el${{ matrix.el }}
+          path: artifacts/*
+          if-no-files-found: error
+
+  deb:
+    runs-on: ubuntu-latest
+    needs: [meta, binary, plugin]
+    container:
+      image: debian:13-slim
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Install build tooling
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git make gettext xz-utils tar findutils
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-tarball
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-tarball
+
+      - name: Build the .deb packages
+        run: |
+          set -eux
+          packaging/build-deb.sh "$VERSION" \
+            "shr-rs-${VERSION}-x86_64.tar.gz" \
+            "cockpit-shr-rs-${VERSION}.tar.xz" \
+            artifacts
+
+      # The real check that every name in Depends: exists on Debian -- a
+      # hand-written control file has nothing else to catch a typo.
+      - name: Smoke-install
+        run: |
+          set -eux
+          apt-get install -y --no-install-recommends ./artifacts/*.deb
+          shr-rs --version
+          test -f /usr/share/cockpit/shr-rs/manifest.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-deb
+          path: artifacts/*
+          if-no-files-found: error
+
+  arch:
+    runs-on: ubuntu-latest
+    needs: [meta, binary, plugin]
+    container:
+      image: archlinux:base-devel
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - name: Install build tooling
+        run: |
+          set -eux
+          # -Syu, not -Sy: a partial upgrade against a stale image database is
+          # the one thing pacman does not survive.
+          pacman -Syu --noconfirm --needed git
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-tarball
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-tarball
+
+      - name: Build the packages
+        run: |
+          set -eux
+          mkdir -p build/engine build/plugin artifacts
+          sed "s/VERSION/${VERSION}/; s|SOURCE|shr-rs-${VERSION}-x86_64.tar.gz|" \
+            packaging/arch/PKGBUILD.in > build/engine/PKGBUILD
+          cp "shr-rs-${VERSION}-x86_64.tar.gz" build/engine/
+          # The plugin's PKGBUILD is generated by cockpit/Makefile and ships
+          # inside the dist tarball, same as its spec.
+          tar xf "cockpit-shr-rs-${VERSION}.tar.xz" -C build/plugin \
+            --strip-components=3 cockpit-shr-rs/packaging/arch/PKGBUILD
+          cp "cockpit-shr-rs-${VERSION}.tar.xz" build/plugin/
+          # makepkg refuses to run as root. --nodeps because the declared
+          # dependencies are runtime-only and one of them (shr-rs) is being
+          # built in this same job; `pacman -U` below checks them for real.
+          useradd -m builder
+          chown -R builder:builder build
+          for d in engine plugin; do
+            runuser -u builder -- sh -c "cd '$PWD/build/$d' && makepkg --noconfirm --nodeps"
+          done
+          mv build/*/*.pkg.tar.zst artifacts/
+          ls -l artifacts
+
+      - name: Smoke-install
+        run: |
+          set -eux
+          pacman -U --noconfirm artifacts/*.pkg.tar.zst
+          shr-rs --version
+          test -f /usr/share/cockpit/shr-rs/manifest.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-arch
+          path: artifacts/*
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [meta, rpm, deb, arch]
+    # A workflow_dispatch run stops here: it exists to prove the matrix
+    # builds, not to publish.
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksum
+        working-directory: artifacts
+        run: |
+          set -eux
+          ls -l
+          sha256sum * | tee SHA256SUMS
+
+      - name: Publish
+        run: |
+          set -eux
+          # actions/checkout fetches the tag as `+<commit-sha>:refs/tags/<tag>`,
+          # so the workspace gets a *lightweight* tag even when the remote has an
+          # annotated one. `%(contents)` then falls through to the target
+          # commit's message and quietly publishes that as the release notes.
+          # Re-fetch the tag ref itself to get the real tag object back.
+          git fetch --force origin \
+            "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          # Only an annotated tag carries a message. `contents`, not
+          # `contents:body`: git treats the first paragraph as the subject and
+          # `:body` would silently drop it from the notes.
+          if [ "$(git cat-file -t "$GITHUB_REF_NAME")" = tag ]; then
+            git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.txt
+          else
+            : > notes.txt
+          fi
+          if [ -s notes.txt ]; then
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" \
+              --notes-file notes.txt artifacts/*
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" \
+              --generate-notes artifacts/*
+          fi

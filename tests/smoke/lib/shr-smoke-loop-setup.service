@@ -1,0 +1,23 @@
+[Unit]
+Description=shr-rs smoke test: reattach loopback disks (SM-REBOOT-1 only)
+DefaultDependencies=no
+After=local-fs.target systemd-udev-settle.service
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/shr-smoke-loop-setup.sh
+# This is boot-time storage work (mdadm assembly + LVM activation) on a
+# TCG-emulated guest, where disk I/O is very slow. systemd's default 90s
+# TimeoutStartSec previously SIGTERM'd this unit mid-`mdadm --assemble
+# --scan` (observed on the real guest when a reboot landed during the
+# array's initial resync), so `vgscan`/`vgchange -ay`/`mount -a` never ran
+# and the filesystem never got mounted. Disabling the timeout is safe here
+# specifically because this unit is Before=multi-user.target and is only
+# ever installed by the SM-REBOOT-1 fixture, not something a real
+# deployment installs.
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

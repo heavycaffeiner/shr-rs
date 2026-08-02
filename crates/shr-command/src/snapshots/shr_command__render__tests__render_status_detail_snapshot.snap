@@ -1,0 +1,19 @@
+---
+source: crates/shr-command/src/render.rs
+expression: render_status_detail(&status_detail_fixture())
+---
+SHR-RS status (detail): DEGRADED
+
+Disks (3):
+  NODE            SIZE  MODEL               SERIAL          SMART TEMP    POWERON  PEND REALLOC  UNCORR
+  sdb           4.0 TB  WD Red Plus         WD-SERIAL-B     WARN  38C      10000h     1       0       0
+  sdc           8.0 TB  Seagate Exos X18 A >SEAGATE-SERIAL->ok    35C        500h     0       0       0
+  sdd           2.0 TB  Spare               SPARE-D         ?     -             ?     ?       ?       ?
+
+Groups (1):
+  default (mode=shr, disks=2, compression=zstd:3) -> /mnt/shr_data
+    band0  raid5  md0             8.0 TB  members: sdb1, sdc1  [recover 42.5%, finish ~12.3 min]  last scrub completed at 2026-07-01T00:00:00Z (0 errors)
+    band1  raid1  md1             4.0 TB [expansion unfinished]  members: sdd1(F)  [idle]  scrub running; last scrub FAILED at 2026-06-15T12:00:00Z (3 errors)  pending-removal: sdd1 (its replace copy is still finishing -- not a new fault)
+
+Unassigned disks (1): 2.0 TB not backing any array
+    sdd       2.0 TB

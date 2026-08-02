@@ -1,0 +1,15 @@
+---
+source: crates/shr-command/src/render.rs
+expression: "render_layout_diagram(&disks, &out)"
+---
+Layout diagram (DRY RUN)
+
+  # data   + parity   . stranded (no redundancy)   ~ reserved/alignment
+
+  BIG1              8.0 TB  [###############+++++##########++++++++++]
+  BIG2              8.0 TB  [###############+++++##########++++++++++]
+  SMALL1            4.0 TB  [###############+++++                    ]
+  SMALL2            4.0 TB  [###############+++++                    ]
+
+  band0  raid5  members: SMALL1, SMALL2, BIG1, BIG2
+  band1  raid1  members: BIG1, BIG2

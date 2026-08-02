@@ -1,0 +1,7 @@
+---
+source: crates/shr-command/src/render.rs
+assertion_line: 1025
+expression: render_disk_list(&status_fixture())
+---
+Disks (1):  NODE      ID                              SIZE  MODEL                   SERIAL          ROTA  SYSTEM  ARRAYS
+             sdb       ata-DISK1                     4.0 TB  WD Red Plus             WD-SERIAL-B     HDD   -       md0

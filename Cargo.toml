@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/shr-core",
+    "crates/shr-inspect",
+    "crates/shr-command",
+    "crates/shr-cli",
+    "crates/shr-tui",
+    "crates/shr-exec",
+    "crates/shr-state",
+    "crates/shr-orchestrate",
+    "crates/shr-bin",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+authors = ["heavycaffeiner"]
+rust-version = "1.88"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+toml = "0.8"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
+crossterm = "0.29"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+libc = "0.2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# dev / test
+proptest = "1"
+rstest = "0.18"
+insta = "1"
+tempfile = "3"
+

@@ -1,0 +1,24 @@
+{
+  "packages": {
+    "@patternfly/patternfly": {
+      "note": "The npm tarball ships no license file. Text below is the LICENSE.txt of the upstream repository (github.com/patternfly/patternfly) for the same release line, and matches the `license` field of the published package. This entry also covers PatternFly's own binary assets emitted into dist/assets: the pf-v6-pficon webfont and the PF-Bkg-Generic / Felt-Bkg-Generic background SVGs. The third-party faces PatternFly carries are listed separately below.",
+      "file": "patternfly-LICENSE.txt"
+    }
+  },
+  "assets": [
+    {
+      "name": "Red Hat Display, Red Hat Text, Red Hat Mono (variable webfonts)",
+      "license": "OFL-1.1",
+      "origin": "Bundled by @patternfly/patternfly and emitted verbatim as dist/assets/RedHat{Display,Text,Mono}VF*.woff2. Upstream: github.com/RedHatOfficial/RedHatFont",
+      "note": "Reserved Font Name \"Red Hat\": the fonts are redistributed unmodified and under their original names.",
+      "file": "RedHatFont-LICENSE.txt"
+    },
+    {
+      "name": "Font Awesome Free (solid webfont)",
+      "license": "OFL-1.1 (font) / CC-BY-4.0 (icons) / MIT (code)",
+      "origin": "Bundled by @patternfly/patternfly as the \"Font Awesome 5 Free\" @font-face and emitted verbatim as dist/assets/fa-solid-900-*.woff2. Upstream: fontawesome.com",
+      "note": "Only the font file is redistributed. Its terms are the SIL OFL 1.1, whose full text is reproduced in the Red Hat fonts entry above; the Reserved Font Name is \"Font Awesome\" and the file is unmodified.",
+      "file": "FontAwesomeFree-LICENSE.txt"
+    }
+  ]
+}

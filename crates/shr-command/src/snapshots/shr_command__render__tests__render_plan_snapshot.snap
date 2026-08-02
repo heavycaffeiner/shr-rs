@@ -1,0 +1,14 @@
+---
+source: crates/shr-command/src/render.rs
+assertion_line: 369
+expression: render_plan(&plan_fixture())
+---
+Planned layout (mode: shr, DRY RUN)
+
+  BAND   LEVEL         SLICE MEMBERS      USABLE
+  band0  raid5        4.0 TB       3      8.0 TB
+
+  Usable 8.0 TB   Parity 4.0 TB   Stranded 500.0 GB   Raw 12.0 TB
+  [##########################++++++++++++++]  (38% wasted)
+
+  ! ata-DISK3: 500000000000 B stranded (no redundancy)

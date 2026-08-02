@@ -1,0 +1,19 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: shr-rs
+Source: https://github.com/heavycaffeiner/shr-rs
+
+Files: *
+Copyright: heavycaffeiner
+License: MIT or Apache-2.0
+ Dual licensed at your option. The full texts are shipped alongside this file
+ as /usr/share/doc/shr-rs/LICENSE-MIT and /usr/share/doc/shr-rs/LICENSE-APACHE;
+ the Apache-2.0 text is also at /usr/share/common-licenses/Apache-2.0.
+
+Files: usr/bin/shr-rs
+Copyright: see /usr/share/doc/shr-rs/THIRD-PARTY-NOTICES.txt
+License: MIT and Apache-2.0 and Unicode-3.0 and Zlib
+ The binary is statically linked against musl libc and roughly 120 Rust
+ crates, all under permissive terms. Every one of them, with its copyright
+ notice and license text, is listed in
+ /usr/share/doc/shr-rs/THIRD-PARTY-NOTICES.txt, generated at build time from
+ the exact dependency set that was linked.

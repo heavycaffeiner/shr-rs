@@ -1,0 +1,31 @@
+# Generated into packaging/arch/PKGBUILD by cockpit/Makefile, which sed-swaps
+# the two placeholder tokens below for the version and the tarball name. That
+# sed runs over every line, so those two words must not appear anywhere else.
+pkgname=cockpit-shr-rs
+pkgver=VERSION
+pkgrel=1
+pkgdesc='Cockpit dashboard for the SHR-RS RAID manager'
+# Prebuilt JavaScript -- nothing in the payload is architecture specific.
+arch=('any')
+url='https://github.com/heavycaffeiner/shr-rs'
+license=('LGPL-2.1-or-later')
+depends=(cockpit shr-rs)
+# package() runs `make install`, which needs msgfmt from gettext.
+makedepends=(make gettext)
+source=("SOURCE")
+sha256sums=('SKIP')
+
+package() {
+  cd "$pkgname"
+  make DESTDIR="$pkgdir" install PREFIX=/usr
+  # Source maps are large and only useful when debugging the bundle, matching
+  # what the rpm spec drops in %install.
+  find "$pkgdir/usr/share/cockpit" -name '*.map' -delete
+  install -Dm0644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  # Bundled third-party code and webfonts; their terms require the notices
+  # travel with the binaries. Same pair the rpm puts in %license.
+  install -Dm0644 dist/THIRD-PARTY-NOTICES.txt \
+    "$pkgdir/usr/share/licenses/$pkgname/THIRD-PARTY-NOTICES.txt"
+  install -Dm0644 dist/index.js.LEGAL.txt \
+    "$pkgdir/usr/share/licenses/$pkgname/index.js.LEGAL.txt"
+}

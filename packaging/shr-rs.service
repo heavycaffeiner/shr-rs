@@ -1,0 +1,27 @@
+[Unit]
+# This runs `shr-rs daemon`, which is a state TAILER, not a monitoring
+# daemon -- it re-reads state.toml every 10s and prints it. It detects
+# nothing, runs no background task, and reacts to nothing. The old
+# Description ("SHR-RS RAID Management Daemon") claimed otherwise and would
+# leave an operator who enabled this believing their array was being watched.
+#
+# The periodic work that actually keeps a group healthy -- scrub scheduling,
+# reshape throttling, health checks, snapshot automation -- is installed by
+# `shr-rs schedule install`, which creates its own systemd timers
+# (shr-rs-throttle-tick.timer, shr-rs-health-check.timer,
+# shr-rs-snapshot-auto.timer, and per-group shr-rs-scrub-*.timer). This unit
+# is NOT a substitute for that, and enabling it is not required.
+Description=SHR-RS state tailer (prints state.toml every 10s; NOT a monitor)
+Documentation=https://github.com/heavycaffeiner/shr-rs
+After=network.target local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/shr-rs daemon
+Restart=always
+RestartSec=5
+User=root
+WorkingDirectory=/
+
+[Install]
+WantedBy=multi-user.target

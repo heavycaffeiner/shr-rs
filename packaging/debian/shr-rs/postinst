@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+# daemon-reload only. shr-rs.service is shipped but deliberately NOT enabled,
+# which is the opposite of the usual Debian convention -- so, to stop a later
+# reader from "fixing" it: the unit is a state tailer that reprints
+# state.toml every 10 seconds. It detects nothing and acts on nothing.
+# Everything periodic that actually keeps a group healthy (scrub scheduling,
+# reshape throttling, health checks, snapshots) is installed at runtime by
+# `shr-rs schedule install`, which creates its own timers and is not owned by
+# this package. The rpm behaves the same way (%systemd_post only applies
+# presets).
+if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null 2>&1 || true
+fi

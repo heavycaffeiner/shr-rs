@@ -1,0 +1,22 @@
+[package]
+name = "shr-orchestrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+shr-core = { path = "../shr-core" }
+shr-inspect = { path = "../shr-inspect" }
+shr-exec = { path = "../shr-exec" }
+shr-state = { path = "../shr-state" }
+shr-command = { path = "../shr-command" }
+thiserror.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tracing-subscriber.workspace = true

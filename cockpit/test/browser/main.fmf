@@ -1,0 +1,10 @@
+summary:
+    Run browser integration tests on the host
+require:
+  - cockpit-shr-rs
+  - shr-rs
+  - podman
+  - cockpit-ws
+  - cockpit-system
+test: ./browser.sh
+duration: 60m

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+# The unit file is gone by now; tell systemd so it stops listing it.
+# /var/lib/shr-rs is left in place on purge: it holds state.toml, which is the
+# only record of which mdadm arrays and LVM volumes belong to which group.
+# Deleting it would orphan a live array.
+if [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null 2>&1 || true
+fi

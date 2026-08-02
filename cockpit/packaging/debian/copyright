@@ -1,0 +1,20 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: cockpit-shr-rs
+Source: https://github.com/heavycaffeiner/shr-rs
+
+Files: *
+Copyright: heavycaffeiner
+License: LGPL-2.1-or-later
+ This package derives from the Cockpit starter-kit and keeps its licence. The
+ full text is shipped alongside this file as
+ /usr/share/doc/cockpit-shr-rs/LICENSE, and also at
+ /usr/share/common-licenses/LGPL-2.1.
+
+Files: usr/share/cockpit/shr-rs/*
+Copyright: see /usr/share/doc/cockpit-shr-rs/THIRD-PARTY-NOTICES.txt
+License: MIT and OFL-1.1 and CC-BY-4.0 and 0BSD
+ The shipped bundle compiles in PatternFly, React and their dependencies, and
+ carries the Red Hat and Font Awesome Free webfonts verbatim. Every bundled
+ module and asset, with its license text, is listed in
+ /usr/share/doc/cockpit-shr-rs/THIRD-PARTY-NOTICES.txt, generated at build
+ time from the modules the bundler actually resolved.

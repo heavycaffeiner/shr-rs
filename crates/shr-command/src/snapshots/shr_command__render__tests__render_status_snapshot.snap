@@ -1,0 +1,15 @@
+---
+source: crates/shr-command/src/render.rs
+expression: render_status(&status_fixture())
+---
+SHR-RS status: ▲ DEGRADED
+
+Disks (1):  NODE            SIZE  MODEL                   SMART     TEMP    ARRAYS
+             sdb           4.0 TB  WD Red Plus             WARN      38C     md0
+
+Arrays (1): NAME    LEVEL   STATE     DISKS   PROGRESS
+             md0     raid5   clean,degraded2/3     recover 42.5%
+
+Groups (1): NAME      MODE    DISKS   USABLE    MOUNT
+             default   shr     1       8.0 TB    /mnt/shr_data [expansion unfinished]
+                 band0  raid5   md0               8.0 TB [expansion unfinished]

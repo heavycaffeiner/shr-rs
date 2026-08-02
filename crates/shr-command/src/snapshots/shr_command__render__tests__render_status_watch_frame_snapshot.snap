@@ -1,0 +1,10 @@
+---
+source: crates/shr-command/src/render.rs
+assertion_line: 1289
+expression: "render_status_watch_frame(&watch_fixture(), &meta)"
+---
+SHR-RS status (watch): DEGRADED                                         
+                                                                        
+Arrays (2):                                                             
+  md0     [#########...........] recover 42.5%, finish ~12.3m           
+  md1     [                    ] idle

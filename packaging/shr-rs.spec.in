@@ -1,0 +1,94 @@
+Name: shr-rs
+Version: %{VERSION}
+Release: 1%{?dist}
+Summary: Sliced Hybrid RAID (SHR/SHR-2) manager over mdadm, LVM and Btrfs
+License: MIT OR Apache-2.0
+URL: https://github.com/heavycaffeiner/shr-rs
+Source0: %{name}-%{version}-x86_64.tar.gz
+
+# Source0 carries a statically linked musl binary cross-built by the release
+# workflow (.github/workflows/release.yml), not a source tree: this project
+# is developed on Windows and has no in-package cargo build. Hence no
+# debuginfo subpackage -- there is nothing for rpm to extract it from.
+ExclusiveArch: x86_64
+%global debug_package %{nil}
+
+BuildRequires: systemd-rpm-macros
+
+# Runtime dependencies are the external commands the engine actually shells
+# out to, counted from the source rather than guessed: mdadm, parted,
+# lsblk/blkid (util-linux), the lvm2 family, curl (webhook delivery), and
+# systemctl/udevadm (systemd).
+#
+# btrfs-progs and smartmontools are Recommends, NOT Requires. btrfs-progs
+# lives in EPEL on both EL9 and EL10, so a hard dependency would make this
+# package uninstallable on a stock Rocky/RHEL -- and installing it there would
+# not help anyway, because the stock kernel ships no btrfs module either (see
+# README's Btrfs note for the kernel-lt route). mdadm and LVM management,
+# which is most of what this tool does, works without either.
+Requires: mdadm
+Requires: lvm2
+Requires: parted
+Requires: util-linux
+Requires: curl
+Requires: systemd
+Recommends: btrfs-progs
+Recommends: smartmontools
+
+%description
+shr-rs manages SHR -- Sliced Hybrid RAID -- pools of mixed-capacity disks on
+the standard Linux stack. Disks are sliced into offset-aligned bands, each band
+becomes its own mdadm array, the arrays are concatenated by LVM, and Btrfs sits
+on top -- so disks of differing sizes contribute their full capacity and the
+array can be expanded online.
+
+It provides create/expand with journaled rollback and crash resume, scrub
+(mdadm check plus Btrfs), disk replacement, SMART monitoring, transparent
+zstd recompression, snapshots with retention, an adaptive reshape throttle,
+and per-group systemd timers. Run it with no arguments for the interactive
+TUI, or with a subcommand for the scriptable CLI (add --json for
+schema-versioned machine-readable output).
+
+Install cockpit-shr-rs for the web dashboard.
+
+%prep
+%autosetup -n %{name}-%{version}
+
+%build
+# Nothing to build: Source0 is the release binary. See the comment on Source0.
+
+%install
+install -Dpm0755 shr-rs %{buildroot}%{_bindir}/shr-rs
+install -Dpm0644 packaging/shr-rs.service %{buildroot}%{_unitdir}/shr-rs.service
+install -dm0700 %{buildroot}%{_sharedstatedir}/shr-rs
+install -dm0755 %{buildroot}%{_sysconfdir}/shr-rs
+
+%check
+# Smoke-test the packaged artifact after rpm has stripped it. --version takes
+# the CLI path unconditionally (detect_ui_mode: any argument that is neither
+# --tui nor --no-tui means CLI), so this does not depend on a terminal.
+%{buildroot}%{_bindir}/shr-rs --version
+
+# shr-rs.service is a state tailer and is deliberately NOT enabled by default;
+# see the comment at the top of the unit. %%systemd_post only applies presets,
+# so shipping it stays inert unless an operator or a preset enables it. The
+# timers that do the real periodic work are created at runtime by
+# `shr-rs schedule install` and are not owned by this package.
+%post
+%systemd_post shr-rs.service
+
+%preun
+%systemd_preun shr-rs.service
+
+%postun
+%systemd_postun_with_restart shr-rs.service
+
+%files
+%license LICENSE-MIT LICENSE-APACHE THIRD-PARTY-NOTICES.txt
+%doc README.md
+%{_bindir}/shr-rs
+%{_unitdir}/shr-rs.service
+%dir %attr(0700,root,root) %{_sharedstatedir}/shr-rs
+%dir %{_sysconfdir}/shr-rs
+
+%changelog

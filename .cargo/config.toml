@@ -1,0 +1,10 @@
+# Cross-compile runnable Linux binaries from the Windows host with no external
+# toolchain: the musl target bundles its own libc and links with rust-lld,
+# producing a static-pie ELF.
+#
+#   cargo build --release --target x86_64-unknown-linux-musl
+#
+# Native `cargo test` (x86_64-pc-windows-msvc) is unaffected by this block and
+# stays the fast loop for the pure crates (shr-core, parsing, etc.).
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"

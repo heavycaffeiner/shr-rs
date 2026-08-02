@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>org.cockpit_project.shr_rs</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>SHR-RS</name>
+  <summary>Manage SHR-RS heterogeneous-capacity RAID</summary>
+  <description>
+    <p>
+      Inspect physical disks, SMART health, mdadm arrays, band layout and
+      synchronization progress through the SHR-RS schema-versioned status
+      command.
+    </p>
+    <p>
+      Create and expand SHR/SHR-2 groups through a guided wizard, and run
+      scrub, disk replacement, recompression, snapshots, schedule
+      installation and destroy from the operations panel. Destructive
+      actions require a dry-run preview and typed confirmation, and run
+      only with administrative access.
+    </p>
+  </description>
+  <extends>org.cockpit_project.cockpit</extends>
+  <launchable type="cockpit-manifest">shr-rs</launchable>
+  <!-- developer_name, not the AppStream 1.0 <developer><name>: the validator
+       that actually runs here is EL9's libappstream-glib appstream-util (in
+       `make dist` and again in the spec's %check), which predates that
+       element. appstreamcli still accepts this legacy form. -->
+  <developer_name>heavycaffeiner</developer_name>
+  <url type="homepage">https://github.com/heavycaffeiner/shr-rs</url>
+  <url type="bugtracker">https://github.com/heavycaffeiner/shr-rs/issues</url>
+</component>

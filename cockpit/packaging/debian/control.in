@@ -1,0 +1,17 @@
+Package: cockpit-shr-rs
+Version: %{VERSION}-1
+Section: admin
+Priority: optional
+Architecture: all
+Maintainer: heavycaffeiner <146043537+heavycaffeiner@users.noreply.github.com>
+Homepage: https://github.com/heavycaffeiner/shr-rs
+Depends: cockpit-bridge, shr-rs
+Description: Cockpit dashboard for the SHR-RS RAID manager
+ Cockpit web dashboard for the SHR-RS RAID manager: live drive, mdadm array,
+ group and band panels with per-band sync progress and scrub history, plus a
+ group-creation wizard and an operations panel (scrub, expand, disk replace,
+ recompress, snapshot, schedule install, destroy).
+ .
+ Every destructive action requires a dry-run preview first and confirmation by
+ typing the exact group name, and runs with superuser: "require" -- so an
+ unprivileged Cockpit session cannot reach any write path.

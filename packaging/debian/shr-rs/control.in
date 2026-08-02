@@ -1,0 +1,24 @@
+Package: shr-rs
+Version: %{VERSION}-1
+Section: admin
+Priority: optional
+Architecture: amd64
+Maintainer: heavycaffeiner <146043537+heavycaffeiner@users.noreply.github.com>
+Homepage: https://github.com/heavycaffeiner/shr-rs
+Depends: mdadm, lvm2, parted, util-linux, curl, systemd
+Recommends: btrfs-progs, smartmontools
+Description: Sliced Hybrid RAID (SHR/SHR-2) manager over mdadm, LVM and Btrfs
+ shr-rs manages SHR -- Sliced Hybrid RAID -- pools of mixed-capacity disks on
+ the standard Linux stack. Disks are sliced into offset-aligned bands, each
+ band becomes its own mdadm array, the arrays are concatenated by LVM, and
+ Btrfs sits on top -- so disks of differing sizes contribute their full
+ capacity and the array can be expanded online.
+ .
+ It provides create/expand with journaled rollback and crash resume, scrub
+ (mdadm check plus Btrfs), disk replacement, SMART monitoring, transparent
+ zstd recompression, snapshots with retention, an adaptive reshape throttle,
+ and per-group systemd timers. Run it with no arguments for the interactive
+ TUI, or with a subcommand for the scriptable CLI (add --json for
+ schema-versioned machine-readable output).
+ .
+ Install cockpit-shr-rs for the web dashboard.

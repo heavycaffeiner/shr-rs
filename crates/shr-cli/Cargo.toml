@@ -1,0 +1,29 @@
+[package]
+name = "shr-cli"
+description = "clap CLI frontend for shr-rs (fallback + JSON source for the Cockpit plugin)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "shr_cli"
+path = "src/lib.rs"
+
+[dependencies]
+shr-core = { path = "../shr-core" }
+shr-inspect = { path = "../shr-inspect" }
+shr-command = { path = "../shr-command" }
+shr-exec = { path = "../shr-exec" }
+shr-state = { path = "../shr-state" }
+shr-orchestrate = { path = "../shr-orchestrate" }
+clap = { workspace = true }
+crossterm = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+fd-lock = "4"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+

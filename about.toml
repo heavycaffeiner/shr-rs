@@ -1,0 +1,43 @@
+# cargo-about configuration for the engine's THIRD-PARTY-NOTICES.txt.
+#
+# Run from the repository root:
+#
+#   cargo about generate --config about.toml about.hbs -o THIRD-PARTY-NOTICES.txt
+#   cat packaging/notices/musl-COPYRIGHT.txt >> THIRD-PARTY-NOTICES.txt
+#
+# The release workflow does exactly that before assembling the engine tarball,
+# so the notices are generated from the Cargo.lock being shipped rather than
+# committed and left to drift.
+
+# Only the target we actually ship. Without this, cargo-about walks the
+# dependency graph for every platform and pulls in Windows/macOS/wasm crates
+# that are never linked into the released binary.
+targets = ["x86_64-unknown-linux-musl"]
+
+# Build dependencies do not end up in the binary, so they are not redistributed
+# and need no notice.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+
+# Every crate must resolve to a license we have vetted. A new dependency with
+# anything else fails the build instead of quietly shipping unattributed.
+#
+# Order is preference order for dual-licensed crates, and MIT leads on purpose:
+# most of the graph is "MIT OR Apache-2.0", and MIT asks only that its notice
+# travel with the binary, where Apache-2.0 adds NOTICE-file and
+# statement-of-changes duties for no benefit to us.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "MIT-0",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Zlib",
+    "BSL-1.0",
+    "0BSD",
+    "CC0-1.0",
+    "Unlicense",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+]

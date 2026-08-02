@@ -1,0 +1,13 @@
+{
+    "version": 1,
+    "requires": {
+        "cockpit": "137"
+    },
+    "menu": {
+        "index": {
+            "label": "SHR-RS",
+            "order": 35,
+            "path": "index.html"
+        }
+    }
+}

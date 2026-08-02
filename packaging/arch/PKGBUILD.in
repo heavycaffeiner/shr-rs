@@ -1,0 +1,44 @@
+# Generated into a build directory by .github/workflows/release.yml, which
+# sed-swaps the two placeholder tokens below for the version and the tarball
+# name. That sed runs over every line, so those two words must not appear
+# anywhere else in this file.
+pkgname=shr-rs
+pkgver=VERSION
+pkgrel=1
+pkgdesc='Sliced Hybrid RAID (SHR/SHR-2) manager over mdadm, LVM and Btrfs'
+arch=('x86_64')
+url='https://github.com/heavycaffeiner/shr-rs'
+license=('MIT' 'Apache-2.0')
+# The external commands the engine actually shells out to, counted from the
+# source rather than guessed: mdadm, parted, lsblk/blkid (util-linux), the
+# lvm2 family, curl (webhook delivery), systemctl/udevadm (systemd).
+depends=(mdadm lvm2 parted util-linux curl systemd)
+# btrfs-progs is optional on purpose: mdadm and LVM management, which is most
+# of what this tool does, works without it.
+optdepends=('btrfs-progs: Btrfs-backed groups (create, scrub, snapshot, recompress)'
+            'smartmontools: SMART health monitoring and disk warnings')
+source=("SOURCE")
+sha256sums=('SKIP')
+# The payload is a prebuilt statically linked musl binary cross-built by the
+# release workflow, not a source tree -- there is no debug info to split out,
+# and makepkg would otherwise emit an empty -debug package.
+options=('!debug')
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm0755 shr-rs "$pkgdir/usr/bin/shr-rs"
+  install -Dm0644 packaging/shr-rs.service \
+    "$pkgdir/usr/lib/systemd/system/shr-rs.service"
+  # Not enabled, and enabling it is not required: the unit is a state tailer.
+  # The periodic work is installed at runtime by `shr-rs schedule install`,
+  # which creates its own timers.
+  install -dm0700 "$pkgdir/var/lib/shr-rs"
+  install -dm0755 "$pkgdir/etc/shr-rs"
+  install -Dm0644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm0644 LICENSE-MIT "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+  install -Dm0644 LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+  # The binary is statically linked, so the crates' notices have to travel
+  # with it. Generated into the tarball by the release workflow.
+  install -Dm0644 THIRD-PARTY-NOTICES.txt \
+    "$pkgdir/usr/share/licenses/$pkgname/THIRD-PARTY-NOTICES.txt"
+}

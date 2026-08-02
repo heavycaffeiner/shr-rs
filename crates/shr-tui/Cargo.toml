@@ -1,0 +1,21 @@
+[package]
+name = "shr-tui"
+description = "Read-only Ratatui dashboard for SHR-RS storage status"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+crossterm = { workspace = true }
+ratatui = { workspace = true }
+shr-command = { path = "../shr-command" }
+shr-core = { path = "../shr-core" }
+shr-exec = { path = "../shr-exec" }
+shr-inspect = { path = "../shr-inspect" }
+shr-orchestrate = { path = "../shr-orchestrate" }
+shr-state = { path = "../shr-state" }
+
+[dev-dependencies]
+tempfile.workspace = true

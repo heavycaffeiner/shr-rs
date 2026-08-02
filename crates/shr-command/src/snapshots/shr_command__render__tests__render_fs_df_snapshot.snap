@@ -1,0 +1,14 @@
+---
+source: crates/shr-command/src/render.rs
+expression: render_fs_df(&fs_df_fixture())
+---
+Filesystem capacity
+
+  NOTE: Btrfs allocates data/metadata chunks separately from a plain
+  df's view -- DF-AVAIL below can read more optimistic or pessimistic
+  than reality. UNALLOC (raw space not yet claimed by any chunk) is
+  the more trustworthy free-space signal when known.
+
+  GROUP     MOUNT                 USABLE     DATA (used/total)     META (used/total)   UNALLOC  DF-AVAIL
+  default   /mnt/shr_data         8.0 TB         3.0 TB/8.0 TB       10.0 GB/20.0 GB    5.0 TB    4.9 TB
+  fresh-gro>/mnt/shr_fresh_gr>    4.0 TB                   ?/?                   ?/?         ?         ?

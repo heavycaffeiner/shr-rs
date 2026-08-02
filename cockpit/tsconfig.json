@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "checkJs": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedSideEffectImports": false,
+    "jsx": "react",
+    "lib": [
+      "dom",
+      "es2020"
+    ],
+    "paths": {
+        "*": ["./pkg/lib/*"]
+    },
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    // PatternFly 6's shipped .d.ts files do not typecheck standalone:
+    // react-icons' SVGIconProps is referenced without being imported, and
+    // react-table's Td/Th widen `className` incompatibly with React's own
+    // HTMLProps. Those are declaration defects in a dependency, not in this
+    // project -- `src/**/*` is still fully checked.
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "es2020",
+    "types": [
+        "node"
+    ]
+  },
+  "include": [
+    "src/**/*"
+  ]
+}

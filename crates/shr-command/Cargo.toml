@@ -1,0 +1,19 @@
+[package]
+name = "shr-command"
+description = "Command API shared by the CLI and TUI: read-only status and dry-run planning"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+shr-core = { path = "../shr-core" }
+shr-inspect = { path = "../shr-inspect" }
+shr-state = { path = "../shr-state" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+crossterm = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
