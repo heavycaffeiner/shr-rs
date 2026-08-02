@@ -1292,6 +1292,18 @@ describe("formatSyncPercentEta", () => {
         );
     });
 
+    // Observed live on a scrubbing guest: "about less than a minute"
+    // (Korean "약 1분 미만"). `formatDuration`'s under-a-minute answer is
+    // already the approximation, so the "about" prefix reads as a mistake
+    // stacked on top of it. Every OTHER duration still keeps the prefix --
+    // an ETA of exactly "8 min" IS a rounded estimate and must say so.
+    it("drops the \"about\" prefix for an ETA under a minute, which is already approximate", () => {
+        assert.equal(
+            formatSyncPercentEta({ action: "check", percent: 28.7, finish_min: 0.4 }),
+            "28.7% · less than a minute",
+        );
+    });
+
     // The task's own reported symptom: a 9-hour rebuild must read "9 h
     // 0 min" here exactly like `formatSyncProgress` does for the same
     // finish_min, never "540.0 min".

@@ -965,11 +965,26 @@ export const formatSyncProgress = (sync: SyncSummary | null): string => {
  * itself: `ArrayRow` renders `sync.action` separately (its own `<strong>`),
  * so this only covers the percent/ETA half.
  */
+/**
+ * An ETA, hedged -- "about 9 h 0 min" -- because a `finish_min` mdadm
+ * reports is a moving estimate, not a promise.
+ *
+ * Except under a minute, where `formatDuration` already answers with an
+ * approximation of its own and the hedge stacks into "about less than a
+ * minute" (seen live on a scrubbing guest, and as "약 1분 미만" in Korean).
+ * The plain duration is the honest reading there.
+ */
+const formatEta = (minutes: number): string => (
+    Math.max(Math.round(minutes), 0) < 1
+        ? formatDuration(minutes)
+        : format(_("model.sync.about"), formatDuration(minutes))
+);
+
 export const formatSyncPercentEta = (sync: SyncSummary | null): string => {
     if (!sync)
         return "";
     const percent = sync.percent === null ? _("model.sync.calculating") : `${sync.percent.toFixed(1)}%`;
-    const eta = sync.finish_min === null ? null : format(_("model.sync.about"), formatDuration(sync.finish_min));
+    const eta = sync.finish_min === null ? null : formatEta(sync.finish_min);
     return [percent, eta].filter(Boolean).join(" · ");
 };
 
@@ -1081,10 +1096,11 @@ const syncKindLabel = (sync: ActiveSync): string => (
 // computed/guessed figure.
 const formatActivePercent = (sync: ActiveSync): string => {
     const percentText = sync.percent === null ? _("model.sync.calculating") : `${sync.percent.toFixed(1)}%`;
-    // Route through formatDuration like formatSyncProgress does -- this
-    // used to print raw minutes ("about 540.0 min") one panel above the
-    // correctly formatted "9 h 0 min" for the same field.
-    const etaText = sync.finishMin === null ? null : format(_("model.sync.about"), formatDuration(sync.finishMin));
+    // Shares `formatEta` with `formatSyncPercentEta` (see its doc comment)
+    // so the two panels hedge the same way -- this used to print raw
+    // minutes ("about 540.0 min") one panel above the correctly formatted
+    // "9 h 0 min" for the same field.
+    const etaText = sync.finishMin === null ? null : formatEta(sync.finishMin);
     return [percentText, etaText].filter(Boolean).join(" · ");
 };
 
