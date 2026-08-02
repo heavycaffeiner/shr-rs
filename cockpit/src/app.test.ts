@@ -31,6 +31,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import type { Spawn } from "./actions.ts";
 import type { SpawnOptions } from "./cockpit.ts";
+import { installEnglishCatalog } from "./testCatalog.ts";
+
+// The msgids in `src/` are dotted keys, so without a catalogue every string
+// below would render as its key. See testCatalog.ts.
+installEnglishCatalog();
 
 (globalThis as unknown as { window: unknown }).window = { cockpit: { spawn: async () => "" } };
 
@@ -149,8 +154,8 @@ test("errorHintKind defaults to installation/PATH for an error with no problem c
 // implementation: dropping the masthead is what unblocks the dialogs, and
 // keeping all four header controls is what makes this a move rather than a
 // deletion. `renderToStaticMarkup` runs no effects, so this is the initial
-// `{ kind: "loading" }` state -- where the refresh button reads "불러오는 중"
-// and the health badge reads "확인 중".
+// `{ kind: "loading" }` state -- where the refresh button reads "Loading"
+// and the health badge reads "Checking".
 test("the dashboard draws no masthead of its own, and keeps every header control", async () => {
     const { Application } = await loadAppModule();
     const html = renderToStaticMarkup(React.createElement(Application));
@@ -164,10 +169,10 @@ test("the dashboard draws no masthead of its own, and keeps every header control
     // The four controls the masthead used to carry. These must survive the
     // move into the leading page section.
     assert.match(html, /SHR-RS RAID Manager/, "the page title must survive the masthead removal");
-    assert.match(html, /크기가 서로 다른 디스크를 묶어/, "the subtitle must survive the masthead removal");
-    assert.match(html, /그룹 만들기/, "the create-group button must survive the masthead removal");
-    assert.match(html, /불러오는 중/, "the refresh button must survive the masthead removal (loading state label)");
-    assert.match(html, /확인 중/, "the health badge must survive the masthead removal (loading state label)");
+    assert.match(html, /Pools disks of different sizes/, "the subtitle must survive the masthead removal");
+    assert.match(html, /Create group/, "the create-group button must survive the masthead removal");
+    assert.match(html, /Loading/, "the refresh button must survive the masthead removal (loading state label)");
+    assert.match(html, /Checking/, "the health badge must survive the masthead removal (loading state label)");
 
     // Dropping the masthead silently took the page's full-width grid area
     // with it. page.css hands the main container that area via

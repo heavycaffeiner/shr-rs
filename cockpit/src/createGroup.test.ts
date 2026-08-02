@@ -23,6 +23,12 @@ import {
     type WizardFormInput,
 } from "./createGroup.ts";
 
+import { installEnglishCatalog } from "./testCatalog.ts";
+
+// The msgids in `src/` are dotted keys, so without a catalogue every string
+// below would render as its key. See testCatalog.ts.
+installEnglishCatalog();
+
 const okPreflightJson = JSON.stringify({
     ok: true,
     blockers: [],

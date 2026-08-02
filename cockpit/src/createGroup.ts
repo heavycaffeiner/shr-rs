@@ -28,6 +28,7 @@
  *      `step: "error"`, never `"done"`.
  */
 
+import { _, format } from "./i18n.ts";
 import {
     isRecord,
     requireBoolean,
@@ -125,17 +126,17 @@ export const parseWritePreflight = (raw: string): WritePreflight => {
     try {
         value = JSON.parse(raw);
     } catch {
-        throw new Error("shr-rs가 유효한 preflight JSON을 반환하지 않았습니다.");
+        throw new Error(_("create.error.preflightNotJson"));
     }
-    const report = requireRecord(value, "preflight 응답이 객체가 아닙니다.");
+    const report = requireRecord(value, _("create.error.preflightNotObject"));
     if (typeof report.error === "string")
         throw new Error(report.error);
     return {
-        ok: requireBoolean(report.ok, "preflight 응답의 ok 필드가 올바르지 않습니다."),
-        blockers: requireArray(report.blockers, "preflight 응답의 blockers 목록이 올바르지 않습니다.")
+        ok: requireBoolean(report.ok, _("create.error.preflightOk")),
+        blockers: requireArray(report.blockers, _("create.error.preflightBlockers"))
                 .map(parseWriteBlocker),
-        warnings: requireStringArray(report.warnings, "preflight 응답의 warnings 목록이 올바르지 않습니다."),
-        targets: requireArray(report.targets, "preflight 응답의 targets 목록이 올바르지 않습니다.")
+        warnings: requireStringArray(report.warnings, _("create.error.preflightWarnings")),
+        targets: requireArray(report.targets, _("create.error.preflightTargets"))
                 .map(parsePreflightTarget),
     };
 };
@@ -160,12 +161,17 @@ export interface CreatePreview {
 }
 
 const parsePreviewBand = (value: unknown, index: number): PreviewBand => {
-    const band = requireRecord(value, `밴드 #${index + 1} 정보가 올바르지 않습니다.`);
+    // Same "$0: $1 is not valid." shape as model.ts's own parsers, so the two
+    // sets of payload errors read as one voice and share their msgids.
+    const subject = format(_("parse.subject.bandIndex"), index + 1);
+    const band = requireRecord(value, format(_("parse.entry.invalid"), subject));
     return {
-        index: requireNumber(band.index, `밴드 #${index + 1}의 인덱스가 올바르지 않습니다.`),
-        level: requireString(band.level, `밴드 #${index + 1}의 RAID 레벨이 올바르지 않습니다.`),
-        md_name: requireString(band.md_name, `밴드 #${index + 1}의 mdadm 이름이 올바르지 않습니다.`),
-        usable_bytes: requireNumber(band.usable_bytes, `밴드 #${index + 1}의 가용 용량이 올바르지 않습니다.`),
+        index: requireNumber(band.index, format(_("parse.field.invalid"), subject, _("parse.field.index"))),
+        level: requireString(band.level, format(_("parse.field.invalid"), subject, _("parse.field.raidLevel"))),
+        md_name: requireString(band.md_name, format(_("parse.field.invalid"), subject, _("parse.field.mdName"))),
+        usable_bytes: requireNumber(
+            band.usable_bytes, format(_("parse.field.invalid"), subject, _("parse.field.usableCapacity")),
+        ),
     };
 };
 
@@ -175,25 +181,25 @@ export const parseCreatePreview = (raw: string): CreatePreview => {
     try {
         value = JSON.parse(raw);
     } catch {
-        throw new Error("shr-rs가 유효한 미리보기 JSON을 반환하지 않았습니다.");
+        throw new Error(_("create.error.previewNotJson"));
     }
-    const report = requireRecord(value, "미리보기 응답이 객체가 아닙니다.");
+    const report = requireRecord(value, _("create.error.previewNotObject"));
     if (typeof report.error === "string")
         throw new Error(report.error);
-    const filesystem = requireRecord(report.filesystem, "미리보기 응답의 filesystem 정보가 올바르지 않습니다.");
+    const filesystem = requireRecord(report.filesystem, _("create.error.previewFilesystem"));
     if (!Array.isArray(report.bands))
-        throw new Error("미리보기 응답의 bands 목록이 올바르지 않습니다.");
+        throw new Error(_("create.error.previewBands"));
     if (!Array.isArray(report.disks))
-        throw new Error("미리보기 응답의 disks 목록이 올바르지 않습니다.");
+        throw new Error(_("create.error.previewDisks"));
     return {
-        name: requireString(report.name, "미리보기 응답의 name이 올바르지 않습니다."),
-        mode: requireString(report.mode, "미리보기 응답의 mode가 올바르지 않습니다."),
-        layout_version: requireNumber(report.layout_version, "미리보기 응답의 layout_version이 올바르지 않습니다."),
-        mount_point: requireString(filesystem.mount_point, "미리보기 응답의 mount_point가 올바르지 않습니다."),
+        name: requireString(report.name, _("create.error.previewName")),
+        mode: requireString(report.mode, _("create.error.previewMode")),
+        layout_version: requireNumber(report.layout_version, _("create.error.previewLayoutVersion")),
+        mount_point: requireString(filesystem.mount_point, _("create.error.previewMountPoint")),
         bands: report.bands.map(parsePreviewBand),
         disk_count: report.disks.length,
         planned_commands: requireStringArray(
-            report.planned_commands, "미리보기 응답의 planned_commands 목록이 올바르지 않습니다.",
+            report.planned_commands, _("create.error.previewPlannedCommands"),
         ),
     };
 };
@@ -214,19 +220,19 @@ export const parseCreatedGroup = (raw: string): CreatedGroupSummary => {
     try {
         value = JSON.parse(raw);
     } catch {
-        throw new Error("shr-rs가 유효한 생성 결과 JSON을 반환하지 않았습니다.");
+        throw new Error(_("create.error.resultNotJson"));
     }
-    const report = requireRecord(value, "생성 결과 응답이 객체가 아닙니다.");
+    const report = requireRecord(value, _("create.error.resultNotObject"));
     if (typeof report.error === "string")
         throw new Error(report.error);
     if (!Array.isArray(report.disks))
-        throw new Error("생성 결과 응답의 disks 목록이 올바르지 않습니다.");
+        throw new Error(_("create.error.resultDisks"));
     if (!Array.isArray(report.bands))
-        throw new Error("생성 결과 응답의 bands 목록이 올바르지 않습니다.");
+        throw new Error(_("create.error.resultBands"));
     return {
-        name: requireString(report.name, "생성 결과 응답의 name이 올바르지 않습니다."),
-        mode: requireString(report.mode, "생성 결과 응답의 mode가 올바르지 않습니다."),
-        layout_version: requireNumber(report.layout_version, "생성 결과 응답의 layout_version이 올바르지 않습니다."),
+        name: requireString(report.name, _("create.error.resultName")),
+        mode: requireString(report.mode, _("create.error.resultMode")),
+        layout_version: requireNumber(report.layout_version, _("create.error.resultLayoutVersion")),
         disk_count: report.disks.length,
         band_count: report.bands.length,
     };
@@ -344,8 +350,10 @@ export interface ExistingGroupIdentity {
 export const findVgNameConflict = (vgName: string, existingGroups: ExistingGroupIdentity[]): string | null => {
     const collision = existingGroups.find(group => group.vg_name === vgName);
     return collision
-        ? `볼륨 그룹 이름 "${vgName}"은(는) 이미 그룹 "${collision.name}"이(가) 사용 중입니다. ` +
-          "다른 이름을 지정하세요."
+        ? format(
+            _("create.error.vgNameConflict"),
+            vgName, collision.name,
+        )
         : null;
 };
 
@@ -455,7 +463,7 @@ const spawnErrorMessage = (error: unknown): string => {
         return error;
     if (isRecord(error) && typeof error.message === "string" && error.message.trim())
         return error.message;
-    return "명령 실행에 실패했습니다.";
+    return _("actions.error.commandFailed");
 };
 
 /**

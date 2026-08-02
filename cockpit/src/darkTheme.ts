@@ -12,7 +12,7 @@
  * `@media (prefers-color-scheme: dark)` block, which appeared to track the
  * Cockpit theme switcher only because Chrome propagates an embedder's used
  * color-scheme into same-origin iframes. That coincidence does not carry
- * the PatternFly tokens: without this module, choosing "밝게"/"어둡게" in
+ * the PatternFly tokens: without this module, choosing "Light"/"Dark" in
  * Cockpit's session menu would leave every PatternFly surface unchanged.
  *
  * Cockpit stores the preference in `localStorage["shell:style"]` as one of

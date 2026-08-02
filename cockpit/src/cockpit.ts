@@ -12,6 +12,18 @@ export interface SpawnOptions {
 
 export interface CockpitApi {
     spawn(args: string[], options?: SpawnOptions): Promise<string>;
+
+    /* Localization. Everything below is optional on this interface because the
+     * unit tests stub `window.cockpit` with `spawn` alone; `i18n.ts` carries
+     * the fallbacks. On a real page `../base1/cockpit.js` defines all of it,
+     * and `po-default.js`/`po.js` have already called `cockpit.locale()` with
+     * this package's catalogues before our bundle runs -- see index.html for
+     * that load order. */
+    gettext?: ((message: string) => string) & ((context: string, message: string) => string);
+    ngettext?: (message1: string, messageN: string, n: number) => string;
+    format?: (format_string: string, ...args: unknown[]) => string;
+    language?: string;
+    language_direction?: string;
 }
 
 declare global {
@@ -21,6 +33,6 @@ declare global {
 }
 
 if (!window.cockpit)
-    throw new Error("Cockpit JavaScript API를 불러오지 못했습니다.");
+    throw new Error("Failed to load the Cockpit JavaScript API.");
 
 export default window.cockpit;

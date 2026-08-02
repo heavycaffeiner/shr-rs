@@ -1,3 +1,9 @@
+// `.ts`, not `.js`: `node --test` loads this module directly through its own
+// type stripping, which does not rewrite extensions -- same reason
+// `actions.ts` imports `./model.ts`. The `.tsx` files, which only ever reach
+// a bundler, use `./i18n.js`.
+import { _, format, ngettext } from "./i18n.ts";
+
 export type Health = "healthy" | "degraded" | "unknown";
 export type SmartState = "ok" | "warning" | "unknown";
 
@@ -234,28 +240,46 @@ export const requireStringArray = (value: unknown, message: string): string[] =>
     return value;
 };
 
-const parseSmart = (value: unknown, diskName: string): SmartSummary => {
-    const smart = requireRecord(value, `디스크 정보(${diskName})의 SMART 정보가 올바르지 않습니다.`);
+// Every parser below names what it is reading with a `subject` -- "Disk sda",
+// "Band #2 of group tank" -- and then reports each bad field against it, so
+// one "$0: the X is not valid." msgid serves array, band and group alike. It
+// also keeps the noun out of the field messages, which is what lets a
+// translator reorder the two halves.
+const invalidField = (subject: string, field: string): string =>
+    format(_("parse.field.invalid"), subject, field);
+
+const parseSmart = (value: unknown, subject: string): SmartSummary => {
+    const smart = requireRecord(value, invalidField(subject, _("parse.field.smartSection")));
     if (smart.state !== "ok" && smart.state !== "warning" && smart.state !== "unknown")
-        throw new Error(`디스크 정보(${diskName})의 SMART 상태가 올바르지 않습니다.`);
+        throw new Error(invalidField(subject, _("parse.field.smartState")));
 
     return {
         state: smart.state,
-        temperature_c: requireNullableNumber(smart.temperature_c, `디스크 정보(${diskName})의 온도가 올바르지 않습니다.`),
-        power_on_hours: requireNullableNumber(smart.power_on_hours, `디스크 정보(${diskName})의 가동 시간이 올바르지 않습니다.`),
-        pending_sectors: requireNullableNumber(smart.pending_sectors, `디스크 정보(${diskName})의 보류 섹터 수가 올바르지 않습니다.`),
-        reallocated_sectors: requireNullableNumber(smart.reallocated_sectors, `디스크 정보(${diskName})의 재할당 섹터 수가 올바르지 않습니다.`),
-        uncorrectable_sectors: requireNullableNumber(smart.uncorrectable_sectors, `디스크 정보(${diskName})의 복구 불가 섹터 수가 올바르지 않습니다.`),
-        nvme_critical_warning: requireNullableNumber(smart.nvme_critical_warning, `디스크 정보(${diskName})의 NVMe 경고 값이 올바르지 않습니다.`),
+        temperature_c: requireNullableNumber(smart.temperature_c, invalidField(subject, _("parse.field.temperature"))),
+        power_on_hours: requireNullableNumber(smart.power_on_hours, invalidField(subject, _("parse.field.powerOnTime"))),
+        pending_sectors: requireNullableNumber(
+            smart.pending_sectors, invalidField(subject, _("parse.field.pendingSectors")),
+        ),
+        reallocated_sectors: requireNullableNumber(
+            smart.reallocated_sectors, invalidField(subject, _("parse.field.reallocatedSectors")),
+        ),
+        uncorrectable_sectors: requireNullableNumber(
+            smart.uncorrectable_sectors, invalidField(subject, _("parse.field.uncorrectableSectors")),
+        ),
+        nvme_critical_warning: requireNullableNumber(
+            smart.nvme_critical_warning, invalidField(subject, _("parse.field.nvmeWarning")),
+        ),
     };
 };
 
 const parseDisk = (value: unknown, index: number): DiskStatus => {
-    const disk = requireRecord(value, `디스크 정보 #${index + 1}가 올바르지 않습니다.`);
-    const name = requireString(disk.name, `디스크 정보 #${index + 1}의 이름이 올바르지 않습니다.`);
+    const entry = format(_("parse.subject.diskEntry"), index + 1);
+    const disk = requireRecord(value, format(_("parse.entry.invalid"), entry));
+    const name = requireString(disk.name, invalidField(entry, _("parse.field.name")));
+    const subject = format(_("parse.subject.disk"), name);
     const rotational = disk.rotational;
     if (rotational !== null && typeof rotational !== "boolean")
-        throw new Error(`디스크 정보(${name})의 회전식 여부가 올바르지 않습니다.`);
+        throw new Error(invalidField(subject, _("parse.field.rotational")));
 
     return {
         name,
@@ -264,23 +288,23 @@ const parseDisk = (value: unknown, index: number): DiskStatus => {
         // present non-string value is still a malformed payload.
         id: disk.id === undefined
             ? null
-            : requireNullableString(disk.id, `디스크 정보(${name})의 by-id 이름이 올바르지 않습니다.`),
-        size: requireNullableNumber(disk.size, `디스크 정보(${name})의 용량이 올바르지 않습니다.`),
-        model: requireNullableString(disk.model, `디스크 정보(${name})의 모델명이 올바르지 않습니다.`),
-        serial: requireNullableString(disk.serial, `디스크 정보(${name})의 일련번호가 올바르지 않습니다.`),
+            : requireNullableString(disk.id, invalidField(subject, _("parse.field.byIdName"))),
+        size: requireNullableNumber(disk.size, invalidField(subject, _("parse.field.capacity"))),
+        model: requireNullableString(disk.model, invalidField(subject, _("parse.field.model"))),
+        serial: requireNullableString(disk.serial, invalidField(subject, _("parse.field.serial"))),
         rotational,
-        smart: parseSmart(disk.smart, name),
-        arrays: requireStringArray(disk.arrays, `디스크 정보(${name})의 어레이 목록이 올바르지 않습니다.`),
+        smart: parseSmart(disk.smart, subject),
+        arrays: requireStringArray(disk.arrays, invalidField(subject, _("parse.field.arrayList"))),
         // `#[serde(default)]` on the Rust side -- absent entirely on an
         // older payload means "not known to be a system disk", not "known
         // to be a data disk", but there's no third state to represent here,
         // so this defaults to `false` like the Rust struct itself does.
         system_disk: disk.system_disk === undefined
             ? false
-            : requireBoolean(disk.system_disk, `디스크 정보(${name})의 시스템 디스크 여부가 올바르지 않습니다.`),
+            : requireBoolean(disk.system_disk, invalidField(subject, _("parse.field.systemDiskFlag"))),
         system_mounts: disk.system_mounts === undefined
             ? []
-            : requireStringArray(disk.system_mounts, `디스크 정보(${name})의 시스템 마운트 목록이 올바르지 않습니다.`),
+            : requireStringArray(disk.system_mounts, invalidField(subject, _("parse.field.systemMountList"))),
     };
 };
 
@@ -291,38 +315,35 @@ const parseDisk = (value: unknown, index: number): DiskStatus => {
 const parseSync = (value: unknown, subject: string): SyncSummary | null => {
     if (value === null)
         return null;
-    const sync = requireRecord(value, `${subject}의 동기화 정보가 올바르지 않습니다.`);
+    const sync = requireRecord(value, invalidField(subject, _("parse.field.syncSection")));
     return {
-        action: requireString(sync.action, `${subject}의 동기화 작업명이 올바르지 않습니다.`),
-        percent: requireNullableNumber(sync.percent, `${subject}의 동기화 진행률이 올바르지 않습니다.`),
-        finish_min: requireNullableNumber(sync.finish_min, `${subject}의 예상 시간이 올바르지 않습니다.`),
+        action: requireString(sync.action, invalidField(subject, _("parse.field.syncAction"))),
+        percent: requireNullableNumber(sync.percent, invalidField(subject, _("parse.field.syncPercent"))),
+        finish_min: requireNullableNumber(sync.finish_min, invalidField(subject, _("parse.field.eta"))),
     };
 };
 
 const parseScrubSummary = (value: unknown, subject: string): ScrubSummary => {
-    const scrub = requireRecord(value, `${subject}의 스크럽 정보가 올바르지 않습니다.`);
+    const scrub = requireRecord(value, invalidField(subject, _("parse.field.scrubSection")));
     if (scrub.outcome !== "completed" && scrub.outcome !== "cancelled" && scrub.outcome !== "failed")
-        throw new Error(`${subject}의 스크럽 결과가 올바르지 않습니다.`);
+        throw new Error(invalidField(subject, _("parse.field.scrubOutcome")));
     return {
-        finished_at: requireString(scrub.finished_at, `${subject}의 스크럽 완료 시각이 올바르지 않습니다.`),
+        finished_at: requireString(scrub.finished_at, invalidField(subject, _("parse.field.scrubFinishedAt"))),
         outcome: scrub.outcome,
-        error_count: requireNumber(scrub.error_count, `${subject}의 스크럽 오류 수가 올바르지 않습니다.`),
+        error_count: requireNumber(scrub.error_count, invalidField(subject, _("parse.field.scrubErrorCount"))),
     };
 };
 
 const parseMemberState = (value: unknown, subject: string, index: number): MemberStatus => {
-    const member = requireRecord(value, `${subject}의 멤버 상태 #${index + 1}가 올바르지 않습니다.`);
+    const entry = format(_("parse.subject.memberState"), subject, index + 1);
+    const member = requireRecord(value, format(_("parse.entry.invalid"), entry));
     return {
-        name: requireString(member.name, `${subject}의 멤버 상태 #${index + 1} 이름이 올바르지 않습니다.`),
-        role: requireNullableNumber(member.role, `${subject}의 멤버 상태 #${index + 1}의 role이 올바르지 않습니다.`),
-        faulty: requireBoolean(member.faulty, `${subject}의 멤버 상태 #${index + 1}의 faulty 값이 올바르지 않습니다.`),
-        spare: requireBoolean(member.spare, `${subject}의 멤버 상태 #${index + 1}의 spare 값이 올바르지 않습니다.`),
-        write_mostly: requireBoolean(
-            member.write_mostly, `${subject}의 멤버 상태 #${index + 1}의 write_mostly 값이 올바르지 않습니다.`,
-        ),
-        replacement: requireBoolean(
-            member.replacement, `${subject}의 멤버 상태 #${index + 1}의 replacement 값이 올바르지 않습니다.`,
-        ),
+        name: requireString(member.name, invalidField(entry, _("parse.field.name"))),
+        role: requireNullableNumber(member.role, invalidField(entry, _("parse.field.role"))),
+        faulty: requireBoolean(member.faulty, invalidField(entry, _("parse.field.faultyFlag"))),
+        spare: requireBoolean(member.spare, invalidField(entry, _("parse.field.spareFlag"))),
+        write_mostly: requireBoolean(member.write_mostly, invalidField(entry, _("parse.field.writeMostlyFlag"))),
+        replacement: requireBoolean(member.replacement, invalidField(entry, _("parse.field.replacementFlag"))),
     };
 };
 
@@ -332,78 +353,82 @@ const parseMemberStates = (value: unknown, subject: string): MemberStatus[] => {
     if (value === undefined)
         return [];
     if (!Array.isArray(value))
-        throw new Error(`${subject}의 멤버 상태 목록이 올바르지 않습니다.`);
+        throw new Error(invalidField(subject, _("parse.field.memberStateList")));
     return value.map((item, i) => parseMemberState(item, subject, i));
 };
 
 const parseArray = (value: unknown, index: number): ArrayStatus => {
-    const array = requireRecord(value, `어레이 정보 #${index + 1}가 올바르지 않습니다.`);
-    const name = requireString(array.name, `어레이 정보 #${index + 1}의 이름이 올바르지 않습니다.`);
+    const entry = format(_("parse.subject.arrayEntry"), index + 1);
+    const array = requireRecord(value, format(_("parse.entry.invalid"), entry));
+    const name = requireString(array.name, invalidField(entry, _("parse.field.name")));
+    const subject = format(_("parse.subject.array"), name);
 
     return {
         name,
-        level: requireNullableString(array.level, `어레이 정보(${name})의 RAID 레벨이 올바르지 않습니다.`),
-        state: requireString(array.state, `어레이 정보(${name})의 상태가 올바르지 않습니다.`),
-        read_only: requireBoolean(array.read_only, `어레이 정보(${name})의 읽기 전용 상태가 올바르지 않습니다.`),
-        degraded: requireBoolean(array.degraded, `어레이 정보(${name})의 degraded 상태가 올바르지 않습니다.`),
-        raid_disks: requireNullableNumber(array.raid_disks, `어레이 정보(${name})의 목표 멤버 수가 올바르지 않습니다.`),
-        active_disks: requireNullableNumber(array.active_disks, `어레이 정보(${name})의 활성 멤버 수가 올바르지 않습니다.`),
-        members: requireStringArray(array.members, `어레이 정보(${name})의 멤버 목록이 올바르지 않습니다.`),
-        member_states: parseMemberStates(array.member_states, `어레이 정보(${name})`),
-        sync: parseSync(array.sync, `어레이 정보(${name})`),
+        level: requireNullableString(array.level, invalidField(subject, _("parse.field.raidLevel"))),
+        state: requireString(array.state, invalidField(subject, _("parse.field.state"))),
+        read_only: requireBoolean(array.read_only, invalidField(subject, _("parse.field.readOnlyFlag"))),
+        degraded: requireBoolean(array.degraded, invalidField(subject, _("parse.field.degradedFlag"))),
+        raid_disks: requireNullableNumber(array.raid_disks, invalidField(subject, _("parse.field.targetMembers"))),
+        active_disks: requireNullableNumber(array.active_disks, invalidField(subject, _("parse.field.activeMembers"))),
+        members: requireStringArray(array.members, invalidField(subject, _("parse.field.memberList"))),
+        member_states: parseMemberStates(array.member_states, subject),
+        sync: parseSync(array.sync, subject),
     };
 };
 
 const parseGroupBand = (value: unknown, groupName: string, index: number): GroupBandStatus => {
-    const band = requireRecord(value, `그룹(${groupName})의 밴드 정보 #${index + 1}가 올바르지 않습니다.`);
-    const subject = `그룹(${groupName})의 밴드 #${index + 1}`;
+    const subject = format(_("parse.subject.band"), groupName, index + 1);
+    const band = requireRecord(value, format(_("parse.entry.invalid"), subject));
     return {
-        index: requireNumber(band.index, `${subject} 인덱스가 올바르지 않습니다.`),
-        level: requireString(band.level, `${subject} RAID 레벨이 올바르지 않습니다.`),
-        md_name: requireString(band.md_name, `${subject} mdadm 이름이 올바르지 않습니다.`),
-        usable_bytes: requireNumber(band.usable_bytes, `${subject} 가용 용량이 올바르지 않습니다.`),
-        resize_pending: requireBoolean(band.resize_pending, `${subject} 확장 마무리 대기 상태가 올바르지 않습니다.`),
+        index: requireNumber(band.index, invalidField(subject, _("parse.field.index"))),
+        level: requireString(band.level, invalidField(subject, _("parse.field.raidLevel"))),
+        md_name: requireString(band.md_name, invalidField(subject, _("parse.field.mdName"))),
+        usable_bytes: requireNumber(band.usable_bytes, invalidField(subject, _("parse.field.usableCapacity"))),
+        resize_pending: requireBoolean(band.resize_pending, invalidField(subject, _("parse.field.resizePendingFlag"))),
         // Additive (this wave): absent entirely on an older-but-still-v2
         // payload must default, not throw -- a partial rollout of the
         // CLI/cockpit pair must never blank the whole dashboard
         // (backward-compatibility requirement in the phase brief).
         members: band.members === undefined
             ? []
-            : requireStringArray(band.members, `${subject} 참여 멤버 목록이 올바르지 않습니다.`),
+            : requireStringArray(band.members, invalidField(subject, _("parse.field.memberList"))),
         member_states: parseMemberStates(band.member_states, subject),
         md_uuid: (band.md_uuid === undefined || band.md_uuid === null)
             ? null
-            : requireString(band.md_uuid, `${subject} mdadm UUID가 올바르지 않습니다.`),
+            : requireString(band.md_uuid, invalidField(subject, _("parse.field.mdUuid"))),
         sync: band.sync === undefined ? null : parseSync(band.sync, subject),
         last_scrub: (band.last_scrub === undefined || band.last_scrub === null)
             ? null
             : parseScrubSummary(band.last_scrub, subject),
         scrub_in_progress: band.scrub_in_progress === undefined
             ? false
-            : requireBoolean(band.scrub_in_progress, `${subject} 스크럽 진행 상태가 올바르지 않습니다.`),
+            : requireBoolean(band.scrub_in_progress, invalidField(subject, _("parse.field.scrubInProgressFlag"))),
     };
 };
 
 const parseGroup = (value: unknown, index: number): GroupStatus => {
-    const group = requireRecord(value, `그룹 정보 #${index + 1}가 올바르지 않습니다.`);
-    const name = requireString(group.name, `그룹 정보 #${index + 1}의 이름이 올바르지 않습니다.`);
+    const entry = format(_("parse.subject.groupEntry"), index + 1);
+    const group = requireRecord(value, format(_("parse.entry.invalid"), entry));
+    const name = requireString(group.name, invalidField(entry, _("parse.field.name")));
+    const subject = format(_("parse.subject.group"), name);
 
     if (!Array.isArray(group.bands))
-        throw new Error(`그룹(${name})의 밴드 목록이 올바르지 않습니다.`);
+        throw new Error(invalidField(subject, _("parse.field.bandList")));
 
     return {
         name,
-        mode: requireString(group.mode, `그룹(${name})의 모드가 올바르지 않습니다.`),
-        layout_version: requireNumber(group.layout_version, `그룹(${name})의 레이아웃 버전이 올바르지 않습니다.`),
-        mount_point: requireString(group.mount_point, `그룹(${name})의 마운트 지점이 올바르지 않습니다.`),
-        fs_uuid: requireNullableString(group.fs_uuid, `그룹(${name})의 파일시스템 UUID가 올바르지 않습니다.`),
-        usable_bytes: requireNumber(group.usable_bytes, `그룹(${name})의 가용 용량이 올바르지 않습니다.`),
-        resize_pending: requireBoolean(group.resize_pending, `그룹(${name})의 확장 마무리 대기 상태가 올바르지 않습니다.`),
-        disks: requireStringArray(group.disks, `그룹(${name})의 멤버 디스크 목록이 올바르지 않습니다.`),
+        mode: requireString(group.mode, invalidField(subject, _("parse.field.mode"))),
+        layout_version: requireNumber(group.layout_version, invalidField(subject, _("parse.field.layoutVersion"))),
+        mount_point: requireString(group.mount_point, invalidField(subject, _("parse.field.mountPoint"))),
+        fs_uuid: requireNullableString(group.fs_uuid, invalidField(subject, _("parse.field.fsUuid"))),
+        usable_bytes: requireNumber(group.usable_bytes, invalidField(subject, _("parse.field.usableCapacity"))),
+        resize_pending: requireBoolean(group.resize_pending, invalidField(subject, _("parse.field.resizePendingFlag"))),
+        disks: requireStringArray(group.disks, invalidField(subject, _("parse.field.memberDiskList"))),
         bands: group.bands.map((band, i) => parseGroupBand(band, name, i)),
-        vg_name: requireString(group.vg_name, `그룹(${name})의 볼륨 그룹 이름이 올바르지 않습니다.`),
-        lv_name: requireString(group.lv_name, `그룹(${name})의 논리 볼륨 이름이 올바르지 않습니다.`),
-        compression: requireString(group.compression, `그룹(${name})의 압축 설정이 올바르지 않습니다.`),
+        vg_name: requireString(group.vg_name, invalidField(subject, _("parse.field.vgName"))),
+        lv_name: requireString(group.lv_name, invalidField(subject, _("parse.field.lvName"))),
+        compression: requireString(group.compression, invalidField(subject, _("parse.field.compression"))),
     };
 };
 
@@ -412,10 +437,10 @@ export const parseStatusOutput = (raw: string): StatusReport => {
     try {
         value = JSON.parse(raw);
     } catch {
-        throw new Error("shr-rs가 유효한 JSON 상태를 반환하지 않았습니다.");
+        throw new Error(_("status.error.notJson"));
     }
 
-    const report = requireRecord(value, "shr-rs 상태 응답이 객체가 아닙니다.");
+    const report = requireRecord(value, _("status.error.notObject"));
     if (typeof report.error === "string")
         throw new Error(report.error);
     // v1 (no `groups`) is rejected outright rather than treated as "groups
@@ -424,18 +449,18 @@ export const parseStatusOutput = (raw: string): StatusReport => {
     // confused. A genuinely old shr-rs binary must fail loudly here, not
     // render a dashboard that silently omits every SHR group.
     if (report.schema_version !== 2)
-        throw new Error(
-            "이 서버의 shr-rs 버전이 대시보드와 호환되지 않습니다. shr-rs와 Cockpit 플러그인을 같은 버전으로 " +
-            `맞춰 주세요. (응답 형식 ${String(report.schema_version)})`,
-        );
+        throw new Error(format(
+            _("status.error.incompatible"),
+            String(report.schema_version),
+        ));
     if (report.health !== "healthy" && report.health !== "degraded" && report.health !== "unknown")
-        throw new Error("상태 응답의 전체 건강 상태가 올바르지 않습니다.");
+        throw new Error(_("status.error.health"));
     if (!Array.isArray(report.disks))
-        throw new Error("상태 응답의 디스크 정보가 올바르지 않습니다.");
+        throw new Error(_("status.error.disks"));
     if (!Array.isArray(report.arrays))
-        throw new Error("상태 응답의 어레이 정보가 올바르지 않습니다.");
+        throw new Error(_("status.error.arrays"));
     if (!Array.isArray(report.groups))
-        throw new Error("상태 응답의 그룹 정보가 올바르지 않습니다.");
+        throw new Error(_("status.error.groups"));
 
     return {
         schema_version: 2,
@@ -449,29 +474,32 @@ export const parseStatusOutput = (raw: string): StatusReport => {
         // value is still a malformed payload and must throw, not be coerced.
         state_path: (report.state_path === undefined || report.state_path === null)
             ? null
-            : requireString(report.state_path, "상태 응답의 구성 파일 경로가 올바르지 않습니다."),
+            : requireString(report.state_path, _("status.error.statePath")),
     };
 };
 
 const parseGroupDf = (value: unknown, index: number): GroupDfStatus => {
-    const group = requireRecord(value, `fs df 응답의 그룹 정보 #${index + 1}가 올바르지 않습니다.`);
-    const name = requireString(group.name, `fs df 응답의 그룹 정보 #${index + 1} 이름이 올바르지 않습니다.`);
-    const subject = `그룹(${name})의 fs df`;
+    const entry = format(_("parse.subject.fsDfGroupEntry"), index + 1);
+    const group = requireRecord(value, format(_("parse.entry.invalid"), entry));
+    const name = requireString(group.name, invalidField(entry, _("parse.field.name")));
+    const subject = format(_("parse.subject.fsDfGroup"), name);
     return {
         name,
-        mount_point: requireString(group.mount_point, `${subject} 마운트 지점이 올바르지 않습니다.`),
-        usable_bytes: requireNumber(group.usable_bytes, `${subject} 가용 용량이 올바르지 않습니다.`),
-        data_used_bytes: requireNullableNumber(group.data_used_bytes, `${subject} 데이터 사용량이 올바르지 않습니다.`),
-        data_total_bytes: requireNullableNumber(group.data_total_bytes, `${subject} 데이터 총량이 올바르지 않습니다.`),
+        mount_point: requireString(group.mount_point, invalidField(subject, _("parse.field.mountPoint"))),
+        usable_bytes: requireNumber(group.usable_bytes, invalidField(subject, _("parse.field.usableCapacity"))),
+        data_used_bytes: requireNullableNumber(group.data_used_bytes, invalidField(subject, _("parse.field.dataUsed"))),
+        data_total_bytes: requireNullableNumber(group.data_total_bytes, invalidField(subject, _("parse.field.dataTotal"))),
         metadata_used_bytes: requireNullableNumber(
-            group.metadata_used_bytes, `${subject} 메타데이터 사용량이 올바르지 않습니다.`,
+            group.metadata_used_bytes, invalidField(subject, _("parse.field.metadataUsed")),
         ),
         metadata_total_bytes: requireNullableNumber(
-            group.metadata_total_bytes, `${subject} 메타데이터 총량이 올바르지 않습니다.`,
+            group.metadata_total_bytes, invalidField(subject, _("parse.field.metadataTotal")),
         ),
-        unallocated_bytes: requireNullableNumber(group.unallocated_bytes, `${subject} 미할당 용량이 올바르지 않습니다.`),
+        unallocated_bytes: requireNullableNumber(
+            group.unallocated_bytes, invalidField(subject, _("parse.field.unallocated")),
+        ),
         statvfs_avail_bytes: requireNullableNumber(
-            group.statvfs_avail_bytes, `${subject} df 가용 용량이 올바르지 않습니다.`,
+            group.statvfs_avail_bytes, invalidField(subject, _("parse.field.dfAvailable")),
         ),
     };
 };
@@ -482,18 +510,18 @@ export const parseFsDfOutput = (raw: string): FsDfReport => {
     try {
         value = JSON.parse(raw);
     } catch {
-        throw new Error("shr-rs가 유효한 fs df JSON을 반환하지 않았습니다.");
+        throw new Error(_("fsdf.error.notJson"));
     }
-    const report = requireRecord(value, "fs df 응답이 객체가 아닙니다.");
+    const report = requireRecord(value, _("fsdf.error.notObject"));
     if (typeof report.error === "string")
         throw new Error(report.error);
     if (report.schema_version !== 2)
-        throw new Error(
-            "이 서버의 shr-rs 버전이 대시보드와 호환되지 않아 사용량을 읽을 수 없습니다. shr-rs와 Cockpit " +
-            `플러그인을 같은 버전으로 맞춰 주세요. (응답 형식 ${String(report.schema_version)})`,
-        );
+        throw new Error(format(
+            _("fsdf.error.incompatible"),
+            String(report.schema_version),
+        ));
     if (!Array.isArray(report.groups))
-        throw new Error("fs df 응답의 그룹 정보가 올바르지 않습니다.");
+        throw new Error(_("fsdf.error.groups"));
     return {
         schema_version: 2,
         groups: report.groups.map(parseGroupDf),
@@ -546,7 +574,7 @@ export const summarizeStatus = (report: StatusReport): StatusSummary => {
 
 export const formatBytes = (bytes: number | null | undefined): string => {
     if (bytes === null || bytes === undefined)
-        return "알 수 없음";
+        return _("common.unknown");
     if (bytes === 0)
         return "0 B";
 
@@ -888,64 +916,61 @@ export const groupToleranceStatus = (mode: string, bands: GroupBandStatus[]): Gr
 
 export const formatDuration = (minutes: number | null): string => {
     if (minutes === null)
-        return "알 수 없음";
+        return _("common.unknown");
     const totalMin = Math.max(Math.round(minutes), 0);
     if (totalMin < 1)
-        return "1분 미만";
+        return _("model.duration.underMinute");
     const hours = Math.floor(totalMin / 60);
     const mins = totalMin % 60;
-    return hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
+    return hours > 0 ? format(_("model.duration.hoursMinutes"), hours, mins) : format(_("model.duration.minutes"), mins);
 };
 
 /**
  * The kernel's own word for what an array is doing (`/proc/mdstat`'s
- * reshape/recovery/resync/check/repair), in Korean. Unknown values fall
- * through verbatim rather than being hidden -- a state we cannot name is
- * still worth showing.
+ * reshape/recovery/resync/check/repair), said in the operator's language.
+ * Unknown values fall through verbatim rather than being hidden -- a state we
+ * cannot name is still worth showing.
  */
-const SYNC_ACTION_LABELS: Record<string, string> = {
-    reshape: "용량 재구성",
-    recovery: "복구",
-    resync: "재동기화",
-    check: "무결성 검사",
-    repair: "복원",
-};
-
-export const describeSyncAction = (action: string): string =>
-    SYNC_ACTION_LABELS[action.toLowerCase()] ?? action;
+export const describeSyncAction = (action: string): string => ({
+    reshape: _("model.sync.reshape"),
+    recovery: _("model.sync.recovery"),
+    resync: _("model.sync.resync"),
+    check: _("model.sync.check"),
+    repair: _("model.sync.repair"),
+}[action.toLowerCase()] ?? action);
 
 /** Same idea for `/proc/mdstat`'s array state word. */
-const ARRAY_STATE_LABELS: Record<string, string> = {
-    active: "동작 중",
-    clean: "동작 중 (기록 없음)",
-    inactive: "정지됨",
-};
-
-export const describeArrayState = (state: string): string =>
-    ARRAY_STATE_LABELS[state.toLowerCase()] ?? state;
+export const describeArrayState = (state: string): string => ({
+    active: _("model.arrayState.active"),
+    clean: _("model.arrayState.clean"),
+    inactive: _("model.arrayState.inactive"),
+}[state.toLowerCase()] ?? state);
 
 export const formatSyncProgress = (sync: SyncSummary | null): string => {
     if (!sync)
-        return "유휴 (진행 중인 작업 없음)";
-    const percent = sync.percent === null ? "진행률 알 수 없음" : `${sync.percent.toFixed(1)}%`;
-    return `${describeSyncAction(sync.action)} · ${percent} · 남은 시간 ${formatDuration(sync.finish_min)}`;
+        return _("model.sync.idleFull");
+    const percent = sync.percent === null ? _("model.sync.percentUnknown") : `${sync.percent.toFixed(1)}%`;
+    return format(
+        _("model.sync.progress"),
+        describeSyncAction(sync.action), percent, formatDuration(sync.finish_min),
+    );
 };
 
 /**
  * `panels.tsx`'s `ArrayRow` percent+ETA cell, pulled out of the JSX so
  * it's a plain function this file's own tests can assert on directly --
- * this exact fragment is the one that used to print raw minutes ("약
- * 540.0분") right next to `formatSyncProgress`'s correctly-formatted "9시간
- * 0분" for the same field. Deliberately not reusing `formatSyncProgress`
+ * this exact fragment is the one that used to print raw minutes ("about
+ * 540.0 min") right next to `formatSyncProgress`'s correctly-formatted "9 h
+ * 0 min" for the same field. Deliberately not reusing `formatSyncProgress`
  * itself: `ArrayRow` renders `sync.action` separately (its own `<strong>`),
  * so this only covers the percent/ETA half.
  */
 export const formatSyncPercentEta = (sync: SyncSummary | null): string => {
     if (!sync)
         return "";
-    const percent = sync.percent === null ? "진행률 계산 중" : `${sync.percent.toFixed(1)}%`;
-    const eta = sync.finish_min === null ? "" : ` · 약 ${formatDuration(sync.finish_min)}`;
-    return `${percent}${eta}`;
+    const percent = sync.percent === null ? _("model.sync.calculating") : `${sync.percent.toFixed(1)}%`;
+    const eta = sync.finish_min === null ? null : format(_("model.sync.about"), formatDuration(sync.finish_min));
+    return [percent, eta].filter(Boolean).join(" · ");
 };
 
 export interface ScrubDisplay {
@@ -955,19 +980,26 @@ export interface ScrubDisplay {
 
 export const formatScrub = (last: ScrubSummary | null, inProgress: boolean): ScrubDisplay => {
     if (inProgress)
-        return { text: "스크럽 진행 중", tone: "neutral" };
+        return { text: _("model.scrub.inProgress"), tone: "neutral" };
     if (!last)
-        return { text: "스크럽 이력 없음", tone: "neutral" };
-    const outcomeLabel = last.outcome === "completed" ? "완료" : last.outcome === "cancelled" ? "취소됨" : "실패";
+        return { text: _("model.scrub.none"), tone: "neutral" };
+    const outcomeLabel = last.outcome === "completed"
+        ? _("model.scrub.completed")
+        : last.outcome === "cancelled" ? _("model.scrub.cancelled") : _("model.scrub.failed");
     const hasErrors = last.error_count > 0;
-    const text = `${last.finished_at} ${outcomeLabel}` + (hasErrors ? ` · 오류 ${last.error_count}건` : "");
+    const text = [
+        `${last.finished_at} ${outcomeLabel}`,
+        hasErrors
+            ? format(ngettext("model.scrub.errors.one", "model.scrub.errors.other", last.error_count), last.error_count)
+            : null,
+    ].filter(Boolean).join(" · ");
     return { text, tone: hasErrors || last.outcome === "failed" ? "warning" : "good" };
 };
 
 // --- Background RAID activity -----------------------------------------
 // The dashboard's top summary strip had no card for background mdadm
 // activity (resync/recovery/reshape/check) -- an operator had to expand the
-// "mdadm 어레이 인벤토리" panel to notice a rebuild in progress, even though a
+// "mdadm array inventory" panel to notice a rebuild in progress, even though a
 // `recovery` running means reduced/lost redundancy right now. Everything
 // here is derived strictly from `ArrayStatus.sync` (the live mdstat-sourced
 // signal parsed by `parseSync`), never from a group's `scrub_in_progress` or
@@ -1032,27 +1064,28 @@ const SYNC_KIND_SEVERITY: Record<SyncKind, number> = {
 // Never invent a friendlier label for a `sync.action` this UI doesn't
 // recognize (mirrors `modeLabel` in panels.tsx) -- `other` falls back to the
 // raw action string mdadm reported instead of a made-up noun.
-const SYNC_KIND_LABEL: Record<Exclude<SyncKind, "other">, string> = {
-    recovery: "복구",
-    reshape: "확장",
-    resync: "재동기화",
-    check: "스크럽",
-};
-
 const syncKindLabel = (sync: ActiveSync): string => (
-    sync.kind === "other" ? sync.action : SYNC_KIND_LABEL[sync.kind]
+    sync.kind === "other"
+        ? sync.action
+        : {
+            recovery: _("model.activity.recovery"),
+            reshape: _("model.activity.expansion"),
+            resync: _("model.activity.resync"),
+            check: _("model.activity.scrub"),
+        }[sync.kind]
 );
 
-// Matches `ArrayRow`'s established wording in panels.tsx exactly (`진행률
-// 계산 중`) -- mdadm itself can report a sync with no percent/ETA yet, and
-// this must read as "unknown", never as a computed/guessed figure.
+// Matches `ArrayRow`'s established wording in panels.tsx exactly
+// (`calculating progress`) -- mdadm itself can report a sync with no
+// percent/ETA yet, and this must read as "unknown", never as a
+// computed/guessed figure.
 const formatActivePercent = (sync: ActiveSync): string => {
-    const percentText = sync.percent === null ? "진행률 계산 중" : `${sync.percent.toFixed(1)}%`;
+    const percentText = sync.percent === null ? _("model.sync.calculating") : `${sync.percent.toFixed(1)}%`;
     // Route through formatDuration like formatSyncProgress does -- this
-    // used to print raw minutes ("약 540.0분") one panel above the correctly
-    // formatted "9시간 0분" for the same field.
-    const etaText = sync.finishMin === null ? "" : ` · 약 ${formatDuration(sync.finishMin)}`;
-    return `${percentText}${etaText}`;
+    // used to print raw minutes ("about 540.0 min") one panel above the
+    // correctly formatted "9 h 0 min" for the same field.
+    const etaText = sync.finishMin === null ? null : format(_("model.sync.about"), formatDuration(sync.finishMin));
+    return [percentText, etaText].filter(Boolean).join(" · ");
 };
 
 export interface BackgroundActivityView {
@@ -1076,7 +1109,7 @@ export interface BackgroundActivityView {
  * fresh host with no groups -- idle/green is correct, nothing to verify) and
  * "state.toml expects bands but no live mdadm array answered" (measured live:
  * `umount` + `vgchange -an` + `mdadm --stop` with state.toml intact reports
- * `health: degraded`, `arrays: []`). The old code read both as "유휴", the
+ * `health: degraded`, `arrays: []`). The old code read both as "Idle", the
  * same defect an earlier fix already addressed one card below on BandRow's sync cell (see
  * that comment in panels.tsx) -- this is that same axis on the sibling path.
  * `groups` is what tells the two apart: only a live array count of zero
@@ -1088,11 +1121,12 @@ export const describeBackgroundActivity = (arrays: ArrayStatus[], groups: GroupS
         const bandsExpected = groups.some(group => group.bands.length > 0);
         if (bandsExpected && arrays.length === 0) {
             // Same phrasing as BandRow's sync cell (panels.tsx) and same
-            // tone as the header's "주의 필요" badge for `health: degraded`
-            // (healthTone in panels.tsx) -- one voice for one underlying fact.
-            return { tone: "warning", headline: "확인 불가", detail: "실시간 어레이 정보 없음" };
+            // tone as the header's "Needs attention" badge for
+            // `health: degraded` (healthTone in panels.tsx) -- one voice for
+            // one underlying fact.
+            return { tone: "warning", headline: _("model.activity.cannotVerify"), detail: _("common.noLiveArrayInfo") };
         }
-        return { tone: "good", headline: "유휴", detail: "진행 중인 백그라운드 작업 없음" };
+        return { tone: "good", headline: _("common.idle"), detail: _("model.activity.none") };
     }
 
     const worst = active.reduce((a, b) => (SYNC_KIND_SEVERITY[b.kind] > SYNC_KIND_SEVERITY[a.kind] ? b : a));
@@ -1100,9 +1134,10 @@ export const describeBackgroundActivity = (arrays: ArrayStatus[], groups: GroupS
         ? "warning"
         : "neutral";
     const worstLabel = syncKindLabel(worst);
+    const others = active.length - 1;
     const headline = active.length === 1
-        ? `${worstLabel} 진행 중`
-        : `${worstLabel} 외 ${active.length - 1}건 진행 중`;
+        ? format(_("model.activity.single"), worstLabel)
+        : format(ngettext("model.activity.multi.one", "model.activity.multi.other", others), worstLabel, others);
     const detail = active
             .map(sync => `${sync.arrayName} ${syncKindLabel(sync)} · ${formatActivePercent(sync)}`)
             .join(" / ");

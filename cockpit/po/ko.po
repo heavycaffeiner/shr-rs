@@ -1,0 +1,1875 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Message keys, not English sentences: the source carries a stable dotted
+# key and every language -- English included -- gets its wording from its
+# own catalogue here.
+msgid ""
+msgstr ""
+"Project-Id-Version: cockpit-shr-rs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: 2026-08-03 03:00+0900\n"
+"Last-Translator: heavycaffeiner <146043537+heavycaffeiner@users.noreply.github.com>\n"
+"Language-Team: Korean\n"
+"Language: ko\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.entry.invalid"
+msgstr "$0이(가) 올바르지 않습니다."
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.invalid"
+msgstr "$0의 $1이(가) 올바르지 않습니다."
+
+#: src/model.ts
+msgid "parse.subject.diskEntry"
+msgstr "디스크 정보 #$0"
+
+#: src/model.ts
+msgid "parse.subject.disk"
+msgstr "디스크 정보($0)"
+
+#: src/model.ts
+msgid "parse.subject.arrayEntry"
+msgstr "어레이 정보 #$0"
+
+#: src/model.ts
+msgid "parse.subject.array"
+msgstr "어레이 정보($0)"
+
+#: src/model.ts
+msgid "parse.subject.band"
+msgstr "그룹($0)의 밴드 #$1"
+
+#: src/createGroup.ts
+msgid "parse.subject.bandIndex"
+msgstr "밴드 #$0"
+
+#: src/model.ts
+msgid "parse.subject.groupEntry"
+msgstr "그룹 정보 #$0"
+
+#: src/model.ts
+msgid "parse.subject.group"
+msgstr "그룹($0)"
+
+#: src/model.ts
+msgid "parse.subject.memberState"
+msgstr "$0의 멤버 상태 #$1"
+
+#: src/model.ts
+msgid "parse.subject.fsDfGroupEntry"
+msgstr "fs df 응답의 그룹 정보 #$0"
+
+#: src/model.ts
+msgid "parse.subject.fsDfGroup"
+msgstr "그룹($0)의 fs df"
+
+#: src/model.ts
+msgid "parse.field.name"
+msgstr "이름"
+
+#: src/model.ts
+msgid "parse.field.smartSection"
+msgstr "SMART 정보"
+
+#: src/model.ts
+msgid "parse.field.smartState"
+msgstr "SMART 상태"
+
+#: src/model.ts
+msgid "parse.field.temperature"
+msgstr "온도"
+
+#: src/model.ts
+msgid "parse.field.powerOnTime"
+msgstr "가동 시간"
+
+#: src/model.ts
+msgid "parse.field.pendingSectors"
+msgstr "보류 섹터 수"
+
+#: src/model.ts
+msgid "parse.field.reallocatedSectors"
+msgstr "재할당 섹터 수"
+
+#: src/model.ts
+msgid "parse.field.uncorrectableSectors"
+msgstr "복구 불가 섹터 수"
+
+#: src/model.ts
+msgid "parse.field.nvmeWarning"
+msgstr "NVMe 경고 값"
+
+#: src/model.ts
+msgid "parse.field.rotational"
+msgstr "회전식 여부"
+
+#: src/model.ts
+msgid "parse.field.byIdName"
+msgstr "by-id 이름"
+
+#: src/model.ts
+msgid "parse.field.capacity"
+msgstr "용량"
+
+#: src/model.ts
+msgid "parse.field.model"
+msgstr "모델명"
+
+#: src/model.ts
+msgid "parse.field.serial"
+msgstr "일련번호"
+
+#: src/model.ts
+msgid "parse.field.arrayList"
+msgstr "어레이 목록"
+
+#: src/model.ts
+msgid "parse.field.systemDiskFlag"
+msgstr "시스템 디스크 여부"
+
+#: src/model.ts
+msgid "parse.field.systemMountList"
+msgstr "시스템 마운트 목록"
+
+#: src/model.ts
+msgid "parse.field.syncSection"
+msgstr "동기화 정보"
+
+#: src/model.ts
+msgid "parse.field.syncAction"
+msgstr "동기화 작업명"
+
+#: src/model.ts
+msgid "parse.field.syncPercent"
+msgstr "동기화 진행률"
+
+#: src/model.ts
+msgid "parse.field.eta"
+msgstr "예상 시간"
+
+#: src/model.ts
+msgid "parse.field.scrubSection"
+msgstr "스크럽 정보"
+
+#: src/model.ts
+msgid "parse.field.scrubOutcome"
+msgstr "스크럽 결과"
+
+#: src/model.ts
+msgid "parse.field.scrubFinishedAt"
+msgstr "스크럽 완료 시각"
+
+#: src/model.ts
+msgid "parse.field.scrubErrorCount"
+msgstr "스크럽 오류 수"
+
+#: src/model.ts
+msgid "parse.field.role"
+msgstr "role"
+
+#: src/model.ts
+msgid "parse.field.faultyFlag"
+msgstr "faulty 값"
+
+#: src/model.ts
+msgid "parse.field.spareFlag"
+msgstr "spare 값"
+
+#: src/model.ts
+msgid "parse.field.writeMostlyFlag"
+msgstr "write_mostly 값"
+
+#: src/model.ts
+msgid "parse.field.replacementFlag"
+msgstr "replacement 값"
+
+#: src/model.ts
+msgid "parse.field.memberStateList"
+msgstr "멤버 상태 목록"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.raidLevel"
+msgstr "RAID 레벨"
+
+#: src/model.ts
+msgid "parse.field.state"
+msgstr "상태"
+
+#: src/model.ts
+msgid "parse.field.readOnlyFlag"
+msgstr "읽기 전용 상태"
+
+#: src/model.ts
+msgid "parse.field.degradedFlag"
+msgstr "degraded 상태"
+
+#: src/model.ts
+msgid "parse.field.targetMembers"
+msgstr "목표 멤버 수"
+
+#: src/model.ts
+msgid "parse.field.activeMembers"
+msgstr "활성 멤버 수"
+
+#: src/model.ts
+msgid "parse.field.memberList"
+msgstr "멤버 목록"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.index"
+msgstr "인덱스"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.mdName"
+msgstr "mdadm 이름"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.usableCapacity"
+msgstr "가용 용량"
+
+#: src/model.ts
+msgid "parse.field.resizePendingFlag"
+msgstr "확장 마무리 대기 상태"
+
+#: src/model.ts
+msgid "parse.field.mdUuid"
+msgstr "mdadm UUID"
+
+#: src/model.ts
+msgid "parse.field.scrubInProgressFlag"
+msgstr "스크럽 진행 상태"
+
+#: src/model.ts
+msgid "parse.field.bandList"
+msgstr "밴드 목록"
+
+#: src/model.ts
+msgid "parse.field.mode"
+msgstr "모드"
+
+#: src/model.ts
+msgid "parse.field.layoutVersion"
+msgstr "레이아웃 버전"
+
+#: src/model.ts
+msgid "parse.field.mountPoint"
+msgstr "마운트 지점"
+
+#: src/model.ts
+msgid "parse.field.fsUuid"
+msgstr "파일시스템 UUID"
+
+#: src/model.ts
+msgid "parse.field.memberDiskList"
+msgstr "멤버 디스크 목록"
+
+#: src/model.ts
+msgid "parse.field.vgName"
+msgstr "볼륨 그룹 이름"
+
+#: src/model.ts
+msgid "parse.field.lvName"
+msgstr "논리 볼륨 이름"
+
+#: src/model.ts
+msgid "parse.field.compression"
+msgstr "압축 설정"
+
+#: src/model.ts
+msgid "parse.field.dataUsed"
+msgstr "데이터 사용량"
+
+#: src/model.ts
+msgid "parse.field.dataTotal"
+msgstr "데이터 총량"
+
+#: src/model.ts
+msgid "parse.field.metadataUsed"
+msgstr "메타데이터 사용량"
+
+#: src/model.ts
+msgid "parse.field.metadataTotal"
+msgstr "메타데이터 총량"
+
+#: src/model.ts
+msgid "parse.field.unallocated"
+msgstr "미할당 용량"
+
+#: src/model.ts
+msgid "parse.field.dfAvailable"
+msgstr "df 가용 용량"
+
+#: src/model.ts
+msgid "status.error.notJson"
+msgstr "shr-rs가 유효한 JSON 상태를 반환하지 않았습니다."
+
+#: src/model.ts
+msgid "status.error.notObject"
+msgstr "shr-rs 상태 응답이 객체가 아닙니다."
+
+#: src/model.ts
+msgid "status.error.incompatible"
+msgstr "이 서버의 shr-rs 버전이 대시보드와 호환되지 않습니다. shr-rs와 Cockpit 플러그인을 같은 버전으로 맞춰 주세요. (응답 형식 $0)"
+
+#: src/model.ts
+msgid "status.error.health"
+msgstr "상태 응답의 전체 건강 상태가 올바르지 않습니다."
+
+#: src/model.ts
+msgid "status.error.disks"
+msgstr "상태 응답의 디스크 정보가 올바르지 않습니다."
+
+#: src/model.ts
+msgid "status.error.arrays"
+msgstr "상태 응답의 어레이 정보가 올바르지 않습니다."
+
+#: src/model.ts
+msgid "status.error.groups"
+msgstr "상태 응답의 그룹 정보가 올바르지 않습니다."
+
+#: src/model.ts
+msgid "status.error.statePath"
+msgstr "상태 응답의 구성 파일 경로가 올바르지 않습니다."
+
+#: src/model.ts
+msgid "fsdf.error.notJson"
+msgstr "shr-rs가 유효한 fs df JSON을 반환하지 않았습니다."
+
+#: src/model.ts
+msgid "fsdf.error.notObject"
+msgstr "fs df 응답이 객체가 아닙니다."
+
+#: src/model.ts
+msgid "fsdf.error.incompatible"
+msgstr "이 서버의 shr-rs 버전이 대시보드와 호환되지 않아 사용량을 읽을 수 없습니다. shr-rs와 Cockpit 플러그인을 같은 버전으로 맞춰 주세요. (응답 형식 $0)"
+
+#: src/model.ts
+msgid "fsdf.error.groups"
+msgstr "fs df 응답의 그룹 정보가 올바르지 않습니다."
+
+#: src/model.ts src/panels.tsx
+msgid "common.unknown"
+msgstr "알 수 없음"
+
+#: src/model.ts src/panels.tsx
+msgid "common.idle"
+msgstr "유휴"
+
+#: src/model.ts src/panels.tsx
+msgid "common.noLiveArrayInfo"
+msgstr "실시간 어레이 정보 없음"
+
+#: src/model.ts
+msgid "model.duration.underMinute"
+msgstr "1분 미만"
+
+#: src/model.ts
+msgid "model.duration.hoursMinutes"
+msgstr "$0시간 $1분"
+
+#: src/model.ts
+msgid "model.duration.minutes"
+msgstr "$0분"
+
+#: src/model.ts
+msgid "model.sync.reshape"
+msgstr "용량 재구성"
+
+#: src/model.ts
+msgid "model.sync.recovery"
+msgstr "복구"
+
+#: src/model.ts
+msgid "model.sync.resync"
+msgstr "재동기화"
+
+#: src/model.ts
+msgid "model.sync.check"
+msgstr "무결성 검사"
+
+#: src/model.ts
+msgid "model.sync.repair"
+msgstr "복원"
+
+#: src/model.ts
+msgid "model.arrayState.active"
+msgstr "동작 중"
+
+#: src/model.ts
+msgid "model.arrayState.clean"
+msgstr "동작 중 (기록 없음)"
+
+#: src/model.ts
+msgid "model.arrayState.inactive"
+msgstr "정지됨"
+
+#: src/model.ts
+msgid "model.sync.idleFull"
+msgstr "유휴 (진행 중인 작업 없음)"
+
+#: src/model.ts
+msgid "model.sync.percentUnknown"
+msgstr "진행률 알 수 없음"
+
+#: src/model.ts
+msgid "model.sync.progress"
+msgstr "$0 · $1 · 남은 시간 $2"
+
+#: src/model.ts
+msgid "model.sync.calculating"
+msgstr "진행률 계산 중"
+
+#: src/model.ts
+msgid "model.sync.about"
+msgstr "약 $0"
+
+#: src/actionsDialogs.tsx src/model.ts
+msgid "model.scrub.inProgress"
+msgstr "스크럽 진행 중"
+
+#: src/model.ts
+msgid "model.scrub.none"
+msgstr "스크럽 이력 없음"
+
+#: src/model.ts
+msgid "model.scrub.completed"
+msgstr "완료"
+
+#: src/model.ts
+msgid "model.scrub.cancelled"
+msgstr "취소됨"
+
+#: src/model.ts
+msgid "model.scrub.failed"
+msgstr "실패"
+
+#: src/model.ts
+msgid "model.activity.recovery"
+msgstr "복구"
+
+#: src/model.ts
+msgid "model.activity.expansion"
+msgstr "확장"
+
+#: src/model.ts
+msgid "model.activity.resync"
+msgstr "재동기화"
+
+#: src/model.ts
+msgid "model.activity.scrub"
+msgstr "스크럽"
+
+#: src/model.ts
+msgid "model.activity.cannotVerify"
+msgstr "확인 불가"
+
+#: src/model.ts
+msgid "model.activity.none"
+msgstr "진행 중인 백그라운드 작업 없음"
+
+#: src/model.ts
+msgid "model.activity.single"
+msgstr "$0 진행 중"
+
+#: src/actions.ts src/createGroup.ts
+msgid "actions.error.commandFailed"
+msgstr "명령 실행에 실패했습니다."
+
+#: src/actions.ts
+msgid "actions.error.scrubStartNoName"
+msgstr "스크럽을 시작할 그룹 이름이 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.scrubStatusNoName"
+msgstr "스크럽 상태를 조회할 그룹 이름이 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.scrubCancelNoName"
+msgstr "스크럽을 취소할 그룹 이름이 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.scrubNotJson"
+msgstr "shr-rs가 유효한 스크럽 상태 JSON을 반환하지 않았습니다."
+
+#: src/actions.ts
+msgid "actions.error.scrubNotObject"
+msgstr "스크럽 상태 응답이 객체가 아닙니다."
+
+#: src/actions.ts
+msgid "actions.error.scrubGroup"
+msgstr "스크럽 상태 응답의 group이 올바르지 않습니다."
+
+#: src/actions.ts
+msgid "actions.error.scrubRunning"
+msgstr "스크럽 상태 응답의 running이 올바르지 않습니다."
+
+#: src/actions.ts
+msgid "actions.error.scrubErrorCount"
+msgstr "스크럽 상태 응답의 error_count가 올바르지 않습니다."
+
+#: src/actions.ts
+msgid "actions.error.expandNoDisks"
+msgstr "확장에 추가할 디스크를 선택하세요."
+
+#: src/actions.ts
+msgid "actions.error.expandNoName"
+msgstr "확장할 그룹 이름이 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.replaceNoName"
+msgstr "디스크를 교체할 그룹 이름이 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.replaceNoOld"
+msgstr "교체할 기존 디스크를 선택하세요."
+
+#: src/actions.ts
+msgid "actions.error.replaceNoNew"
+msgstr "교체할 새 디스크를 선택하세요."
+
+#: src/actions.ts
+msgid "actions.error.replaceSameDisk"
+msgstr "기존 디스크와 새 디스크가 같습니다."
+
+#: src/actions.ts
+msgid "actions.error.replaceSizeUnknown"
+msgstr "디스크 용량을 확인할 수 없어 교체 가능 여부를 판단할 수 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.replaceTooSmall"
+msgstr "새 디스크는 기존 디스크와 같거나 더 커야 합니다."
+
+#: src/actions.ts
+msgid "actions.error.recompressNoName"
+msgstr "압축을 변경할 그룹 이름이 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.recompressFormat"
+msgstr "압축 설정은 \"알고리즘\" 또는 \"알고리즘:레벨\" 형식이어야 합니다 (예: zstd:3)."
+
+#: src/actions.ts
+msgid "actions.error.snapshotNoGroup"
+msgstr "스냅샷을 생성할 그룹 이름이 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.snapshotNoName"
+msgstr "스냅샷 이름을 입력하세요."
+
+#: src/actions.ts
+msgid "actions.error.snapshotSlash"
+msgstr "스냅샷 이름에는 \"/\"를 포함할 수 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.destroyNoName"
+msgstr "삭제할 그룹 이름이 없습니다."
+
+#: src/actions.ts
+msgid "actions.error.destroyNotJson"
+msgstr "shr-rs가 유효한 삭제 결과 JSON을 반환하지 않았습니다."
+
+#: src/actions.ts
+msgid "actions.error.destroyNotObject"
+msgstr "삭제 결과 응답이 객체가 아닙니다."
+
+#: src/actions.ts
+msgid "actions.error.destroyDestroyed"
+msgstr "삭제 결과 응답의 destroyed가 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.preflightNotJson"
+msgstr "shr-rs가 유효한 preflight JSON을 반환하지 않았습니다."
+
+#: src/createGroup.ts
+msgid "create.error.preflightNotObject"
+msgstr "preflight 응답이 객체가 아닙니다."
+
+#: src/createGroup.ts
+msgid "create.error.preflightOk"
+msgstr "preflight 응답의 ok 필드가 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.preflightBlockers"
+msgstr "preflight 응답의 blockers 목록이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.preflightWarnings"
+msgstr "preflight 응답의 warnings 목록이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.preflightTargets"
+msgstr "preflight 응답의 targets 목록이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewNotJson"
+msgstr "shr-rs가 유효한 미리보기 JSON을 반환하지 않았습니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewNotObject"
+msgstr "미리보기 응답이 객체가 아닙니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewFilesystem"
+msgstr "미리보기 응답의 filesystem 정보가 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewBands"
+msgstr "미리보기 응답의 bands 목록이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewDisks"
+msgstr "미리보기 응답의 disks 목록이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewName"
+msgstr "미리보기 응답의 name이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewMode"
+msgstr "미리보기 응답의 mode가 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewLayoutVersion"
+msgstr "미리보기 응답의 layout_version이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewMountPoint"
+msgstr "미리보기 응답의 mount_point가 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.previewPlannedCommands"
+msgstr "미리보기 응답의 planned_commands 목록이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.resultNotJson"
+msgstr "shr-rs가 유효한 생성 결과 JSON을 반환하지 않았습니다."
+
+#: src/createGroup.ts
+msgid "create.error.resultNotObject"
+msgstr "생성 결과 응답이 객체가 아닙니다."
+
+#: src/createGroup.ts
+msgid "create.error.resultDisks"
+msgstr "생성 결과 응답의 disks 목록이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.resultBands"
+msgstr "생성 결과 응답의 bands 목록이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.resultName"
+msgstr "생성 결과 응답의 name이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.resultMode"
+msgstr "생성 결과 응답의 mode가 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.resultLayoutVersion"
+msgstr "생성 결과 응답의 layout_version이 올바르지 않습니다."
+
+#: src/createGroup.ts
+msgid "create.error.vgNameConflict"
+msgstr "볼륨 그룹 이름 \"$0\"은(는) 이미 그룹 \"$1\"이(가) 사용 중입니다. 다른 이름을 지정하세요."
+
+#: src/panels.tsx
+msgid "panels.health.healthy"
+msgstr "정상"
+
+#: src/panels.tsx
+msgid "panels.health.degraded"
+msgstr "주의 필요"
+
+#: src/panels.tsx
+msgid "panels.health.none"
+msgstr "어레이 없음"
+
+#: src/panels.tsx
+msgid "panels.smart.warning"
+msgstr "경고"
+
+#: src/panels.tsx
+msgid "panels.smart.powerOnHours"
+msgstr "$0시간"
+
+#: src/panels.tsx
+msgid "panels.smart.pendingSectors"
+msgstr "보류 섹터 $0"
+
+#: src/panels.tsx
+msgid "panels.smart.reallocated"
+msgstr "재할당 $0"
+
+#: src/panels.tsx
+msgid "panels.smart.uncorrectable"
+msgstr "복구 불가 $0"
+
+#: src/panels.tsx
+msgid "panels.smart.nvmeWarning"
+msgstr "NVMe 경고 0x$0"
+
+#: src/panels.tsx
+msgid "panels.drives.col.node"
+msgstr "노드"
+
+#: src/panels.tsx
+msgid "panels.drives.spinning"
+msgstr "회전식 디스크"
+
+#: src/panels.tsx
+msgid "common.systemDisk"
+msgstr "시스템 디스크 (RAID 대상 아님)"
+
+#: src/panels.tsx
+msgid "panels.drives.col.model"
+msgstr "모델 / 일련번호"
+
+#: src/panels.tsx
+msgid "panels.drives.noModel"
+msgstr "모델 정보 없음"
+
+#: src/panels.tsx
+msgid "panels.drives.noSerial"
+msgstr "일련번호 없음"
+
+#: src/panels.tsx
+msgid "panels.drives.col.capacity"
+msgstr "용량"
+
+#: src/panels.tsx
+msgid "panels.drives.col.smart"
+msgstr "SMART 상태 / 온도 / 가동시간"
+
+#: src/panels.tsx
+msgid "panels.drives.col.arrays"
+msgstr "연결 어레이"
+
+#: src/panels.tsx
+msgid "panels.drives.faultyPartition"
+msgstr "이 디스크의 파티션이 어레이에서 faulty로 표시되었습니다."
+
+#: src/panels.tsx
+msgid "panels.drives.notInRaid"
+msgstr "RAID 미연결"
+
+#: src/panels.tsx
+msgid "panels.drives.title"
+msgstr "구성 드라이브 목록"
+
+#: src/panels.tsx
+msgid "panels.drives.empty"
+msgstr "감지된 물리 디스크가 없습니다."
+
+#: src/panels.tsx
+msgid "panels.arrays.attention"
+msgstr "주의"
+
+#: src/panels.tsx
+msgid "panels.arrays.col.device"
+msgstr "mdadm 디바이스"
+
+#: src/panels.tsx
+msgid "panels.arrays.col.members"
+msgstr "활성 / 목표 멤버"
+
+#: src/panels.tsx
+msgid "panels.arrays.noMemberInfo"
+msgstr "멤버 정보 없음"
+
+#: src/panels.tsx
+msgid "panels.arrays.col.sync"
+msgstr "동기화"
+
+#: src/panels.tsx
+msgid "panels.arrays.col.state"
+msgstr "상태"
+
+#: src/panels.tsx
+msgid "panels.arrays.readOnly"
+msgstr "읽기 전용"
+
+#: src/panels.tsx
+msgid "panels.arrays.degraded"
+msgstr "성능 저하"
+
+#: src/panels.tsx
+msgid "panels.arrays.invalidRaid6"
+msgstr "RAID6는 최소 4개 멤버 필요"
+
+#: src/panels.tsx
+msgid "panels.arrays.title"
+msgstr "mdadm 어레이 인벤토리"
+
+#: src/panels.tsx
+msgid "panels.arrays.empty"
+msgstr "구성된 mdadm 어레이가 없습니다."
+
+#: src/panels.tsx
+msgid "panels.tolerance.unknownMode"
+msgstr "허용 손실 수 알 수 없는 모드"
+
+#: src/panels.tsx
+msgid "panels.tolerance.remaining"
+msgstr "남은 여유 $0 / 설계상 $1디스크 손실 허용"
+
+#: src/panels.tsx
+msgid "panels.tolerance.exceeded"
+msgstr "허용 한도 초과 (설계상 $0디스크 손실 허용)"
+
+#: src/panels.tsx
+msgid "panels.band.col.band"
+msgstr "밴드"
+
+#: src/panels.tsx
+msgid "panels.band.col.device"
+msgstr "mdadm 디바이스 / UUID"
+
+#: src/panels.tsx
+msgid "panels.band.uuidUnknown"
+msgstr "UUID 알 수 없음"
+
+#: src/panels.tsx
+msgid "panels.band.col.members"
+msgstr "참여 멤버 및 슬라이스 크기"
+
+#: src/panels.tsx
+msgid "panels.band.sliceHint"
+msgstr "usable_bytes와 RAID 레벨/구성된 디스크 수(raid_disks)로부터 계산한 값입니다. 멤버 고장 여부는 이 값에 영향을 주지 않습니다."
+
+#: src/panels.tsx
+msgid "panels.band.noLiveMembers"
+msgstr "실시간 멤버 정보 없음"
+
+#: src/panels.tsx
+msgid "panels.band.col.capacity"
+msgstr "가용 / 총 물리 용량"
+
+#: src/panels.tsx
+msgid "panels.band.col.syncScrub"
+msgstr "동기화 / 스크럽 상태"
+
+#: src/panels.tsx
+msgid "common.resizePending"
+msgstr "확장 마무리 대기"
+
+#: src/panels.tsx
+msgid "panels.group.mountPoint"
+msgstr "마운트 지점"
+
+#: src/panels.tsx
+msgid "panels.group.fsUuid"
+msgstr "파일시스템 UUID"
+
+#: src/panels.tsx
+msgid "panels.group.disks"
+msgstr "구성 디스크"
+
+#: src/panels.tsx
+msgid "common.none"
+msgstr "없음"
+
+#: src/panels.tsx
+msgid "panels.group.bandTableLabel"
+msgstr "$0 밴드 구성"
+
+#: src/panels.tsx
+msgid "panels.group.noBands"
+msgstr "구성된 밴드가 없습니다."
+
+#: src/panels.tsx
+msgid "panels.groups.title"
+msgstr "SHR 그룹"
+
+#: src/panels.tsx
+msgid "panels.groups.expansionPending"
+msgstr "확장 마무리 대기 중인 그룹 있음"
+
+#: src/panels.tsx
+msgid "panels.groups.empty"
+msgstr "아직 만들어진 SHR 그룹이 없습니다. 아래 목록은 이 서버에서 지금 감지된 디스크와 RAID 어레이입니다."
+
+#: src/panels.tsx
+msgid "panels.segment.used"
+msgstr "사용 중"
+
+#: src/panels.tsx
+msgid "panels.segment.free"
+msgstr "여유 공간"
+
+#: src/panels.tsx
+msgid "panels.segment.unknown"
+msgstr "가용 용량 (사용/여유 측정 불가)"
+
+#: src/panels.tsx
+msgid "panels.segment.parity"
+msgstr "패리티 보호"
+
+#: src/panels.tsx
+msgid "panels.segment.unassigned"
+msgstr "미할당 물리 용량 (RAID 추가 가능)"
+
+#: src/panels.tsx
+msgid "panels.capacity.usedUnknown.fsDfFailed"
+msgstr "사용량을 조회하지 못했습니다 (shr-rs 버전이 낮거나 연결 문제일 수 있습니다)"
+
+#: src/panels.tsx
+msgid "panels.capacity.usedUnknown.noGroups"
+msgstr "구성된 그룹이 없습니다"
+
+#: src/panels.tsx
+msgid "panels.capacity.usedUnknown.partial"
+msgstr "일부 그룹의 사용량을 읽지 못했습니다 (마운트되어 있는지 확인하세요)"
+
+#: src/panels.tsx
+msgid "panels.capacity.overviewLabel"
+msgstr "그룹 용량 개요"
+
+#: src/panels.tsx
+msgid "panels.capacity.usable"
+msgstr "가용 스토리지"
+
+#: src/panels.tsx
+msgid "panels.capacity.physicalSub"
+msgstr "물리 용량 $0"
+
+#: src/panels.tsx
+msgid "panels.capacity.used"
+msgstr "사용 중 공간"
+
+#: src/panels.tsx
+msgid "common.notMeasurable"
+msgstr "측정 불가"
+
+#: src/panels.tsx
+msgid "panels.capacity.usedMeasured"
+msgstr "마운트된 파일시스템 실측값"
+
+#: src/panels.tsx
+msgid "panels.capacity.free"
+msgstr "여유 공간"
+
+#: src/panels.tsx
+msgid "panels.capacity.freeUnknown"
+msgstr "사용 중 공간을 모르면 계산할 수 없습니다"
+
+#: src/panels.tsx
+msgid "panels.capacity.freeAvailable"
+msgstr "할당 가능"
+
+#: src/panels.tsx
+msgid "panels.capacity.protection"
+msgstr "보호 레벨"
+
+#: src/panels.tsx
+msgid "panels.capacity.parityValue"
+msgstr "패리티 $0"
+
+#: src/panels.tsx
+msgid "panels.capacity.parityPartial"
+msgstr "(일부 밴드는 실시간 정보 없음)"
+
+#: src/panels.tsx
+msgid "panels.capacity.noGroups"
+msgstr "구성된 그룹 없음"
+
+#: src/panels.tsx
+msgid "panels.allocation.title"
+msgstr "스토리지 할당 현황"
+
+#: src/panels.tsx
+msgid "panels.allocation.noGroups"
+msgstr "그룹 없음"
+
+#: src/panels.tsx
+msgid "panels.allocation.systemDiskNote"
+msgstr "시스템 디스크는 OS가 설치된 디스크입니다. 안전을 위해 RAID 후보에서 자동으로 제외되며, 이 디스크의 용량은 미할당 물리 용량에 들어가지 않습니다."
+
+#: src/panels.tsx
+msgid "panels.allocation.empty"
+msgstr "표시할 용량 정보가 없습니다."
+
+#: src/panels.tsx
+msgid "panels.tech.groupName"
+msgstr "그룹 이름"
+
+#: src/panels.tsx
+msgid "panels.tech.vg"
+msgstr "볼륨 그룹 (LVM VG)"
+
+#: src/panels.tsx
+msgid "panels.tech.lv"
+msgstr "논리 볼륨 (LVM LV) / 마운트 위치"
+
+#: src/panels.tsx
+msgid "panels.tech.compression"
+msgstr "압축 방식 및 마운트 옵션"
+
+#: src/panels.tsx
+msgid "panels.tech.statePath"
+msgstr "구성 파일"
+
+#: src/panels.tsx
+msgid "panels.tech.statePathHint"
+msgstr "이 버전의 shr-rs는 구성 파일 경로를 알려주지 않습니다."
+
+#: src/panels.tsx
+msgid "panels.tech.title"
+msgstr "볼륨 및 파일시스템 상세"
+
+#: src/panels.tsx
+msgid "panels.tech.note"
+msgstr "LVM · Btrfs 구성"
+
+#: src/panels.tsx
+msgid "panels.tech.empty"
+msgstr "구성된 SHR 그룹이 없습니다."
+
+#: src/panels.tsx
+msgid "panels.method.title"
+msgstr "용량 산정 방법"
+
+#: src/panels.tsx
+msgid "panels.method.note"
+msgstr "각 수치를 어떻게 구했는지"
+
+#: src/panels.tsx
+msgid "panels.method.usableCapacity"
+msgstr "그룹 가용 용량 (구성 기록 합계)"
+
+#: src/panels.tsx
+msgid "panels.method.parityCapacity"
+msgstr "계산된 패리티 용량"
+
+#: src/panels.tsx
+msgid "panels.method.usableTerm"
+msgstr "가용 용량"
+
+#: src/panels.tsx
+msgid "panels.method.usableBody"
+msgstr "은 그룹을 만들 때 기록해 둔 값을 그대로 더한 것이라 항상 표시됩니다."
+
+#: src/panels.tsx
+msgid "panels.method.parityTerm"
+msgstr "패리티 용량"
+
+#: src/panels.tsx
+msgid "panels.method.parityBody"
+msgstr "은 각 RAID 어레이의 구성 디스크 수와 RAID 레벨로부터 이 화면이 계산합니다. 어레이가 현재 조립되어 있지 않으면 계산할 수 없어 \"측정 불가\"로 표시됩니다. 멤버 하나가 고장으로 표시되어도 어레이가 차지하는 디스크 수는 그대로이므로 이 값은 바뀌지 않으며, 고장/예비 표시는 멤버 목록과 상태 배지에만 나타납니다. 계산값이라 실제 크기와 아주 근소하게 다를 수 있습니다."
+
+#: src/panels.tsx
+msgid "panels.method.usedBody"
+msgstr "은 마운트된 파일시스템에서 직접 읽은 실측값입니다. 마운트되어 있지 않거나 조회에 실패하면 추정하지 않고 \"측정 불가\"로 둡니다."
+
+#: src/panels.tsx
+msgid "panels.method.rawBody"
+msgstr "에는 OS가 설치된 시스템 디스크도 합산되지만, 그 디스크는 RAID 후보에서 제외되므로 미할당 물리 용량에서는 빠집니다."
+
+#: src/app.tsx
+msgid "app.error.connection"
+msgstr "Cockpit 연결 오류: $0"
+
+#: src/app.tsx
+msgid "app.error.loadFailed"
+msgstr "상태 정보를 불러오지 못했습니다."
+
+#: src/app.tsx
+msgid "app.raw.allSizesKnown"
+msgstr "모든 물리 디스크 크기 확인"
+
+#: src/app.tsx
+msgid "app.summaryLabel"
+msgstr "스토리지 상태 요약"
+
+#: src/app.tsx
+msgid "app.metric.background"
+msgstr "백그라운드 작업"
+
+#: src/app.tsx
+msgid "app.metric.overall"
+msgstr "전체 상태"
+
+#: src/app.tsx
+msgid "app.metric.overallSub"
+msgstr "RAID 어레이와 그룹 구성을 종합한 결과"
+
+#: src/app.tsx
+msgid "app.metric.drives"
+msgstr "구성 드라이브"
+
+#: src/app.tsx
+msgid "app.metric.members"
+msgstr "RAID 멤버"
+
+#: src/app.tsx
+msgid "app.physical.title"
+msgstr "감지된 물리 용량"
+
+#: src/app.tsx
+msgid "app.physical.sub"
+msgstr "이 호스트에서 감지된 물리 디스크 크기의 합계입니다"
+
+#: src/app.tsx
+msgid "app.physical.caveat"
+msgstr "RAID 미연결 디스크는 아직 어떤 그룹에도 속하지 않은 여유 디스크입니다. OS가 설치된 시스템 디스크는 안전을 위해 RAID 후보에서 자동으로 제외되므로 이 수치에 포함되지 않습니다."
+
+#: src/app.tsx
+msgid "app.physical.caveatHint"
+msgstr "디스크 한 개가 RAID에 정확히 몇 바이트를 내주었는지는 아직 표시하지 않습니다. 위 숫자는 디스크 개수 기준입니다."
+
+#: src/app.tsx
+msgid "app.lastRefreshed"
+msgstr "마지막 갱신: $0"
+
+#: src/app.tsx
+msgid "app.badge.connectionError"
+msgstr "연결 오류"
+
+#: src/app.tsx
+msgid "app.badge.checking"
+msgstr "확인 중"
+
+#: src/app.tsx
+msgid "app.subtitle"
+msgstr "크기가 서로 다른 디스크를 묶어 하나의 저장 공간으로 사용합니다"
+
+#: src/app.tsx
+msgid "app.action.createGroup"
+msgstr "그룹 만들기"
+
+#: src/app.tsx
+msgid "app.action.loading"
+msgstr "불러오는 중"
+
+#: src/app.tsx
+msgid "app.action.refresh"
+msgstr "새로 고침"
+
+#: src/app.tsx
+msgid "app.loading.title"
+msgstr "스토리지 상태를 확인하고 있습니다"
+
+#: src/app.tsx
+msgid "app.loading.body"
+msgstr "디스크와 RAID 어레이를 조회하고 있습니다. 잠시만 기다려 주세요."
+
+#: src/app.tsx
+msgid "app.error.title"
+msgstr "상태를 불러오지 못했습니다"
+
+#: src/app.tsx
+msgid "app.error.retry"
+msgstr "다시 시도"
+
+#: src/app.tsx
+msgid "app.error.hint.permission"
+msgstr "Cockpit 상단의 \"제한된 접근\"을 눌러 관리자 권한을 켠 뒤 다시 시도하세요."
+
+#: src/app.tsx
+msgid "app.error.hint.installation"
+msgstr "이 서버에 shr-rs 명령이 설치되어 있는지 확인하세요."
+
+#: src/panels.tsx
+msgid "common.ok"
+msgstr "정상"
+
+#: src/panels.tsx
+msgid "common.raidLevel"
+msgstr "RAID 레벨"
+
+#: src/app.tsx src/panels.tsx
+msgid "common.rawCapacity"
+msgstr "감지된 원시 용량"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "common.close"
+msgstr "닫기"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "common.cancel"
+msgstr "취소"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.title"
+msgstr "SHR 그룹 만들기"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.name"
+msgstr "그룹 이름"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.nameTaken"
+msgstr "이미 존재하는 그룹 이름입니다."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.mode"
+msgstr "모드"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.mode.shr"
+msgstr "SHR (단일 패리티)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.mode.shr2"
+msgstr "SHR-2 (이중 패리티)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.mount"
+msgstr "마운트 지점"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.legend"
+msgstr "디스크 선택"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.select"
+msgstr "선택"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.node"
+msgstr "노드"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.model"
+msgstr "모델"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.capacity"
+msgstr "용량"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.state"
+msgstr "상태"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.empty"
+msgstr "감지된 디스크가 없습니다."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.selectAria"
+msgstr "/dev/$0 선택"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.disks.noModel"
+msgstr "모델 정보 없음"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.disks.systemDisk"
+msgstr "시스템 디스크 (선택 불가)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.alreadyInRaid"
+msgstr "이미 RAID 연결됨"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.advanced.toggle"
+msgstr "고급: LVM 볼륨 그룹/논리 볼륨 이름"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.advanced.caveat"
+msgstr "비워두면 그룹 이름에서 자동으로 만듭니다(볼륨 그룹은 $0, 논리 볼륨은 $1). 볼륨 그룹 이름은 호스트 전체에서 단 하나만 존재할 수 있습니다. 같은 이름을 다시 쓰면 안전 점검 단계에서 거부됩니다."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.vgName"
+msgstr "볼륨 그룹(VG) 이름"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.lvName"
+msgstr "논리 볼륨(LV) 이름"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.forceContent"
+msgstr "선택한 디스크에 기존 데이터가 있어도 진행. 데이터가 있는 디스크는 기본적으로 안전 점검에서 차단되며, 이 체크박스는 그 차단을 명시적으로 우회합니다."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.selectCaveat"
+msgstr "디스크를 고른 뒤에도 안전 점검과 실행 계획 미리보기를 거쳐야만 그룹이 만들어집니다. 이 화면에서 바로 디스크가 지워지지 않습니다."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.preflightBusy"
+msgstr "안전 점검 실행 중..."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.preflight"
+msgstr "다음: 안전 점검"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.preflight.blockedTitle"
+msgstr "안전 점검에서 문제가 발견되어 진행할 수 없습니다."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.backToDisks"
+msgstr "디스크 선택으로 돌아가기"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.preview.intro"
+msgstr "안전 점검을 통과했습니다. 실행 계획 미리보기를 생성합니다 (아직 아무 디스크도 건드리지 않습니다)."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.back"
+msgstr "뒤로"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.previewBusy"
+msgstr "미리보기 생성 중..."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.preview"
+msgstr "실행 계획 미리보기"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.confirm.title"
+msgstr "이 작업은 되돌릴 수 없습니다."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.body"
+msgstr "아래 디스크가 파티션되고 포맷됩니다. 기존 데이터가 있다면 전부 사라집니다."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.group"
+msgstr "그룹"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.mode"
+msgstr "모드"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.mount"
+msgstr "마운트"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.bands"
+msgstr "밴드"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.confirm.typeName"
+msgstr "계속하려면 그룹 이름 $0을(를) 정확히 입력하세요"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.executeBusy"
+msgstr "생성 중..."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.action.execute"
+msgstr "그룹 생성 실행 (되돌릴 수 없음)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.executing"
+msgstr "그룹을 생성하는 중입니다. 창을 닫지 마세요."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.done.title"
+msgstr "그룹 \"$0\"이(가) 생성되었습니다."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.done.mode"
+msgstr "모드 $0"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.error.title"
+msgstr "실패했습니다."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.action.startOver"
+msgstr "처음부터 다시 시도"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.systemDisk"
+msgstr "$0: 시스템 디스크입니다 (마운트: $1)."
+
+#: src/createGroupWizard.tsx
+msgid "blocker.hasContent"
+msgstr "$0: 이미 데이터/파티션이 있습니다. 계속하려면 \"기존 데이터가 있어도 진행\"을 선택하세요."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.noStableId"
+msgstr "$0: 안정적인 식별자(by-id)를 찾을 수 없습니다."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.sizeUnknown"
+msgstr "$0: 용량을 확인할 수 없습니다."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.notFound"
+msgstr "$0: 해당하는 디스크를 찾을 수 없습니다."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.unknown"
+msgstr "이 디스크는 사용할 수 없습니다 (자세한 내용: $0)."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.inFlightReason"
+msgstr "작업이 진행 중입니다. 완료될 때까지 창을 닫을 수 없습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.error.title"
+msgstr "실패했습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.retry"
+msgstr "다시 시도"
+
+#: src/actionsDialogs.tsx
+msgid "common.refresh"
+msgstr "새로 고침"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.loadFailed"
+msgstr "상태를 불러오지 못했습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.confirmPrompt"
+msgstr "계속하려면 확인을 눌러 실행하세요."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.confirmAndRun"
+msgstr "확인 후 실행"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.busy.working"
+msgstr "처리 중..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.next.confirm"
+msgstr "다음: 확인"
+
+#: src/actionsDialogs.tsx
+msgid "blocker.hasContentShort"
+msgstr "$0: 이미 데이터/파티션이 있습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.title"
+msgstr "그룹 \"$0\" 스크럽"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.loading"
+msgstr "스크럽 상태를 확인하는 중입니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.currentState"
+msgstr "현재 상태"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.notRunning"
+msgstr "진행 중 아님"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.errorsFound"
+msgstr "발견된 오류"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.cancelTitle"
+msgstr "실행 중인 스크럽을 취소합니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.startTitle"
+msgstr "이 그룹 전체를 스크럽합니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.start"
+msgstr "스크럽 시작"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.cancel"
+msgstr "스크럽 취소"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.title"
+msgstr "그룹 \"$0\" 확장"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.legend"
+msgstr "추가할 디스크 선택 (이미 다른 그룹에서 사용 중인 디스크는 표시되지 않습니다)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.noCandidates"
+msgstr "추가 가능한 디스크가 없습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.forceContent"
+msgstr "선택한 디스크에 기존 데이터가 있어도 진행합니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.priorityLabel"
+msgstr "재구성 속도 우선순위"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.priority.balanced"
+msgstr "균형 (기본값): 평소 디스크 사용과 재구성 속도를 절충"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.priority.background"
+msgstr "백그라운드: 평소 디스크 사용을 우선, 재구성은 느려짐"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.priority.max"
+msgstr "최대 속도: 재구성을 최대한 빨리, 평소 디스크 사용이 느려짐"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.blockedTitle"
+msgstr "안전 점검에서 문제가 발견되었습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.previewIntro"
+msgstr "안전 점검을 통과했습니다. 확장 계획 미리보기를 생성합니다 (아직 아무것도 실행하지 않습니다)."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.confirmBody"
+msgstr "RAID 재구성이 시작됩니다. 시작한 뒤에는 중간에 되돌릴 수 없습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.disksAfter"
+msgstr "확장 후 디스크"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.busy"
+msgstr "확장 중..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.execute"
+msgstr "확장 실행 (되돌릴 수 없음)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.executing"
+msgstr "그룹을 확장하는 중입니다. 창을 닫지 마세요."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.doneTitle"
+msgstr "확장이 완료되었습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.doneBody"
+msgstr "이제 디스크 $0개로 구성됩니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.title"
+msgstr "그룹 \"$0\" 디스크 교체"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.noStableId"
+msgstr "안정적인 식별자(by-id) 없음"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.systemDisk"
+msgstr "시스템 디스크"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.unavailable"
+msgstr "선택 불가: $0"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.confirmBody"
+msgstr "$0이(가) $1(으)로 교체되며, mdadm 리빌드가 시작됩니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.oldLabel"
+msgstr "교체할 기존 디스크"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.noMembers"
+msgstr "이 그룹의 멤버 디스크를 찾을 수 없습니다"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.newLabel"
+msgstr "새 디스크 (같거나 더 큰 용량만 표시됩니다)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.choose"
+msgstr "선택하세요"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.noCandidates"
+msgstr "같거나 더 큰 용량의 미사용 디스크가 없습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.busy"
+msgstr "교체 중..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.execute"
+msgstr "디스크 교체 실행 (되돌릴 수 없음)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.executing"
+msgstr "디스크를 교체하는 중입니다. 창을 닫지 마세요."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.doneTitle"
+msgstr "디스크 교체가 완료되었습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.title"
+msgstr "그룹 \"$0\" 압축 변경"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.confirmTitle"
+msgstr "이 작업은 마운트 옵션과 상태를 변경합니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.confirmBody"
+msgstr "되돌리려면 다시 압축 변경을 실행해야 합니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.field"
+msgstr "압축 설정 (알고리즘 또는 알고리즘:레벨, 예: zstd:3)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.caveat"
+msgstr "새 설정은 앞으로 새로 쓰이는 데이터에만 적용됩니다. 기존 데이터를 다시 압축하려면 재작성이 필요합니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.busy"
+msgstr "적용 중..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.execute"
+msgstr "압축 변경 실행 (되돌릴 수 없음)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.executing"
+msgstr "압축 설정을 적용하는 중입니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.doneTitle"
+msgstr "압축 설정이 변경되었습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.title"
+msgstr "그룹 \"$0\" 삭제"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.confirmBody"
+msgstr "그룹 $0의 마운트가 해제되고, 이 그룹이 사용하던 볼륨과 RAID 어레이가 모두 제거되며, 구성 기록에서도 완전히 사라집니다. 그룹에 저장된 데이터는 복구할 수 없습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.reviewTitle"
+msgstr "이 그룹을 완전히 삭제합니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.reviewBody"
+msgstr "마운트를 해제하고, 이 그룹의 볼륨과 RAID 어레이를 모두 제거한 뒤, 구성 기록에서도 이 그룹을 지웁니다. 명령줄에서 손으로 해체하면 정리되지 않은 구성 정보가 남으므로, 그룹을 지울 때는 이 기능을 사용하세요."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.zeroSuperblocks"
+msgstr "디스크에 남는 RAID 표식까지 완전히 지웁니다. 끄면(기본값) 표식이 남아 나중에 이 RAID 구성을 되살릴 여지가 있지만, 켜면 되살릴 수 없고 디스크는 완전히 빈 상태가 됩니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.busy"
+msgstr "삭제 중..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.execute"
+msgstr "그룹 삭제 실행 (되돌릴 수 없음)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.executing"
+msgstr "그룹을 삭제하는 중입니다. 창을 닫지 마세요."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.doneTitle"
+msgstr "그룹이 삭제되었습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.title"
+msgstr "그룹 \"$0\" 스냅샷 생성"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.field"
+msgstr "스냅샷 이름 (경로 구분자 \"/\" 포함 불가)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.caveat"
+msgstr "읽기 전용 스냅샷이 $0 경로에 생성됩니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.execute"
+msgstr "스냅샷 생성 실행"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.doneTitle"
+msgstr "스냅샷이 생성되었습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.title"
+msgstr "스크럽/헬스체크 스케줄 설치"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.body"
+msgstr "모든 그룹의 정기 스크럽과, 상태 점검 및 재구성 속도 조절을 자동으로 실행하도록 예약합니다. 이미 예약되어 있으면 최신 설정으로 다시 등록합니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.busy"
+msgstr "설치 중..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.execute"
+msgstr "설치 실행"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.doneTitle"
+msgstr "설치가 완료되었습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.title"
+msgstr "확장 마무리"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.body"
+msgstr "지난 용량 확장이 RAID 재구성이 끝나기를 기다리느라 미뤄둔 저장 공간 넓히기 작업을 모든 그룹에서 마무리합니다. 미뤄둔 작업이 없어도 언제든 안전하게 실행할 수 있습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.busy"
+msgstr "마무리하는 중..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.execute"
+msgstr "확장 마무리 실행"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.doneTitle"
+msgstr "확장 마무리가 완료되었습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.title"
+msgstr "운영 작업"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.note"
+msgstr "스크럽 · 확장 · 디스크 교체 · 스냅샷 · 압축 변경 · 삭제 · 스케줄"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.empty"
+msgstr "그룹이 없습니다. 먼저 그룹을 생성하세요."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.scrub"
+msgstr "스크럽"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.expand"
+msgstr "확장"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.replace"
+msgstr "디스크 교체"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.snapshot"
+msgstr "스냅샷 생성"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.recompress"
+msgstr "압축 변경"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.destroy"
+msgstr "삭제"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.schedule"
+msgstr "스케줄 설치"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.pendingTitle"
+msgstr "확장 마무리가 남은 그룹: $0"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.pendingBody"
+msgstr "아래 \"확장 마무리\"를 실행하면 넓어진 용량이 실제로 반영됩니다."
+
+#: src/actionsDialogs.tsx src/model.ts
+msgid "model.scrub.errors.one"
+msgid_plural "model.scrub.errors.other"
+msgstr[0] "오류 $0건"
+
+#: src/model.ts
+msgid "model.activity.multi.one"
+msgid_plural "model.activity.multi.other"
+msgstr[0] "$0 외 $1건 진행 중"
+
+#: src/app.tsx src/panels.tsx
+msgid "common.driveCount.one"
+msgid_plural "common.driveCount.other"
+msgstr[0] "디스크 $0개"
+
+#: src/app.tsx src/panels.tsx
+msgid "common.smartWarningCount.one"
+msgid_plural "common.smartWarningCount.other"
+msgstr[0] "SMART 경고 $0개"
+
+#: src/panels.tsx
+msgid "panels.arrays.note.one"
+msgid_plural "panels.arrays.note.other"
+msgstr[0] "어레이 $0개 (실시간 조회)"
+
+#: src/panels.tsx
+msgid "panels.tolerance.nominal.one"
+msgid_plural "panels.tolerance.nominal.other"
+msgstr[0] "$0디스크 손실 허용"
+
+#: src/panels.tsx
+msgid "panels.tolerance.design.one"
+msgid_plural "panels.tolerance.design.other"
+msgstr[0] "설계상 $0디스크 손실 허용 (실시간 멤버 정보 없음)"
+
+#: src/panels.tsx
+msgid "panels.band.slice.one"
+msgid_plural "panels.band.slice.other"
+msgstr[0] "슬라이스 $0 × $1개 디스크"
+
+#: src/panels.tsx
+msgid "panels.groups.scrubWarn.one"
+msgid_plural "panels.groups.scrubWarn.other"
+msgstr[0] "스크럽 주의 밴드 $0개"
+
+#: src/panels.tsx
+msgid "panels.groups.note.one"
+msgid_plural "panels.groups.note.other"
+msgstr[0] "그룹 $0개"
+
+#: src/app.tsx
+msgid "app.raw.unknownSize.one"
+msgid_plural "app.raw.unknownSize.other"
+msgstr[0] "크기 미확인 디스크 $0개"
+
+#: src/app.tsx
+msgid "app.raw.includesSystem.one"
+msgid_plural "app.raw.includesSystem.other"
+msgstr[0] "시스템 디스크 $0개 포함 (RAID 대상 아님)"
+
+#: src/app.tsx
+msgid "app.metric.arraysNeedAttention.one"
+msgid_plural "app.metric.arraysNeedAttention.other"
+msgstr[0] "주의 어레이 $0개"
+
+#: src/app.tsx
+msgid "app.legend.linked.one"
+msgid_plural "app.legend.linked.other"
+msgstr[0] "RAID 연결 디스크 $0개"
+
+#: src/app.tsx
+msgid "app.legend.unlinked.one"
+msgid_plural "app.legend.unlinked.other"
+msgstr[0] "RAID 미연결 디스크 $0개"
+
+#: src/app.tsx
+msgid "app.legend.system.one"
+msgid_plural "app.legend.system.other"
+msgstr[0] "시스템 디스크 $0개 (RAID 대상 아님)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.bandCount.one"
+msgid_plural "wizard.confirm.bandCount.other"
+msgstr[0] "밴드 $0개"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.confirm.diskCount.one"
+msgid_plural "wizard.confirm.diskCount.other"
+msgstr[0] "디스크 $0개"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.commands.toggle.one"
+msgid_plural "wizard.commands.toggle.other"
+msgstr[0] "실행될 명령 ($0개)"

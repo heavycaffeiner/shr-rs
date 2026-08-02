@@ -15,7 +15,9 @@ Lesser General Public License for more details.
 You should have received a copy of the GNU Lesser General Public License
 along with this package; If not, see <http://www.gnu.org/licenses/>.
 -->
-<html lang="ko">
+<!-- `lang` is the source language, not the rendered one: index.tsx replaces
+     it with `cockpit.language` once po.js has been applied. -->
+<html lang="en">
 <head>
     <title>SHR-RS RAID Manager</title>
     <meta charset="utf-8">
@@ -26,6 +28,19 @@ along with this package; If not, see <http://www.gnu.org/licenses/>.
     <link href="../../static/branding.css" rel="stylesheet" />
 
     <script type="text/javascript" src="../base1/cockpit.js"></script>
+    <!-- Both must sit between cockpit.js and index.js: they call
+         `cockpit.locale()`, and index.js reads translations from module scope
+         onward.
+         `po-default.js` is the English catalogue, served verbatim to every
+         session. It is the baseline because this package's msgids are dotted
+         keys rather than English sentences, and cockpit-ws sends an empty
+         body for `po.js` in any session it considers untranslated (English
+         included) -- see build.js for the measurements.
+         `po.js` is then the session language's catalogue, if one exists.
+         `cockpit.locale()` merges, so Korean lands on top of English and any
+         string a translation has not covered still reads as English. -->
+    <script type="text/javascript" src="po-default.js"></script>
+    <script type="text/javascript" src="po.js"></script>
     <script type="text/javascript" src="index.js"></script>
 </head>
 

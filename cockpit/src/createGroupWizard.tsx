@@ -79,6 +79,7 @@ import {
     type WizardFormInput,
     type WizardState,
 } from "./createGroup.ts";
+import { _, format, ngettext } from "./i18n.ts";
 import { formatBytes, type DiskStatus } from "./model.ts";
 import { Caveat, Chip, MONO, Muted } from "./ui.js";
 
@@ -244,11 +245,11 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                 on the left. Measured in a real browser at 1449px frame
                 width: box left 0, width 1417. */}
             <Bullseye>
-                <div className={MODAL_BOX} role="dialog" aria-modal="true" aria-label="SHR 그룹 만들기">
+                <div className={MODAL_BOX} role="dialog" aria-modal="true" aria-label={_("wizard.title")}>
                     <div className={MODAL_BOX_CLOSE}>
-                        <Button variant="plain" onClick={onClose} aria-label="닫기" icon={<TimesIcon />} />
+                        <Button variant="plain" onClick={onClose} aria-label={_("common.close")} icon={<TimesIcon />} />
                     </div>
-                    <ModalHeader title="SHR 그룹 만들기" />
+                    <ModalHeader title={_("wizard.title")} />
                     <ModalBody>
                         {step === "select-disks" && (
                             <Stack hasGutter>
@@ -259,7 +260,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                 never had a way to do. */}
                                 <StackItem>
                                     <Form onSubmit={event => event.preventDefault()}>
-                                        <FormGroup label="그룹 이름" fieldId="wizard-name">
+                                        <FormGroup label={_("wizard.field.name")} fieldId="wizard-name">
                                             <TextInput
                                             id="wizard-name" type="text" value={name}
                                             onChange={(_event, value) => setName(value)}
@@ -269,21 +270,23 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                             {nameCollides && (
                                                 <FormHelperText>
                                                     <HelperText>
-                                                        <HelperTextItem variant="error">이미 존재하는 그룹 이름입니다.</HelperTextItem>
+                                                        <HelperTextItem variant="error">
+                                                            {_("wizard.field.nameTaken")}
+                                                        </HelperTextItem>
                                                     </HelperText>
                                                 </FormHelperText>
                                             )}
                                         </FormGroup>
-                                        <FormGroup label="모드" fieldId="wizard-mode">
+                                        <FormGroup label={_("wizard.field.mode")} fieldId="wizard-mode">
                                             <FormSelect
                                             id="wizard-mode" value={mode}
                                             onChange={(_event, value) => setMode(value as RedundancyMode)}
                                             >
-                                                <FormSelectOption value="shr" label="SHR (단일 패리티)" />
-                                                <FormSelectOption value="shr2" label="SHR-2 (이중 패리티)" />
+                                                <FormSelectOption value="shr" label={_("wizard.mode.shr")} />
+                                                <FormSelectOption value="shr2" label={_("wizard.mode.shr2")} />
                                             </FormSelect>
                                         </FormGroup>
-                                        <FormGroup label="마운트 지점" fieldId="wizard-mount">
+                                        <FormGroup label={_("wizard.field.mount")} fieldId="wizard-mount">
                                             <TextInput
                                             id="wizard-mount" type="text" value={mountPoint}
                                             onChange={(_event, value) => setMountPoint(value)}
@@ -294,21 +297,21 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
 
                                 <StackItem>
                                     <fieldset>
-                                        <legend>디스크 선택</legend>
-                                        <Table variant="compact" aria-label="디스크 선택">
+                                        <legend>{_("wizard.disks.legend")}</legend>
+                                        <Table variant="compact" aria-label={_("wizard.disks.legend")}>
                                             <Thead>
                                                 <Tr>
-                                                    <Th>선택</Th>
-                                                    <Th>노드</Th>
-                                                    <Th>모델</Th>
-                                                    <Th>용량</Th>
-                                                    <Th>상태</Th>
+                                                    <Th>{_("wizard.disks.col.select")}</Th>
+                                                    <Th>{_("wizard.disks.col.node")}</Th>
+                                                    <Th>{_("wizard.disks.col.model")}</Th>
+                                                    <Th>{_("wizard.disks.col.capacity")}</Th>
+                                                    <Th>{_("wizard.disks.col.state")}</Th>
                                                 </Tr>
                                             </Thead>
                                             <Tbody>
                                                 {disks.length === 0 && (
                                                     <Tr>
-                                                        <Td colSpan={5}><Muted>감지된 디스크가 없습니다.</Muted></Td>
+                                                        <Td colSpan={5}><Muted>{_("wizard.disks.empty")}</Muted></Td>
                                                     </Tr>
                                                 )}
                                                 {disks.map(disk => {
@@ -337,27 +340,29 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                                     const disabled = disk.system_disk === true;
                                                     return (
                                                         <Tr key={disk.name} {...(disabled ? { className: "pf-v6-u-text-color-disabled" } : {})}>
-                                                            <Td dataLabel="선택">
+                                                            <Td dataLabel={_("wizard.disks.col.select")}>
                                                                 <Checkbox
                                                                 id={`wizard-disk-${disk.name}`}
-                                                                aria-label={`/dev/${disk.name} 선택`}
+                                                                aria-label={format(_("wizard.disks.selectAria"), disk.name)}
                                                                 isChecked={selectedDisks.includes(disk.name)}
                                                                 isDisabled={disabled}
                                                                 onChange={() => toggleDisk(disk.name)}
                                                                 />
                                                             </Td>
-                                                            <Td dataLabel="노드" className={MONO}>/dev/{disk.name}</Td>
-                                                            <Td dataLabel="모델">{disk.model ?? "모델 정보 없음"}</Td>
-                                                            <Td dataLabel="용량" className={MONO}>{formatBytes(disk.size)}</Td>
-                                                            <Td dataLabel="상태">
+                                                            <Td dataLabel={_("wizard.disks.col.node")} className={MONO}>/dev/{disk.name}</Td>
+                                                            <Td dataLabel={_("wizard.disks.col.model")}>{disk.model ?? _("wizard.disks.noModel")}</Td>
+                                                            <Td dataLabel={_("wizard.disks.col.capacity")} className={MONO}>{formatBytes(disk.size)}</Td>
+                                                            <Td dataLabel={_("wizard.disks.col.state")}>
                                                                 {disabled && (
                                                                     <Chip color="orange">
-                                                                        시스템 디스크 (선택 불가)
+                                                                        {_("wizard.disks.systemDisk")}
                                                                         {disk.system_mounts && disk.system_mounts.length > 0 &&
                                                                         ` (${disk.system_mounts.join(", ")})`}
                                                                     </Chip>
                                                                 )}
-                                                                {!disabled && disk.arrays.length > 0 && <Chip>이미 RAID 연결됨</Chip>}
+                                                                {!disabled && disk.arrays.length > 0 && (
+                                                                    <Chip>{_("wizard.disks.alreadyInRaid")}</Chip>
+                                                                )}
                                                             </Td>
                                                         </Tr>
                                                     );
@@ -369,17 +374,19 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
 
                                 <StackItem>
                                     <ExpandableSection
-                                    toggleText="고급: LVM 볼륨 그룹/논리 볼륨 이름"
+                                    toggleText={_("wizard.advanced.toggle")}
                                     isExpanded={advancedOpen}
                                     onToggle={() => setAdvancedOpen(value => !value)}
                                     >
+                                        {/* The two derived names used to be `<code>` elements inside
+                                            the sentence. They are ordinary `$0`/`$1` substitutions
+                                            now: a translator has to be free to move them, and a
+                                            catalogue entry carrying markup cannot be moved safely. */}
                                         <Caveat>
-                                            비워두면 그룹 이름에서 자동으로 만듭니다(볼륨 그룹은 <code className={MONO}>{derivedVgName}</code>,
-                                            논리 볼륨은 <code className={MONO}>{DEFAULT_LV_NAME}</code>). 볼륨 그룹 이름은 호스트 전체에서
-                                            단 하나만 존재할 수 있습니다. 같은 이름을 다시 쓰면 안전 점검 단계에서 거부됩니다.
+                                            {format(_("wizard.advanced.caveat"), derivedVgName, DEFAULT_LV_NAME)}
                                         </Caveat>
                                         <Form onSubmit={event => event.preventDefault()}>
-                                            <FormGroup label="볼륨 그룹(VG) 이름" fieldId="wizard-vg-name">
+                                            <FormGroup label={_("wizard.field.vgName")} fieldId="wizard-vg-name">
                                                 <TextInput
                                                 id="wizard-vg-name" type="text" value={vgName}
                                                 // An empty field means "go back to the derived
@@ -391,7 +398,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                                 placeholder={derivedVgName}
                                                 />
                                             </FormGroup>
-                                            <FormGroup label="논리 볼륨(LV) 이름" fieldId="wizard-lv-name">
+                                            <FormGroup label={_("wizard.field.lvName")} fieldId="wizard-lv-name">
                                                 <TextInput
                                                 id="wizard-lv-name" type="text" value={lvName}
                                                 onChange={(_event, value) => setLvNameOverride(value === "" ? null : sanitizeLvmNameComponent(value))}
@@ -407,26 +414,18 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                     id="wizard-force-content"
                                     isChecked={forceContent}
                                     onChange={(_event, checked) => setForceContent(checked)}
-                                    label={
-                                        <>
-                                            선택한 디스크에 기존 데이터가 있어도 진행. 데이터가 있는 디스크는 기본적으로
-                                            안전 점검에서 차단되며, 이 체크박스는 그 차단을 명시적으로 우회합니다.
-                                        </>
-                                    }
+                                    label={_("wizard.forceContent")}
                                     />
                                 </StackItem>
 
                                 <StackItem>
-                                    <Caveat>
-                                        디스크를 고른 뒤에도 안전 점검과 실행 계획 미리보기를 거쳐야만 그룹이
-                                        만들어집니다. 이 화면에서 바로 디스크가 지워지지 않습니다.
-                                    </Caveat>
+                                    <Caveat>{_("wizard.selectCaveat")}</Caveat>
                                 </StackItem>
 
                                 <StackItem>
                                     <ActionList>
                                         <ActionListItem>
-                                            <Button variant="secondary" onClick={onClose}>취소</Button>
+                                            <Button variant="secondary" onClick={onClose}>{_("common.cancel")}</Button>
                                         </ActionListItem>
                                         <ActionListItem>
                                             <Button
@@ -434,7 +433,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                             isDisabled={!canStart || busy}
                                             onClick={startPreflight}
                                             >
-                                                {busy ? "안전 점검 실행 중..." : "다음: 안전 점검"}
+                                                {busy ? _("wizard.action.preflightBusy") : _("wizard.action.preflight")}
                                             </Button>
                                         </ActionListItem>
                                     </ActionList>
@@ -445,7 +444,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                         {step === "preflight" && wizardState?.preflight && (
                             <Stack hasGutter>
                                 <StackItem>
-                                    <Alert variant="danger" isInline title="안전 점검에서 문제가 발견되어 진행할 수 없습니다.">
+                                    <Alert variant="danger" isInline title={_("wizard.preflight.blockedTitle")}>
                                         {wizardState.preflight.blockers.length > 0 && (
                                             <List>
                                                 {wizardState.preflight.blockers.map((blocker, i) => (
@@ -473,7 +472,9 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                 <StackItem>
                                     <ActionList>
                                         <ActionListItem>
-                                            <Button variant="secondary" onClick={startOver}>디스크 선택으로 돌아가기</Button>
+                                            <Button variant="secondary" onClick={startOver}>
+                                                {_("wizard.action.backToDisks")}
+                                            </Button>
                                         </ActionListItem>
                                     </ActionList>
                                 </StackItem>
@@ -483,12 +484,12 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                         {step === "preview" && (
                             <Stack hasGutter>
                                 <StackItem>
-                                    <p>안전 점검을 통과했습니다. 실행 계획 미리보기를 생성합니다 (아직 아무 디스크도 건드리지 않습니다).</p>
+                                    <p>{_("wizard.preview.intro")}</p>
                                 </StackItem>
                                 <StackItem>
                                     <ActionList>
                                         <ActionListItem>
-                                            <Button variant="secondary" onClick={startOver}>뒤로</Button>
+                                            <Button variant="secondary" onClick={startOver}>{_("wizard.action.back")}</Button>
                                         </ActionListItem>
                                         <ActionListItem>
                                             <Button
@@ -496,7 +497,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                             isDisabled={busy}
                                             onClick={runPreview}
                                             >
-                                                {busy ? "미리보기 생성 중..." : "실행 계획 미리보기"}
+                                                {busy ? _("wizard.action.previewBusy") : _("wizard.action.preview")}
                                             </Button>
                                         </ActionListItem>
                                     </ActionList>
@@ -507,35 +508,52 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                         {step === "confirm" && wizardState?.preview && (
                             <Stack hasGutter>
                                 <StackItem>
-                                    <Alert variant="danger" isInline title="이 작업은 되돌릴 수 없습니다.">
-                                        <p>아래 디스크가 파티션되고 포맷됩니다. 기존 데이터가 있다면 전부 사라집니다.</p>
+                                    <Alert variant="danger" isInline title={_("wizard.confirm.title")}>
+                                        <p>{_("wizard.confirm.body")}</p>
                                     </Alert>
                                 </StackItem>
 
                                 <StackItem>
                                     <DescriptionList isHorizontal isCompact>
                                         <DescriptionListGroup>
-                                            <DescriptionListTerm>그룹</DescriptionListTerm>
+                                            <DescriptionListTerm>{_("wizard.confirm.group")}</DescriptionListTerm>
                                             <DescriptionListDescription><strong className={MONO}>{wizardState.preview.name}</strong></DescriptionListDescription>
                                         </DescriptionListGroup>
                                         <DescriptionListGroup>
-                                            <DescriptionListTerm>모드</DescriptionListTerm>
+                                            <DescriptionListTerm>{_("wizard.confirm.mode")}</DescriptionListTerm>
                                             <DescriptionListDescription><strong>{wizardState.preview.mode.toUpperCase()}</strong></DescriptionListDescription>
                                         </DescriptionListGroup>
                                         <DescriptionListGroup>
-                                            <DescriptionListTerm>마운트</DescriptionListTerm>
+                                            <DescriptionListTerm>{_("wizard.confirm.mount")}</DescriptionListTerm>
                                             <DescriptionListDescription><strong className={MONO}>{wizardState.preview.mount_point}</strong></DescriptionListDescription>
                                         </DescriptionListGroup>
                                         <DescriptionListGroup>
-                                            <DescriptionListTerm>밴드</DescriptionListTerm>
-                                            <DescriptionListDescription>{wizardState.preview.bands.length}개, 디스크 {wizardState.preview.disk_count}개</DescriptionListDescription>
+                                            <DescriptionListTerm>{_("wizard.confirm.bands")}</DescriptionListTerm>
+                                            <DescriptionListDescription>
+                                                {[
+                                                    format(ngettext(
+                                                        "wizard.confirm.bandCount.one",
+                                                        "wizard.confirm.bandCount.other",
+                                                        wizardState.preview.bands.length,
+                                                    ), wizardState.preview.bands.length),
+                                                    format(ngettext(
+                                                        "wizard.confirm.diskCount.one",
+                                                        "wizard.confirm.diskCount.other",
+                                                        wizardState.preview.disk_count,
+                                                    ), wizardState.preview.disk_count),
+                                                ].join(", ")}
+                                            </DescriptionListDescription>
                                         </DescriptionListGroup>
                                     </DescriptionList>
                                 </StackItem>
 
                                 <StackItem>
                                     <ExpandableSection
-                                    toggleText={`실행될 명령 (${wizardState.preview.planned_commands.length}개)`}
+                                    toggleText={format(ngettext(
+                                        "wizard.commands.toggle.one",
+                                        "wizard.commands.toggle.other",
+                                        wizardState.preview.planned_commands.length,
+                                    ), wizardState.preview.planned_commands.length)}
                                     isExpanded={commandsOpen}
                                     onToggle={() => setCommandsOpen(value => !value)}
                                     >
@@ -550,11 +568,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                 <StackItem>
                                     <Form onSubmit={event => event.preventDefault()}>
                                         <FormGroup
-                                        label={
-                                            <>
-                                                계속하려면 그룹 이름 <strong className={MONO}>{name.trim()}</strong>을(를) 정확히 입력하세요
-                                            </>
-                                        }
+                                        label={format(_("wizard.confirm.typeName"), name.trim())}
                                         fieldId="wizard-confirm-text"
                                         >
                                             <TextInput
@@ -569,7 +583,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                 <StackItem>
                                     <ActionList>
                                         <ActionListItem>
-                                            <Button variant="secondary" onClick={startOver}>취소</Button>
+                                            <Button variant="secondary" onClick={startOver}>{_("common.cancel")}</Button>
                                         </ActionListItem>
                                         <ActionListItem>
                                             <Button
@@ -577,7 +591,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                             isDisabled={!canExecute || busy}
                                             onClick={execute}
                                             >
-                                                {busy ? "생성 중..." : "그룹 생성 실행 (되돌릴 수 없음)"}
+                                                {busy ? _("wizard.action.executeBusy") : _("wizard.action.execute")}
                                             </Button>
                                         </ActionListItem>
                                     </ActionList>
@@ -588,7 +602,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                         {step === "executing" && (
                             <Stack hasGutter>
                                 <StackItem>
-                                    <p><Spinner size="md" /> 그룹을 생성하는 중입니다. 창을 닫지 마세요.</p>
+                                    <p><Spinner size="md" /> {_("wizard.executing")}</p>
                                 </StackItem>
                             </Stack>
                         )}
@@ -596,18 +610,33 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                         {step === "done" && wizardState?.result && (
                             <Stack hasGutter>
                                 <StackItem>
-                                    <Alert variant="success" isInline title={`그룹 "${wizardState.result.name}"이(가) 생성되었습니다.`} />
+                                    <Alert
+                                        variant="success"
+                                        isInline
+                                        title={format(_("wizard.done.title"), wizardState.result.name)}
+                                    />
                                 </StackItem>
                                 <StackItem>
                                     <p>
-                                        모드 {wizardState.result.mode.toUpperCase()} · 밴드 {wizardState.result.band_count}개 ·
-                                        디스크 {wizardState.result.disk_count}개
+                                        {[
+                                            format(_("wizard.done.mode"), wizardState.result.mode.toUpperCase()),
+                                            format(ngettext(
+                                                "wizard.confirm.bandCount.one",
+                                                "wizard.confirm.bandCount.other",
+                                                wizardState.result.band_count,
+                                            ), wizardState.result.band_count),
+                                            format(ngettext(
+                                                "wizard.confirm.diskCount.one",
+                                                "wizard.confirm.diskCount.other",
+                                                wizardState.result.disk_count,
+                                            ), wizardState.result.disk_count),
+                                        ].join(" · ")}
                                     </p>
                                 </StackItem>
                                 <StackItem>
                                     <ActionList>
                                         <ActionListItem>
-                                            <Button variant="primary" onClick={onClose}>닫기</Button>
+                                            <Button variant="primary" onClick={onClose}>{_("common.close")}</Button>
                                         </ActionListItem>
                                     </ActionList>
                                 </StackItem>
@@ -617,17 +646,19 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                         {step === "error" && (
                             <Stack hasGutter>
                                 <StackItem>
-                                    <Alert variant="danger" isInline title="실패했습니다.">
+                                    <Alert variant="danger" isInline title={_("wizard.error.title")}>
                                         <p>{wizardState?.errorMessage}</p>
                                     </Alert>
                                 </StackItem>
                                 <StackItem>
                                     <ActionList>
                                         <ActionListItem>
-                                            <Button variant="secondary" onClick={onClose}>닫기</Button>
+                                            <Button variant="secondary" onClick={onClose}>{_("common.close")}</Button>
                                         </ActionListItem>
                                         <ActionListItem>
-                                            <Button variant="secondary" onClick={startOver}>처음부터 다시 시도</Button>
+                                            <Button variant="secondary" onClick={startOver}>
+                                                {_("wizard.action.startOver")}
+                                            </Button>
                                         </ActionListItem>
                                     </ActionList>
                                 </StackItem>
@@ -643,19 +674,19 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
 const describeBlocker = (blocker: { kind: string; name?: string; reference?: string; mounts?: string[]; id?: string }): string => {
     switch (blocker.kind) {
     case "system_disk":
-        return `${blocker.name}: 시스템 디스크입니다 (마운트: ${(blocker.mounts ?? []).join(", ")}).`;
+        return format(_("blocker.systemDisk"), blocker.name, (blocker.mounts ?? []).join(", "));
     case "has_content":
-        return `${blocker.name}: 이미 데이터/파티션이 있습니다. 계속하려면 "기존 데이터가 있어도 진행"을 선택하세요.`;
+        return format(_("blocker.hasContent"), blocker.name);
     case "no_stable_id":
-        return `${blocker.name}: 안정적인 식별자(by-id)를 찾을 수 없습니다.`;
+        return format(_("blocker.noStableId"), blocker.name);
     case "size_unknown":
-        return `${blocker.name}: 용량을 확인할 수 없습니다.`;
+        return format(_("blocker.sizeUnknown"), blocker.name);
     case "not_found":
-        return `${blocker.reference}: 해당하는 디스크를 찾을 수 없습니다.`;
+        return format(_("blocker.notFound"), blocker.reference);
     default:
         // Covers "unknown" plus any future kind this file doesn't know yet.
         // Same shape as actionsDialogs.tsx's describePreflightBlocker: plain
         // language first, raw payload as trailing detail.
-        return `이 디스크는 사용할 수 없습니다 (자세한 내용: ${JSON.stringify(blocker)}).`;
+        return format(_("blocker.unknown"), JSON.stringify(blocker));
     }
 };

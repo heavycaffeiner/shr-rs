@@ -36,12 +36,17 @@ import { act, create } from "react-test-renderer";
 
 import type { DestroyInput, ReplaceInput, SimpleActionState, TypedConfirmState } from "./actions.ts";
 import type { DiskStatus, GroupStatus } from "./model.ts";
+import { installEnglishCatalog } from "./testCatalog.ts";
 import type {
     ReactTestInstance,
     ReactTestRenderer,
     ReactTestRendererJSON,
     ReactTestRendererNode,
 } from "react-test-renderer";
+
+// The msgids in `src/` are dotted keys, so without a catalogue every string
+// below would render as its key. See testCatalog.ts.
+installEnglishCatalog();
 
 // `cockpit.ts` throws at module load if `window.cockpit` is missing --
 // `actionsDialogs.tsx` imports it statically even though the one component
@@ -180,13 +185,13 @@ const loadActionsDialogsModule = async (): Promise<{
 test("Modal's close button is a real disabled <button> while closeDisabled, with the in-flight reason as its title", async () => {
     const { Modal } = await loadActionsDialogsModule();
     const html = renderToStaticMarkup(
-        React.createElement(Modal, { title: "그룹 \"g1\" 확장", onClose: () => {}, closeDisabled: true }, "body"),
+        React.createElement(Modal, { title: "Expand group \"g1\"", onClose: () => {}, closeDisabled: true }, "body"),
     );
-    // Re-anchored off `aria-label="닫기"` rather than `class="modal-close"`:
+    // Re-anchored off the close button's `aria-label` rather than `class="modal-close"`:
     // the PatternFly conversion hand-renders this button (see Modal's own
     // doc comment for why) without that class name, but the `aria-label`
     // is still the one attribute the contract actually requires.
-    const closeButton = html.match(/<button[^>]*aria-label="닫기"[^>]*>/)?.[0];
+    const closeButton = html.match(/<button[^>]*aria-label="Close"[^>]*>/)?.[0];
     assert.ok(closeButton, `no close button found in: ${html}`);
     // The real invariant: a `disabled` HTML attribute is what makes a
     // button non-interactive in a real browser, independent of whatever
@@ -194,16 +199,16 @@ test("Modal's close button is a real disabled <button> while closeDisabled, with
     // asserting on the actual close affordance, not merely that some prop
     // reached the component.
     assert.match(closeButton, /\bdisabled=""/, "close button must carry the disabled attribute while busy");
-    assert.match(closeButton, /title="작업이 진행 중입니다\. 완료될 때까지 창을 닫을 수 없습니다\."/);
+    assert.match(closeButton, /title="An operation is in progress\./);
 });
 
 test("Modal's close button is enabled with no in-flight title when not closeDisabled", async () => {
     const { Modal } = await loadActionsDialogsModule();
     const html = renderToStaticMarkup(
-        React.createElement(Modal, { title: "그룹 \"g1\" 확장", onClose: () => {}, closeDisabled: false }, "body"),
+        React.createElement(Modal, { title: "Expand group \"g1\"", onClose: () => {}, closeDisabled: false }, "body"),
     );
-    // Re-anchored off `aria-label="닫기"`, same reason as the test above.
-    const closeButton = html.match(/<button[^>]*aria-label="닫기"[^>]*>/)?.[0];
+    // Re-anchored off the close button's `aria-label`, same reason as the test above.
+    const closeButton = html.match(/<button[^>]*aria-label="Close"[^>]*>/)?.[0];
     assert.ok(closeButton, `no close button found in: ${html}`);
     assert.doesNotMatch(closeButton, /\bdisabled/, "close button must not be disabled when nothing is in flight");
     assert.doesNotMatch(closeButton, /title=/, "no in-flight tooltip when nothing is in flight");
@@ -228,7 +233,7 @@ test("Modal's close button is enabled with no in-flight title when not closeDisa
 test("Modal's box carries the same size and placement modifiers stock Cockpit's dialogs use", async () => {
     const { Modal } = await loadActionsDialogsModule();
     const html = renderToStaticMarkup(
-        React.createElement(Modal, { title: "그룹 \"g1\" 확장", onClose: () => {} }, "body"),
+        React.createElement(Modal, { title: "Expand group \"g1\"", onClose: () => {} }, "body"),
     );
 
     const match = /<div class="(pf-v6-c-modal-box[^"]*)"/.exec(html);
@@ -339,7 +344,7 @@ test("ExpandDialog's disk picker disables and labels a system-disk candidate, le
     assert.ok(vdaRow, `no row rendered for the system disk in: ${html}`);
     assert.match(vdaRow, /<span class="pf-v6-c-check__label pf-m-disabled"/, "the system disk's row must be visibly marked disabled, not just inert");
     assert.match(vdaRow, /<input[^>]*\bdisabled=""/, "the system disk's checkbox itself must carry the disabled attribute");
-    assert.match(vdaRow, /시스템 디스크 \(선택 불가\)/, "must warn the operator inline, not just disable silently");
+    assert.match(vdaRow, /System disk \(cannot be selected\)/, "must warn the operator inline, not just disable silently");
     assert.match(vdaRow, /\/, \/boot, \/boot\/efi/, "must surface which mounts make it a system disk");
 
     // A non-system candidate must render unmarked and freely selectable --
@@ -377,8 +382,8 @@ test("OperationsPanel renders a reconcile action, unflagged when nothing is resi
             groups: [reconcileGroupFixture({ resize_pending: false })], disks: [], onChanged: () => {},
         }),
     );
-    assert.match(html, /확장 마무리/, "must render a reconcile trigger somewhere in the panel");
-    assert.doesNotMatch(html, /마무리가 남은 그룹/, "no pending-resize warning when nothing is pending");
+    assert.match(html, /Finish the expansion/, "must render a reconcile trigger somewhere in the panel");
+    assert.doesNotMatch(html, /still waiting for an expansion/, "no pending-resize warning when nothing is pending");
 });
 
 test("OperationsPanel flags the reconcile action when a group has resize_pending", async () => {
@@ -388,8 +393,8 @@ test("OperationsPanel flags the reconcile action when a group has resize_pending
             groups: [reconcileGroupFixture({ name: "shr1", resize_pending: true })], disks: [], onChanged: () => {},
         }),
     );
-    assert.match(html, /확장 마무리/);
-    assert.match(html, /마무리가 남은 그룹/, "must surface the pending-resize warning right where the operator can act on it");
+    assert.match(html, /Finish the expansion/);
+    assert.match(html, /still waiting for an expansion/, "must surface the pending-resize warning right where the operator can act on it");
     assert.match(html, /shr1/, "must name which group has the pending resize");
 });
 
@@ -454,7 +459,7 @@ test("ReplaceDialog's old-disk picker disables and labels a member disk with no 
     const option = html.match(/<option value="loop10"[^>]*>[^<]*<\/option>/)?.[0];
     assert.ok(option, `no option rendered for loop10 in: ${html}`);
     assert.match(option, /\bdisabled=""/, "an id-less member disk's option must be disabled, not just visually different");
-    assert.match(option, /안정적인 식별자\(by-id\) 없음/, "must tell the operator WHY this disk can't be picked");
+    assert.match(option, /no stable identifier \(by-id\)/, "must tell the operator WHY this disk can't be picked");
 });
 
 test("ReplaceDialog's new-disk picker disables and labels a system-disk candidate, leaving a plain candidate selectable", async () => {
@@ -471,7 +476,7 @@ test("ReplaceDialog's new-disk picker disables and labels a system-disk candidat
     const vdaOption = html.match(/<option value="vda"[^>]*>[^<]*<\/option>/)?.[0];
     assert.ok(vdaOption, `no option rendered for vda (system disk) in: ${html}`);
     assert.match(vdaOption, /\bdisabled=""/, "the system disk must not be a selectable replacement target");
-    assert.match(vdaOption, /시스템 디스크/, "must warn the operator inline, not just disable silently");
+    assert.match(vdaOption, /system disk/, "must warn the operator inline, not just disable silently");
     assert.match(vdaOption, /\/, \/boot/, "must surface which mounts make it a system disk");
 
     const loop13Option = html.match(/<option value="loop13"[^>]*>[^<]*<\/option>/)?.[0];
@@ -737,8 +742,8 @@ test("DestroyDialog's review step renders the zero-superblocks checkbox unchecke
     const checkbox = html.match(/<input[^>]*type="checkbox"[^>]*>/)?.[0];
     assert.ok(checkbox, `expected a checkbox in the review step, got: ${html}`);
     assert.doesNotMatch(checkbox, /checked/, "zero-superblocks must default to unchecked (off)");
-    assert.match(html, /되살릴 여지가 있지만/, "must state the recoverable-if-off tradeoff");
-    assert.match(html, /되살릴 수 없고/, "must state the unrecoverable-if-on tradeoff");
+    assert.match(html, /could still be revived later/, "must state the recoverable-if-off tradeoff");
+    assert.match(html, /it cannot be revived/, "must state the unrecoverable-if-on tradeoff");
 });
 
 // --- A dialog's own "done" panel never painted -----------------------
@@ -750,12 +755,12 @@ test("DestroyDialog's review step renders the zero-superblocks checkbox unchecke
 // app.tsx's `refresh`, which itself synchronously does `setState({kind:
 // "loading"})` -- React 18 batches both updates into a single commit, so
 // `Dashboard` -> `OperationsPanel` -> the open dialog unmount in the exact
-// same paint that would have shown "완료되었습니다". Measured live in a
-// browser (MutationObserver over 재조정/스케줄 설치): the done text matched
+// same paint that would have shown the done panel. Measured live in a
+// browser (MutationObserver over reconcile/schedule-install): the done text matched
 // in ZERO frames across the whole transition. All seven dialogs had this
-// shape, not just the four (재조정/스케줄 설치/확장/디스크 교체) first
-// suspected -- 압축 변경 and 스냅샷 생성 have the identical pattern, and
-// 스크럽 has the analogous one (its post-action `load()` call is discarded
+// shape, not just the four (reconcile/schedule install/expand/disk replace)
+// first suspected -- recompress and snapshot create have the identical
+// pattern, and scrub has the analogous one (its post-action `load()` call is discarded
 // the same way).
 //
 // Fix: each dialog now defers `onChanged()` from the run handler (which
@@ -833,12 +838,12 @@ test("ReconcileDialog's done panel actually renders, and the deferred refresh on
     });
 
     await act(async () => {
-        findButtonByText(renderer, "확장 마무리").props.onClick();
+        findButtonByText(renderer, "Finish the expansion").props.onClick();
     });
     assert.ok(renderer.toJSON(), "ReconcileDialog should be open after clicking the trigger");
 
     await act(async () => {
-        findButtonByText(renderer, "확장 마무리 실행").props.onClick();
+        findButtonByText(renderer, "Run the expansion finish").props.onClick();
     });
 
     assert.deepEqual(spawnedArgv, ["shr-rs", "reconcile"], "the real reconcile command must actually have been spawned");
@@ -848,12 +853,12 @@ test("ReconcileDialog's done panel actually renders, and the deferred refresh on
         "the dialog must still be mounted right after the action finishes -- app.tsx-shaped onChanged must not have fired yet",
     );
     assert.ok(
-        containsText(afterRun, "확장 마무리가 완료되었습니다"),
+        containsText(afterRun, "The expansion finish is complete."),
         "the done panel's own text must actually be present in the render tree, not just reached-and-discarded",
     );
 
     await act(async () => {
-        findButtonByText(renderer, "닫기").props.onClick();
+        findButtonByText(renderer, "Close").props.onClick();
     });
     assert.equal(
         renderer.toJSON(),
@@ -877,12 +882,12 @@ test("ScheduleDialog's done panel actually renders, and the deferred refresh onl
     });
 
     await act(async () => {
-        findButtonByText(renderer, "스케줄 설치").props.onClick();
+        findButtonByText(renderer, "Install the schedule").props.onClick();
     });
     assert.ok(renderer.toJSON(), "ScheduleDialog should be open after clicking the trigger");
 
     await act(async () => {
-        findButtonByText(renderer, "설치 실행").props.onClick();
+        findButtonByText(renderer, "Run the install").props.onClick();
     });
 
     assert.deepEqual(spawnedArgv, ["shr-rs", "schedule", "install"], "the real schedule install command must actually have been spawned");
@@ -892,12 +897,12 @@ test("ScheduleDialog's done panel actually renders, and the deferred refresh onl
         "the dialog must still be mounted right after the action finishes -- app.tsx-shaped onChanged must not have fired yet",
     );
     assert.ok(
-        containsText(afterRun, "설치가 완료되었습니다"),
+        containsText(afterRun, "The install is complete."),
         "the done panel's own text must actually be present in the render tree, not just reached-and-discarded",
     );
 
     await act(async () => {
-        findButtonByText(renderer, "닫기").props.onClick();
+        findButtonByText(renderer, "Close").props.onClick();
     });
     assert.equal(
         renderer.toJSON(),
@@ -928,7 +933,7 @@ test("DestroyDialog's done panel renders, refresh is deferred until close, a mis
     });
 
     await act(async () => {
-        findButtonByText(renderer, "삭제").props.onClick();
+        findButtonByText(renderer, "Destroy").props.onClick();
     });
     assert.ok(renderer.toJSON(), "DestroyDialog should be open after clicking the trigger");
 
@@ -938,7 +943,7 @@ test("DestroyDialog's done panel renders, refresh is deferred until close, a mis
     });
 
     await act(async () => {
-        findButtonByText(renderer, "다음: 확인").props.onClick();
+        findButtonByText(renderer, "Next: confirm").props.onClick();
     });
 
     // A mismatched typed confirmation must keep execute disabled and spawn nothing (the shape).
@@ -946,7 +951,7 @@ test("DestroyDialog's done panel renders, refresh is deferred until close, a mis
         renderer.root.findByProps({ placeholder: "shr1" }).props.onChange({ target: { value: "wrong-name" } });
     });
     assert.equal(
-        findButtonByText(renderer, "그룹 삭제 실행 (되돌릴 수 없음)").props.disabled,
+        findButtonByText(renderer, "Destroy the group (cannot be undone)").props.disabled,
         true,
         "a mismatched typed confirmation must keep the execute button disabled",
     );
@@ -957,7 +962,7 @@ test("DestroyDialog's done panel renders, refresh is deferred until close, a mis
         renderer.root.findByProps({ placeholder: "shr1" }).props.onChange({ target: { value: "shr1" } });
     });
     await act(async () => {
-        findButtonByText(renderer, "그룹 삭제 실행 (되돌릴 수 없음)").props.onClick();
+        findButtonByText(renderer, "Destroy the group (cannot be undone)").props.onClick();
     });
 
     assert.deepEqual(
@@ -971,12 +976,12 @@ test("DestroyDialog's done panel renders, refresh is deferred until close, a mis
         "the dialog must still be mounted right after the action finishes -- app.tsx-shaped onChanged must not have fired yet",
     );
     assert.ok(
-        containsText(afterRun, "그룹이 삭제되었습니다"),
+        containsText(afterRun, "The group has been destroyed."),
         "the done panel's own text must actually be present in the render tree, not just reached-and-discarded",
     );
 
     await act(async () => {
-        findButtonByText(renderer, "닫기").props.onClick();
+        findButtonByText(renderer, "Close").props.onClick();
     });
     assert.equal(
         renderer.toJSON(),
@@ -1028,9 +1033,9 @@ test("every dialog with an onChanged defers it to a handleClose wrapper, not a r
 });
 
 // The test above only covers <Modal onClose={...}> -- it says nothing about
-// the 13 inner 취소/닫기 buttons and ErrorPanel's onClose prop. Mutating any
+// the 13 inner cancel/close buttons and ErrorPanel's onClose prop. Mutating any
 // one of those from `onClick={handleClose}` back to `onClick={onClose}`
-// (verified live: e.g. ExpandDialog's "확장이 완료되었습니다" done-panel 닫기
+// (verified live: e.g. ExpandDialog's "The expansion is complete." done-panel close
 // button) still passed the full suite before this test existed -- an
 // operator who clicks that button after a real expand sees the success
 // panel, but the dashboard silently never refreshes and keeps showing the

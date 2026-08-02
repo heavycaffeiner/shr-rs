@@ -36,6 +36,7 @@ import {
 } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 
+import { _, format, ngettext } from "./i18n.js";
 import { Badge, Caveat, CellSub, Chip, MONO, MetricCard, Muted, type Tone } from "./ui.js";
 import {
     type ArrayStatus,
@@ -76,22 +77,22 @@ export { Badge };
 export const healthTone = (health: Health): Tone => {
     switch (health) {
     case "healthy":
-        return { label: "정상", tone: "good" };
+        return { label: _("panels.health.healthy"), tone: "good" };
     case "degraded":
-        return { label: "주의 필요", tone: "warning" };
+        return { label: _("panels.health.degraded"), tone: "warning" };
     default:
-        return { label: "어레이 없음", tone: "neutral" };
+        return { label: _("panels.health.none"), tone: "neutral" };
     }
 };
 
 const smartTone = (state: SmartState): Tone => {
     switch (state) {
     case "ok":
-        return { label: "정상", tone: "good" };
+        return { label: _("common.ok"), tone: "good" };
     case "warning":
-        return { label: "경고", tone: "warning" };
+        return { label: _("panels.smart.warning"), tone: "warning" };
     default:
-        return { label: "알 수 없음", tone: "neutral" };
+        return { label: _("common.unknown"), tone: "neutral" };
     }
 };
 
@@ -192,38 +193,42 @@ const DiskRow = ({ disk, arrays }: { disk: DiskStatus; arrays: ArrayStatus[] }) 
     const memberHealth = diskMemberHealth(disk, arrays);
     const smartDetails = [
         disk.smart.temperature_c === null ? null : `${disk.smart.temperature_c}°C`,
-        disk.smart.power_on_hours === null ? null : `${disk.smart.power_on_hours.toLocaleString()}시간`,
-        disk.smart.pending_sectors ? `보류 섹터 ${disk.smart.pending_sectors}` : null,
-        disk.smart.reallocated_sectors ? `재할당 ${disk.smart.reallocated_sectors}` : null,
-        disk.smart.uncorrectable_sectors ? `복구 불가 ${disk.smart.uncorrectable_sectors}` : null,
-        disk.smart.nvme_critical_warning ? `NVMe 경고 0x${disk.smart.nvme_critical_warning.toString(16)}` : null,
+        disk.smart.power_on_hours === null
+            ? null
+            : format(_("panels.smart.powerOnHours"), disk.smart.power_on_hours.toLocaleString()),
+        disk.smart.pending_sectors ? format(_("panels.smart.pendingSectors"), disk.smart.pending_sectors) : null,
+        disk.smart.reallocated_sectors ? format(_("panels.smart.reallocated"), disk.smart.reallocated_sectors) : null,
+        disk.smart.uncorrectable_sectors ? format(_("panels.smart.uncorrectable"), disk.smart.uncorrectable_sectors) : null,
+        disk.smart.nvme_critical_warning
+            ? format(_("panels.smart.nvmeWarning"), disk.smart.nvme_critical_warning.toString(16))
+            : null,
     ].filter(Boolean).join(" · ");
 
     return (
         <Tr>
-            <Td dataLabel="노드">
+            <Td dataLabel={_("panels.drives.col.node")}>
                 <strong className={MONO}>/dev/{disk.name}</strong>
-                <CellSub>{disk.rotational === false ? "SSD / NVMe" : "회전식 디스크"}</CellSub>
+                <CellSub>{disk.rotational === false ? "SSD / NVMe" : _("panels.drives.spinning")}</CellSub>
                 {disk.id && <CellSub className={MONO}>{disk.id}</CellSub>}
                 {disk.system_disk && (
                     <CellSub>
-                        <Badge tone={{ label: "시스템 디스크 (RAID 대상 아님)", tone: "warning" }} />
+                        <Badge tone={{ label: _("common.systemDisk"), tone: "warning" }} />
                         {disk.system_mounts && disk.system_mounts.length > 0 && (
                             <CellSub className={MONO}>{disk.system_mounts.join(", ")}</CellSub>
                         )}
                     </CellSub>
                 )}
             </Td>
-            <Td dataLabel="모델 / 일련번호">
-                {disk.model ?? "모델 정보 없음"}
-                <CellSub className={MONO}>{disk.serial ?? "일련번호 없음"}</CellSub>
+            <Td dataLabel={_("panels.drives.col.model")}>
+                {disk.model ?? _("panels.drives.noModel")}
+                <CellSub className={MONO}>{disk.serial ?? _("panels.drives.noSerial")}</CellSub>
             </Td>
-            <Td dataLabel="용량" className={MONO}>{formatBytes(disk.size)}</Td>
-            <Td dataLabel="SMART 상태 / 온도 / 가동시간">
+            <Td dataLabel={_("panels.drives.col.capacity")} className={MONO}>{formatBytes(disk.size)}</Td>
+            <Td dataLabel={_("panels.drives.col.smart")}>
                 <Badge tone={smart} />
                 {smartDetails && <CellSub>{smartDetails}</CellSub>}
             </Td>
-            <Td dataLabel="연결 어레이">
+            <Td dataLabel={_("panels.drives.col.arrays")}>
                 {disk.arrays.length > 0
                     ? (
                         <>
@@ -236,31 +241,39 @@ const DiskRow = ({ disk, arrays }: { disk: DiskStatus; arrays: ArrayStatus[] }) 
                                     </FlexItem>
                                 ))}
                             </Flex>
-                            {memberHealth.faulty && <CellSub>이 디스크의 파티션이 어레이에서 faulty로 표시되었습니다.</CellSub>}
+                            {memberHealth.faulty && (
+                                <CellSub>{_("panels.drives.faultyPartition")}</CellSub>
+                            )}
                         </>
                     )
-                    : <Muted>RAID 미연결</Muted>}
+                    : <Muted>{_("panels.drives.notInRaid")}</Muted>}
             </Td>
         </Tr>
     );
 };
 
 export const DrivesPanel = ({ report, warningDisks }: { report: StatusReport; warningDisks: number }) => (
-    <Section title="구성 드라이브 목록" note={`${report.disks.length}개 · SMART 경고 ${warningDisks}개`}>
-        <Table variant="compact" aria-label="구성 드라이브 목록">
+    <Section
+        title={_("panels.drives.title")}
+        note={[
+            format(ngettext("common.driveCount.one", "common.driveCount.other", report.disks.length), report.disks.length),
+            format(ngettext("common.smartWarningCount.one", "common.smartWarningCount.other", warningDisks), warningDisks),
+        ].join(" · ")}
+    >
+        <Table variant="compact" aria-label={_("panels.drives.title")}>
             <Thead>
                 <Tr>
-                    <Th>노드</Th>
-                    <Th>모델 / 일련번호</Th>
-                    <Th>용량</Th>
-                    <Th>SMART 상태 / 온도 / 가동시간</Th>
-                    <Th>연결 어레이</Th>
+                    <Th>{_("panels.drives.col.node")}</Th>
+                    <Th>{_("panels.drives.col.model")}</Th>
+                    <Th>{_("panels.drives.col.capacity")}</Th>
+                    <Th>{_("panels.drives.col.smart")}</Th>
+                    <Th>{_("panels.drives.col.arrays")}</Th>
                 </Tr>
             </Thead>
             <Tbody>
                 {report.disks.length > 0
                     ? report.disks.map(disk => <DiskRow disk={disk} arrays={report.arrays} key={disk.name} />)
-                    : <EmptyRow columns={5} message="감지된 물리 디스크가 없습니다." />}
+                    : <EmptyRow columns={5} message={_("panels.drives.empty")} />}
             </Tbody>
         </Table>
     </Section>
@@ -271,41 +284,45 @@ const ArrayRow = ({ array }: { array: ArrayStatus }) => {
     const expected = array.raid_disks ?? array.members.length;
     const isInvalidRaid6 = array.level?.toLowerCase() === "raid6" && expected < 4;
     const tone: Tone = arrayNeedsAttention(array)
-        ? { label: "주의", tone: "warning" }
-        : { label: "정상", tone: "good" };
+        ? { label: _("panels.arrays.attention"), tone: "warning" }
+        : { label: _("common.ok"), tone: "good" };
 
     return (
         <Tr>
-            <Td dataLabel="mdadm 디바이스"><strong className={MONO}>/dev/{array.name}</strong></Td>
-            <Td dataLabel="RAID 레벨" className={MONO}>{array.level?.toUpperCase() ?? "알 수 없음"}</Td>
-            <Td dataLabel="활성 / 목표 멤버">
+            <Td dataLabel={_("panels.arrays.col.device")}><strong className={MONO}>/dev/{array.name}</strong></Td>
+            <Td dataLabel={_("common.raidLevel")} className={MONO}>{array.level?.toUpperCase() ?? _("common.unknown")}</Td>
+            <Td dataLabel={_("panels.arrays.col.members")}>
                 <span className={MONO}>{active}/{expected}</span>
-                <MemberList members={array.members} memberStates={array.member_states} emptyLabel="멤버 정보 없음" />
+                <MemberList
+                    members={array.members}
+                    memberStates={array.member_states}
+                    emptyLabel={_("panels.arrays.noMemberInfo")}
+                />
             </Td>
-            <Td dataLabel="동기화">
+            <Td dataLabel={_("panels.arrays.col.sync")}>
                 {array.sync
                     ? (
                         <>
                             <strong>{describeSyncAction(array.sync.action)}</strong>
                             {/* `formatSyncPercentEta` (model.ts) routes the ETA through
                                 `formatDuration`, same as `formatSyncProgress` used one panel
-                                below for bands -- this used to print raw minutes ("약
-                                540.0분") next to a correctly-formatted duration, and is now a
+                                below for bands -- this used to print raw minutes ("about
+                                540.0 min") next to a correctly-formatted duration, and is now a
                                 plain function `model.test.ts` asserts on directly instead of
                                 inline JSX with no test surface. */}
                             <CellSub>{formatSyncPercentEta(array.sync)}</CellSub>
                         </>
                     )
-                    : <Muted>유휴</Muted>}
+                    : <Muted>{_("common.idle")}</Muted>}
             </Td>
-            <Td dataLabel="상태">
+            <Td dataLabel={_("panels.arrays.col.state")}>
                 <Badge tone={tone} />
                 <CellSub>
                     {[
                         describeArrayState(array.state),
-                        array.read_only ? "읽기 전용" : null,
-                        array.degraded ? "성능 저하" : null,
-                        isInvalidRaid6 ? "RAID6는 최소 4개 멤버 필요" : null,
+                        array.read_only ? _("panels.arrays.readOnly") : null,
+                        array.degraded ? _("panels.arrays.degraded") : null,
+                        isInvalidRaid6 ? _("panels.arrays.invalidRaid6") : null,
                     ].filter(Boolean).join(" · ")}
                 </CellSub>
             </Td>
@@ -314,21 +331,27 @@ const ArrayRow = ({ array }: { array: ArrayStatus }) => {
 };
 
 export const ArraysPanel = ({ report }: { report: StatusReport }) => (
-    <Section title="mdadm 어레이 인벤토리" note={`${report.arrays.length}개 어레이 (실시간 조회)`}>
-        <Table variant="compact" aria-label="mdadm 어레이 인벤토리">
+    <Section
+        title={_("panels.arrays.title")}
+        note={format(
+            ngettext("panels.arrays.note.one", "panels.arrays.note.other", report.arrays.length),
+            report.arrays.length,
+        )}
+    >
+        <Table variant="compact" aria-label={_("panels.arrays.title")}>
             <Thead>
                 <Tr>
-                    <Th>mdadm 디바이스</Th>
-                    <Th>RAID 레벨</Th>
-                    <Th>활성 / 목표 멤버</Th>
-                    <Th>동기화</Th>
-                    <Th>상태</Th>
+                    <Th>{_("panels.arrays.col.device")}</Th>
+                    <Th>{_("common.raidLevel")}</Th>
+                    <Th>{_("panels.arrays.col.members")}</Th>
+                    <Th>{_("panels.arrays.col.sync")}</Th>
+                    <Th>{_("panels.arrays.col.state")}</Th>
                 </Tr>
             </Thead>
             <Tbody>
                 {report.arrays.length > 0
                     ? report.arrays.map(array => <ArrayRow array={array} key={array.name} />)
-                    : <EmptyRow columns={5} message="구성된 mdadm 어레이가 없습니다." />}
+                    : <EmptyRow columns={5} message={_("panels.arrays.empty")} />}
             </Tbody>
         </Table>
     </Section>
@@ -355,16 +378,20 @@ const modeLabel = (mode: string): string => {
 // place that decides the wording -- the arithmetic itself stays in model.ts.
 const toleranceLabel = ({ nominal, remaining }: GroupToleranceStatus): string => {
     if (nominal === null)
-        return "허용 손실 수 알 수 없는 모드";
+        return _("panels.tolerance.unknownMode");
     if (remaining === null)
-        return `설계상 ${nominal}디스크 손실 허용 (실시간 멤버 정보 없음)`;
+        return format(ngettext(
+            "panels.tolerance.design.one",
+            "panels.tolerance.design.other",
+            nominal,
+        ), nominal);
     if (remaining === nominal)
-        return `${nominal}디스크 손실 허용`;
+        return format(ngettext("panels.tolerance.nominal.one", "panels.tolerance.nominal.other", nominal), nominal);
     if (remaining >= 0)
-        return `남은 여유 ${remaining} / 설계상 ${nominal}디스크 손실 허용`;
+        return format(_("panels.tolerance.remaining"), remaining, nominal);
     // Never clamp to 0 -- a band already beyond its tolerance must read as
     // beyond it, not as "no margin left" (which would understate the risk).
-    return `허용 한도 초과 (설계상 ${nominal}디스크 손실 허용)`;
+    return format(_("panels.tolerance.exceeded"), nominal);
 };
 
 const toleranceTone = ({ nominal, remaining }: GroupToleranceStatus): Tone["tone"] => {
@@ -385,33 +412,41 @@ const BandRow = ({ band, arrays }: { band: GroupBandStatus; arrays: ArrayStatus[
 
     return (
         <Tr>
-            <Td dataLabel="밴드" className={MONO}>band{band.index}</Td>
-            <Td dataLabel="RAID 레벨" className={MONO}>{band.level.toUpperCase()}</Td>
-            <Td dataLabel="mdadm 디바이스 / UUID">
+            <Td dataLabel={_("panels.band.col.band")} className={MONO}>band{band.index}</Td>
+            <Td dataLabel={_("common.raidLevel")} className={MONO}>{band.level.toUpperCase()}</Td>
+            <Td dataLabel={_("panels.band.col.device")}>
                 <span className={MONO}>/dev/{band.md_name}</span>
-                <CellSub className={MONO}>{band.md_uuid ?? "UUID 알 수 없음"}</CellSub>
+                <CellSub className={MONO}>{band.md_uuid ?? _("panels.band.uuidUnknown")}</CellSub>
             </Td>
-            <Td dataLabel="참여 멤버 및 슬라이스 크기">
+            <Td dataLabel={_("panels.band.col.members")}>
                 {band.members.length > 0
                     ? (
                         <>
                             <MemberList members={band.members} memberStates={band.member_states} />
                             {capacity && (
                                 <CellSub>
-                                    <span title="usable_bytes와 RAID 레벨/구성된 디스크 수(raid_disks)로부터 계산한 값입니다. 멤버 고장 여부는 이 값에 영향을 주지 않습니다.">
-                                        슬라이스 {formatBytes(capacity.memberBytes)} × {capacity.memberCount}개 디스크
+                                    <span title={_("panels.band.sliceHint")}>
+                                        {format(
+                                            ngettext(
+                                                "panels.band.slice.one",
+                                                "panels.band.slice.other",
+                                                capacity.memberCount,
+                                            ),
+                                            formatBytes(capacity.memberBytes),
+                                            capacity.memberCount,
+                                        )}
                                     </span>
                                 </CellSub>
                             )}
                         </>
                     )
-                    : <Muted>실시간 멤버 정보 없음</Muted>}
+                    : <Muted>{_("panels.band.noLiveMembers")}</Muted>}
             </Td>
-            <Td dataLabel="가용 / 총 물리 용량" className={MONO}>
-                {formatBytes(band.usable_bytes)} / {capacity ? formatBytes(capacity.rawBytes) : "알 수 없음"}
+            <Td dataLabel={_("panels.band.col.capacity")} className={MONO}>
+                {formatBytes(band.usable_bytes)} / {capacity ? formatBytes(capacity.rawBytes) : _("common.unknown")}
             </Td>
-            <Td dataLabel="동기화 / 스크럽 상태">
-                {band.resize_pending && <Badge tone={{ label: "확장 마무리 대기", tone: "warning" }} />}
+            <Td dataLabel={_("panels.band.col.syncScrub")}>
+                {band.resize_pending && <Badge tone={{ label: _("common.resizePending"), tone: "warning" }} />}
                 {/* `band.sync === null` covers BOTH "live array, nothing
                     syncing" and "no live mdadm array with this md_name at all"
                     -- see GroupBandStatus::sync's doc comment. Reading
@@ -419,15 +454,15 @@ const BandRow = ({ band, arrays }: { band: GroupBandStatus; arrays: ArrayStatus[
                     signal the member cell above already uses) first, exactly
                     like render.rs's render_band_detail_row/watch_band_row do
                     for this identical field, is what tells the two apart
-                    instead of both silently reading as "유휴" (idle). Scrub
+                    instead of both silently reading as "Idle". Scrub
                     (below) is intentionally NOT gated the same way: it's
                     state.toml history, not a live-mdstat read, so it stays
                     meaningful even with no live array -- matches
                     render_band_detail_row, which doesn't gate scrub either. */}
                 <CellSub>
                     {band.members.length === 0
-                        ? "실시간 어레이 정보 없음"
-                        : band.sync ? formatSyncProgress(band.sync) : "유휴"}
+                        ? _("common.noLiveArrayInfo")
+                        : band.sync ? formatSyncProgress(band.sync) : _("common.idle")}
                 </CellSub>
                 <CellSub><Badge tone={{ label: scrub.text, tone: scrub.tone }} /></CellSub>
             </Td>
@@ -449,11 +484,24 @@ const GroupCard = ({ group, arrays }: { group: GroupStatus; arrays: ArrayStatus[
                             <FlexItem><strong className={MONO}>{group.name}</strong></FlexItem>
                             <FlexItem><Chip>{modeLabel(group.mode)}</Chip></FlexItem>
                             {group.resize_pending && (
-                                <FlexItem><Badge tone={{ label: "확장 마무리 대기", tone: "warning" }} /></FlexItem>
+                                <FlexItem>
+                                    <Badge tone={{ label: _("common.resizePending"), tone: "warning" }} />
+                                </FlexItem>
                             )}
                             {scrubWarnings > 0 && (
                                 <FlexItem>
-                                    <Badge tone={{ label: `스크럽 주의 밴드 ${scrubWarnings}개`, tone: "warning" }} />
+                                    <Badge tone={{
+                                        label: format(
+                                            ngettext(
+                                                "panels.groups.scrubWarn.one",
+                                                "panels.groups.scrubWarn.other",
+                                                scrubWarnings,
+                                            ),
+                                            scrubWarnings,
+                                        ),
+                                        tone: "warning",
+                                    }}
+                                    />
                                 </FlexItem>
                             )}
                         </Flex>
@@ -464,20 +512,20 @@ const GroupCard = ({ group, arrays }: { group: GroupStatus; arrays: ArrayStatus[
             <CardBody>
                 <DescriptionList isHorizontal isCompact className="pf-v6-u-mb-md">
                     <DescriptionListGroup>
-                        <DescriptionListTerm>마운트 지점</DescriptionListTerm>
+                        <DescriptionListTerm>{_("panels.group.mountPoint")}</DescriptionListTerm>
                         <DescriptionListDescription className={MONO}>{group.mount_point}</DescriptionListDescription>
                     </DescriptionListGroup>
                     {/* No layout version here: it is an internal on-disk
                         revision number that means nothing to whoever is
                         reading this card. */}
                     <DescriptionListGroup>
-                        <DescriptionListTerm>파일시스템 UUID</DescriptionListTerm>
+                        <DescriptionListTerm>{_("panels.group.fsUuid")}</DescriptionListTerm>
                         <DescriptionListDescription className={MONO}>
-                            {group.fs_uuid ?? "알 수 없음"}
+                            {group.fs_uuid ?? _("common.unknown")}
                         </DescriptionListDescription>
                     </DescriptionListGroup>
                     <DescriptionListGroup>
-                        <DescriptionListTerm>구성 디스크</DescriptionListTerm>
+                        <DescriptionListTerm>{_("panels.group.disks")}</DescriptionListTerm>
                         <DescriptionListDescription>
                             {group.disks.length > 0
                                 ? (
@@ -485,25 +533,25 @@ const GroupCard = ({ group, arrays }: { group: GroupStatus; arrays: ArrayStatus[
                                         {group.disks.map(id => <FlexItem key={id}><Chip>{id}</Chip></FlexItem>)}
                                     </Flex>
                                 )
-                                : <Muted>없음</Muted>}
+                                : <Muted>{_("common.none")}</Muted>}
                         </DescriptionListDescription>
                     </DescriptionListGroup>
                 </DescriptionList>
-                <Table variant="compact" aria-label={`${group.name} 밴드 구성`}>
+                <Table variant="compact" aria-label={format(_("panels.group.bandTableLabel"), group.name)}>
                     <Thead>
                         <Tr>
-                            <Th>밴드</Th>
-                            <Th>RAID 레벨</Th>
-                            <Th>mdadm 디바이스 / UUID</Th>
-                            <Th>참여 멤버 및 슬라이스 크기</Th>
-                            <Th>가용 / 총 물리 용량</Th>
-                            <Th>동기화 / 스크럽 상태</Th>
+                            <Th>{_("panels.band.col.band")}</Th>
+                            <Th>{_("common.raidLevel")}</Th>
+                            <Th>{_("panels.band.col.device")}</Th>
+                            <Th>{_("panels.band.col.members")}</Th>
+                            <Th>{_("panels.band.col.capacity")}</Th>
+                            <Th>{_("panels.band.col.syncScrub")}</Th>
                         </Tr>
                     </Thead>
                     <Tbody>
                         {group.bands.length > 0
                             ? group.bands.map(band => <BandRow band={band} arrays={arrays} key={band.index} />)
-                            : <EmptyRow columns={6} message="구성된 밴드가 없습니다." />}
+                            : <EmptyRow columns={6} message={_("panels.group.noBands")} />}
                     </Tbody>
                 </Table>
             </CardBody>
@@ -513,8 +561,11 @@ const GroupCard = ({ group, arrays }: { group: GroupStatus; arrays: ArrayStatus[
 
 export const GroupsPanel = ({ report }: { report: StatusReport }) => (
     <Section
-        title="SHR 그룹"
-        note={`${report.groups.length}개${report.groups.some(g => g.resize_pending) ? " · 확장 마무리 대기 중인 그룹 있음" : ""}`}
+        title={_("panels.groups.title")}
+        note={[
+            format(ngettext("panels.groups.note.one", "panels.groups.note.other", report.groups.length), report.groups.length),
+            report.groups.some(g => g.resize_pending) ? _("panels.groups.expansionPending") : null,
+        ].filter(Boolean).join(" · ")}
     >
         <Stack hasGutter>
             {report.groups.length > 0
@@ -526,8 +577,7 @@ export const GroupsPanel = ({ report }: { report: StatusReport }) => (
                 : (
                     <StackItem>
                         <Caveat>
-                            아직 만들어진 SHR 그룹이 없습니다. 아래 목록은 이 서버에서 지금 감지된
-                            디스크와 RAID 어레이입니다.
+                            {_("panels.groups.empty")}
                         </Caveat>
                     </StackItem>
                 )}
@@ -537,14 +587,18 @@ export const GroupsPanel = ({ report }: { report: StatusReport }) => (
 
 // --- Capacity overview (mockup: top metrics-grid + allocation bar) ---------
 
-const SEGMENT_LABEL: Record<string, string> = {
-    used: "사용 중",
-    free: "여유 공간",
-    unknown: "가용 용량 (사용/여유 측정 불가)",
-    parity: "패리티 보호",
-    unassigned: "미할당 물리 용량 (RAID 추가 가능)",
-    system: "시스템 디스크 (RAID 대상 아님)",
-};
+// A function rather than the module-scope constant this used to be. po.js runs
+// before the bundle (see index.html), so a constant would in fact translate
+// correctly today -- but it would be the one string table in this package whose
+// correctness depends on script order rather than on when it is read.
+const segmentLabel = (kind: string): string => ({
+    used: _("panels.segment.used"),
+    free: _("panels.segment.free"),
+    unknown: _("panels.segment.unknown"),
+    parity: _("panels.segment.parity"),
+    unassigned: _("panels.segment.unassigned"),
+    system: _("common.systemDisk"),
+}[kind] ?? kind);
 
 export const CapacityOverviewPanel = ({ report, fsDf }: { report: StatusReport; fsDf: FsDfReport | null }) => {
     const allocation = summarizeAllocation(report);
@@ -563,34 +617,36 @@ export const CapacityOverviewPanel = ({ report, fsDf }: { report: StatusReport; 
     // genuinely missing (unmounted, `btrfs`/`df` error), never because "no
     // parser exists yet".
     const usedUnknownReason = fsDf === null
-        ? "사용량을 조회하지 못했습니다 (shr-rs 버전이 낮거나 연결 문제일 수 있습니다)"
+        ? _("panels.capacity.usedUnknown.fsDfFailed")
         : fsDf.groups.length === 0
-            ? "구성된 그룹이 없습니다"
-            : "일부 그룹의 사용량을 읽지 못했습니다 (마운트되어 있는지 확인하세요)";
+            ? _("panels.capacity.usedUnknown.noGroups")
+            : _("panels.capacity.usedUnknown.partial");
 
     return (
         <>
-            <Gallery hasGutter minWidths={{ default: "220px" }} aria-label="그룹 용량 개요">
+            <Gallery hasGutter minWidths={{ default: "220px" }} aria-label={_("panels.capacity.overviewLabel")}>
                 <MetricCard
-                    label="가용 스토리지"
+                    label={_("panels.capacity.usable")}
                     value={formatBytes(allocation.usableBytes)}
-                    sub={`물리 용량 ${formatBytes(allocation.rawDiskBytes)}`}
+                    sub={format(_("panels.capacity.physicalSub"), formatBytes(allocation.rawDiskBytes))}
                 />
                 <MetricCard
-                    label="사용 중 공간"
-                    value={usage.usedBytes === null ? "측정 불가" : formatBytes(usage.usedBytes)}
-                    sub={usage.usedBytes === null ? usedUnknownReason : "마운트된 파일시스템 실측값"}
+                    label={_("panels.capacity.used")}
+                    value={usage.usedBytes === null ? _("common.notMeasurable") : formatBytes(usage.usedBytes)}
+                    sub={usage.usedBytes === null ? usedUnknownReason : _("panels.capacity.usedMeasured")}
                 />
                 <MetricCard
-                    label="여유 공간"
-                    value={usage.freeBytes === null ? "측정 불가" : formatBytes(usage.freeBytes)}
-                    sub={usage.freeBytes === null ? "사용 중 공간을 모르면 계산할 수 없습니다" : "할당 가능"}
+                    label={_("panels.capacity.free")}
+                    value={usage.freeBytes === null ? _("common.notMeasurable") : formatBytes(usage.freeBytes)}
+                    sub={usage.freeBytes === null
+                        ? _("panels.capacity.freeUnknown")
+                        : _("panels.capacity.freeAvailable")}
                 />
                 <MetricCard
-                    label="보호 레벨"
+                    label={_("panels.capacity.protection")}
                     value={allocation.parityBytes === null
-                        ? "측정 불가"
-                        : `패리티 ${formatBytes(allocation.parityBytes)}`}
+                        ? _("common.notMeasurable")
+                        : format(_("panels.capacity.parityValue"), formatBytes(allocation.parityBytes))}
                     sub={tolerances.length > 0
                         ? (
                             <Stack>
@@ -604,19 +660,21 @@ export const CapacityOverviewPanel = ({ report, fsDf }: { report: StatusReport; 
                                         {" "}{toleranceLabel(t.status)}
                                     </StackItem>
                                 ))}
-                                {allocation.parityBytesPartial && <StackItem>(일부 밴드는 실시간 정보 없음)</StackItem>}
+                                {allocation.parityBytesPartial && (
+                                    <StackItem>{_("panels.capacity.parityPartial")}</StackItem>
+                                )}
                             </Stack>
                         )
-                        : "구성된 그룹 없음"}
+                        : _("panels.capacity.noGroups")}
                 />
             </Gallery>
 
-            <Card component="div" aria-label="스토리지 할당 현황">
+            <Card component="div" aria-label={_("panels.allocation.title")}>
                 <CardTitle>
                     <Split hasGutter>
-                        <SplitItem isFilled>스토리지 할당 현황</SplitItem>
+                        <SplitItem isFilled>{_("panels.allocation.title")}</SplitItem>
                         <SplitItem className={MONO}>
-                            {report.groups.map(g => modeLabel(g.mode)).join(", ") || "그룹 없음"}
+                            {report.groups.map(g => modeLabel(g.mode)).join(", ") || _("panels.allocation.noGroups")}
                         </SplitItem>
                     </Split>
                 </CardTitle>
@@ -635,23 +693,22 @@ export const CapacityOverviewPanel = ({ report, fsDf }: { report: StatusReport; 
                                         <StackItem key={segment.kind}>
                                             <Progress
                                                 value={(segment.bytes / total) * 100}
-                                                title={`${SEGMENT_LABEL[segment.kind]} (${formatBytes(segment.bytes)})`}
+                                                title={`${segmentLabel(segment.kind)} (${formatBytes(segment.bytes)})`}
                                                 measureLocation={ProgressMeasureLocation.outside}
                                                 variant={segment.kind === "used" ? "success" : undefined}
-                                                aria-label={SEGMENT_LABEL[segment.kind]}
+                                                aria-label={segmentLabel(segment.kind)}
                                             />
                                         </StackItem>
                                     ))}
                                 </Stack>
                                 {allocation.systemDiskBytes !== null && allocation.systemDiskBytes > 0 && (
                                     <Caveat>
-                                        시스템 디스크는 OS가 설치된 디스크입니다. 안전을 위해 RAID 후보에서 자동으로
-                                        제외되며, 이 디스크의 용량은 미할당 물리 용량에 들어가지 않습니다.
+                                        {_("panels.allocation.systemDiskNote")}
                                     </Caveat>
                                 )}
                             </>
                         )
-                        : <Caveat>표시할 용량 정보가 없습니다.</Caveat>}
+                        : <Caveat>{_("panels.allocation.empty")}</Caveat>}
                 </CardBody>
             </Card>
         </>
@@ -670,37 +727,41 @@ const KvItem = ({ label, value, hint }: { label: string; value: string; hint?: s
     </DescriptionListGroup>
 );
 
-const UNKNOWN = "알 수 없음";
-// The status report carries the configuration file's path, so this only fires
-// when the backend genuinely does not know it (older CLI build).
-const STATE_PATH_HINT = "이 버전의 shr-rs는 구성 파일 경로를 알려주지 않습니다.";
-
-const TechSpecCard = ({ group, statePath }: { group: GroupStatus; statePath: string | null }) => (
-    <DescriptionList isHorizontal isCompact>
-        <KvItem label="그룹 이름" value={group.name} />
-        <KvItem label="볼륨 그룹 (LVM VG)" value={group.vg_name ?? UNKNOWN} />
-        <KvItem label="논리 볼륨 (LVM LV) / 마운트 위치" value={`${group.lv_name ?? UNKNOWN} → ${group.mount_point}`} />
-        <KvItem label="파일시스템 UUID" value={group.fs_uuid ?? UNKNOWN} />
-        <KvItem label="압축 방식 및 마운트 옵션" value={group.compression ?? UNKNOWN} />
-        {statePath === null
-            ? (
-                <KvItem
-                    label="구성 파일"
-                    value={UNKNOWN}
-                    hint={STATE_PATH_HINT}
-                />
-            )
-            : (
-                <KvItem
-                    label="구성 파일"
-                    value={statePath}
-                />
-            )}
-    </DescriptionList>
-);
+const TechSpecCard = ({ group, statePath }: { group: GroupStatus; statePath: string | null }) => {
+    const unknown = _("common.unknown");
+    return (
+        <DescriptionList isHorizontal isCompact>
+            <KvItem label={_("panels.tech.groupName")} value={group.name} />
+            <KvItem label={_("panels.tech.vg")} value={group.vg_name ?? unknown} />
+            <KvItem
+                label={_("panels.tech.lv")}
+                value={`${group.lv_name ?? unknown} → ${group.mount_point}`}
+            />
+            <KvItem label={_("panels.group.fsUuid")} value={group.fs_uuid ?? unknown} />
+            <KvItem label={_("panels.tech.compression")} value={group.compression ?? unknown} />
+            {statePath === null
+                ? (
+                    <KvItem
+                        label={_("panels.tech.statePath")}
+                        value={unknown}
+                        // The status report carries this path, so the hint only
+                        // fires when the backend genuinely does not know it
+                        // (an older CLI build).
+                        hint={_("panels.tech.statePathHint")}
+                    />
+                )
+                : (
+                    <KvItem
+                        label={_("panels.tech.statePath")}
+                        value={statePath}
+                    />
+                )}
+        </DescriptionList>
+    );
+};
 
 export const TechSpecPanel = ({ report }: { report: StatusReport }) => (
-    <Section title="볼륨 및 파일시스템 상세" note="LVM · Btrfs 구성" defaultExpanded={false}>
+    <Section title={_("panels.tech.title")} note={_("panels.tech.note")} defaultExpanded={false}>
         <Stack hasGutter>
             {report.groups.length > 0
                 ? report.groups.map(group => (
@@ -709,7 +770,7 @@ export const TechSpecPanel = ({ report }: { report: StatusReport }) => (
                         <TechSpecCard group={group} statePath={report.state_path} />
                     </StackItem>
                 ))
-                : <StackItem><Caveat>구성된 SHR 그룹이 없습니다.</Caveat></StackItem>}
+                : <StackItem><Caveat>{_("panels.tech.empty")}</Caveat></StackItem>}
         </Stack>
     </Section>
 );
@@ -723,38 +784,49 @@ export const CapacityMethodologyPanel = ({ report }: { report: StatusReport }) =
     const allocation = summarizeAllocation(report);
 
     return (
-        <Section title="용량 산정 방법" note="각 수치를 어떻게 구했는지" defaultExpanded={false}>
+        <Section
+            title={_("panels.method.title")}
+            note={_("panels.method.note")}
+            defaultExpanded={false}
+        >
             <DescriptionList isHorizontal isCompact className="pf-v6-u-mb-md">
                 <DescriptionListGroup>
-                    <DescriptionListTerm>감지된 원시 용량</DescriptionListTerm>
+                    <DescriptionListTerm>{_("common.rawCapacity")}</DescriptionListTerm>
                     <DescriptionListDescription className={MONO}>
                         {formatBytes(summary.rawBytes)}
                     </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
-                    <DescriptionListTerm>그룹 가용 용량 (구성 기록 합계)</DescriptionListTerm>
+                    <DescriptionListTerm>{_("panels.method.usableCapacity")}</DescriptionListTerm>
                     <DescriptionListDescription className={MONO}>
                         {formatBytes(allocation.usableBytes)}
                     </DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
-                    <DescriptionListTerm>계산된 패리티 용량</DescriptionListTerm>
+                    <DescriptionListTerm>{_("panels.method.parityCapacity")}</DescriptionListTerm>
                     <DescriptionListDescription className={MONO}>
                         {formatBytes(allocation.parityBytes)}
                     </DescriptionListDescription>
                 </DescriptionListGroup>
             </DescriptionList>
+            {/* One paragraph per figure rather than one msgid with `<strong>`
+                markup inside it: a translator gets whole sentences, and none
+                of them has to carry HTML through the catalogue. */}
             <Content component="p">
-                <strong>가용 용량</strong>은 그룹을 만들 때 기록해 둔 값을 그대로 더한 것이라 항상 표시됩니다.
-                <strong> 패리티 용량</strong>은 각 RAID 어레이의 구성 디스크 수와 RAID 레벨로부터 이 화면이
-                계산합니다. 어레이가 현재 조립되어 있지 않으면 계산할 수 없어 &quot;측정 불가&quot;로 표시됩니다.
-                멤버 하나가 고장으로 표시되어도 어레이가 차지하는 디스크 수는 그대로이므로 이 값은 바뀌지
-                않으며, 고장/예비 표시는 멤버 목록과 상태 배지에만 나타납니다. 계산값이라 실제 크기와 아주
-                근소하게 다를 수 있습니다.
-                <strong> 사용 중 공간</strong>은 마운트된 파일시스템에서 직접 읽은 실측값입니다. 마운트되어
-                있지 않거나 조회에 실패하면 추정하지 않고 &quot;측정 불가&quot;로 둡니다.
-                <strong> 감지된 원시 용량</strong>에는 OS가 설치된 시스템 디스크도 합산되지만, 그 디스크는
-                RAID 후보에서 제외되므로 미할당 물리 용량에서는 빠집니다.
+                <strong>{_("panels.method.usableTerm")}</strong>{" "}
+                {_("panels.method.usableBody")}
+            </Content>
+            <Content component="p">
+                <strong>{_("panels.method.parityTerm")}</strong>{" "}
+                {_("panels.method.parityBody")}
+            </Content>
+            <Content component="p">
+                <strong>{_("panels.capacity.used")}</strong>{" "}
+                {_("panels.method.usedBody")}
+            </Content>
+            <Content component="p">
+                <strong>{_("common.rawCapacity")}</strong>{" "}
+                {_("panels.method.rawBody")}
             </Content>
         </Section>
     );

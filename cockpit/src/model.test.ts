@@ -33,6 +33,12 @@ import {
     type MemberStatus,
     type SmartSummary,
 } from "./model.ts";
+import { installEnglishCatalog } from "./testCatalog.ts";
+
+// Every expectation below is the English wording from `po/en.po`, not a
+// message key: see that helper's own comment for why the tests load a real
+// catalogue instead of asserting on keys.
+installEnglishCatalog();
 
 const validStatus = {
     schema_version: 2,
@@ -353,16 +359,16 @@ describe("parseStatusOutput", () => {
     it("rejects a non-string state_path instead of rendering garbage", () => {
         assert.throws(
             () => parseStatusOutput(JSON.stringify({ ...validStatus, state_path: 42 })),
-            /구성 파일 경로/,
+            /configuration file path/,
         );
     });
 
-    it("rejects a group missing vg_name/lv_name/compression instead of rendering 알 수 없음 silently", () => {
+    it("rejects a group missing vg_name/lv_name/compression instead of rendering \"Unknown\" silently", () => {
         const groupWithoutVgName = { ...validStatus.groups[0] };
         delete (groupWithoutVgName as Record<string, unknown>).vg_name;
         assert.throws(
             () => parseStatusOutput(JSON.stringify({ ...validStatus, groups: [groupWithoutVgName] })),
-            /볼륨 그룹/,
+            /the volume group name/,
         );
     });
 
@@ -378,19 +384,19 @@ describe("parseStatusOutput", () => {
                     }],
                 }],
             })),
-            /스크럽 결과/,
+            /the scrub outcome/,
         );
     });
 
     it("rejects malformed JSON, CLI error objects, and unknown schemas", () => {
-        assert.throws(() => parseStatusOutput("not json"), /유효한 JSON/);
+        assert.throws(() => parseStatusOutput("not json"), /valid JSON status output/);
         assert.throws(
             () => parseStatusOutput(JSON.stringify({ error: "lsblk failed" })),
             /lsblk failed/,
         );
         assert.throws(
             () => parseStatusOutput(JSON.stringify({ ...validStatus, schema_version: 3 })),
-            /버전이 대시보드와 호환되지 않습니다/,
+            /not compatible with the dashboard/,
         );
     });
 
@@ -403,35 +409,35 @@ describe("parseStatusOutput", () => {
         delete v1.groups;
         assert.throws(
             () => parseStatusOutput(JSON.stringify(v1)),
-            /버전이 대시보드와 호환되지 않습니다/,
+            /not compatible with the dashboard/,
         );
     });
 
     it("rejects structurally incomplete reports before rendering", () => {
         assert.throws(
             () => parseStatusOutput(JSON.stringify({ ...validStatus, disks: [{}] })),
-            /디스크 정보/,
+            /Disk entry #/,
         );
     });
 
     it("rejects malformed group entries instead of rendering garbage", () => {
         assert.throws(
             () => parseStatusOutput(JSON.stringify({ ...validStatus, groups: [{}] })),
-            /그룹 정보/,
+            /Group entry #/,
         );
         assert.throws(
             () => parseStatusOutput(JSON.stringify({
                 ...validStatus,
                 groups: [{ ...validStatus.groups[0], mode: 42 }],
             })),
-            /모드/,
+            /the mode/,
         );
         assert.throws(
             () => parseStatusOutput(JSON.stringify({
                 ...validStatus,
                 groups: [{ ...validStatus.groups[0], usable_bytes: -1 }],
             })),
-            /가용 용량/,
+            /the usable capacity/,
         );
         assert.throws(
             () => parseStatusOutput(JSON.stringify({
@@ -441,14 +447,14 @@ describe("parseStatusOutput", () => {
                     bands: [{ ...validStatus.groups[0].bands[0], resize_pending: "yes" }],
                 }],
             })),
-            /확장 마무리 대기/,
+            /the pending-expansion flag/,
         );
         assert.throws(
             () => parseStatusOutput(JSON.stringify({
                 ...validStatus,
                 groups: [{ ...validStatus.groups[0], bands: "not-an-array" }],
             })),
-            /밴드 목록/,
+            /the band list/,
         );
     });
 });
@@ -549,7 +555,7 @@ describe("formatBytes", () => {
         assert.equal(formatBytes(4_000_000_000_000), "4.0 TB");
         assert.equal(formatBytes(512_000_000_000), "512.0 GB");
         assert.equal(formatBytes(0), "0 B");
-        assert.equal(formatBytes(null), "알 수 없음");
+        assert.equal(formatBytes(null), "Unknown");
     });
 });
 
@@ -1220,33 +1226,33 @@ describe("groupToleranceStatus", () => {
 
 describe("formatDuration", () => {
     it("renders hours+minutes, sub-minute, and unknown durations", () => {
-        assert.equal(formatDuration(125), "2시간 5분");
-        assert.equal(formatDuration(45), "45분");
-        assert.equal(formatDuration(0.4), "1분 미만");
-        assert.equal(formatDuration(null), "알 수 없음");
+        assert.equal(formatDuration(125), "2 h 5 min");
+        assert.equal(formatDuration(45), "45 min");
+        assert.equal(formatDuration(0.4), "less than a minute");
+        assert.equal(formatDuration(null), "Unknown");
     });
 });
 
 describe("formatSyncProgress", () => {
     it("renders idle, in-progress-with-unknown-percent, and full progress", () => {
-        assert.equal(formatSyncProgress(null), "유휴 (진행 중인 작업 없음)");
+        assert.equal(formatSyncProgress(null), "Idle (nothing in progress)");
         assert.equal(
             formatSyncProgress({ action: "recovery", percent: null, finish_min: null }),
-            "복구 · 진행률 알 수 없음 · 남은 시간 알 수 없음",
+            "Recovery · progress unknown · Unknown remaining",
         );
         assert.equal(
             formatSyncProgress({ action: "resync", percent: 42.5, finish_min: 8.2 }),
-            "재동기화 · 42.5% · 남은 시간 8분",
+            "Resync · 42.5% · 8 min remaining",
         );
     });
 });
 
 describe("describeSyncAction / describeArrayState", () => {
     it("translates the kernel's own words", () => {
-        assert.equal(describeSyncAction("reshape"), "용량 재구성");
-        assert.equal(describeSyncAction("check"), "무결성 검사");
-        assert.equal(describeArrayState("active"), "동작 중");
-        assert.equal(describeArrayState("inactive"), "정지됨");
+        assert.equal(describeSyncAction("reshape"), "Capacity reshape");
+        assert.equal(describeSyncAction("check"), "Integrity check");
+        assert.equal(describeArrayState("active"), "Active");
+        assert.equal(describeArrayState("inactive"), "Stopped");
     });
 
     it("passes an unrecognised value through rather than hiding it", () => {
@@ -1256,7 +1262,7 @@ describe("describeSyncAction / describeArrayState", () => {
 });
 
 // `ArrayRow` (panels.tsx) used to compute its own percent/ETA text
-// inline, and the ETA half printed raw minutes ("약 540.0분") instead of
+// inline, and the ETA half printed raw minutes ("about 540.0 min") instead of
 // routing through `formatDuration` like `formatSyncProgress` did one panel
 // below for bands -- the fix pulled the fragment out into this function so
 // it has a test surface at all (panels.tsx itself has no render test).
@@ -1268,7 +1274,7 @@ describe("formatSyncPercentEta", () => {
     it("renders an unknown percent honestly, with no ETA suffix when finish_min is also null", () => {
         assert.equal(
             formatSyncPercentEta({ action: "recovery", percent: null, finish_min: null }),
-            "진행률 계산 중",
+            "calculating progress",
         );
     });
 
@@ -1282,32 +1288,32 @@ describe("formatSyncPercentEta", () => {
     it("renders a sub-hour ETA in minutes only", () => {
         assert.equal(
             formatSyncPercentEta({ action: "resync", percent: 42.5, finish_min: 8.2 }),
-            "42.5% · 약 8분",
+            "42.5% · about 8 min",
         );
     });
 
-    // The task's own reported symptom: a 9-hour rebuild must read "9시간
-    // 0분" here exactly like `formatSyncProgress` does for the same
-    // finish_min, never "540.0분".
+    // The task's own reported symptom: a 9-hour rebuild must read "9 h
+    // 0 min" here exactly like `formatSyncProgress` does for the same
+    // finish_min, never "540.0 min".
     it("renders a multi-hour ETA via formatDuration, not raw minutes", () => {
         assert.equal(
             formatSyncPercentEta({ action: "recovery", percent: 12.3, finish_min: 540 }),
-            "12.3% · 약 9시간 0분",
+            "12.3% · about 9 h 0 min",
         );
     });
 });
 
 describe("formatScrub", () => {
     it("prioritizes in-progress, then flags a nonzero error count as a warning", () => {
-        assert.deepEqual(formatScrub(null, true), { text: "스크럽 진행 중", tone: "neutral" });
-        assert.deepEqual(formatScrub(null, false), { text: "스크럽 이력 없음", tone: "neutral" });
+        assert.deepEqual(formatScrub(null, true), { text: "Scrub in progress", tone: "neutral" });
+        assert.deepEqual(formatScrub(null, false), { text: "No scrub history", tone: "neutral" });
         assert.deepEqual(
             formatScrub({ finished_at: "2026-07-24T10:15:00Z", outcome: "completed", error_count: 0 }, false),
-            { text: "2026-07-24T10:15:00Z 완료", tone: "good" },
+            { text: "2026-07-24T10:15:00Z completed", tone: "good" },
         );
         assert.deepEqual(
             formatScrub({ finished_at: "2026-07-24T09:30:00Z", outcome: "failed", error_count: 3 }, false),
-            { text: "2026-07-24T09:30:00Z 실패 · 오류 3건", tone: "warning" },
+            { text: "2026-07-24T09:30:00Z failed · 3 errors", tone: "warning" },
         );
     });
 });
@@ -1375,21 +1381,21 @@ describe("parseFsDfOutput", () => {
     });
 
     it("rejects malformed JSON, CLI error objects, and unknown schemas", () => {
-        assert.throws(() => parseFsDfOutput("not json"), /유효한 fs df JSON/);
+        assert.throws(() => parseFsDfOutput("not json"), /valid fs df JSON/);
         assert.throws(
             () => parseFsDfOutput(JSON.stringify({ error: "no state.toml" })),
             /no state\.toml/,
         );
         assert.throws(
             () => parseFsDfOutput(JSON.stringify({ ...validFsDf, schema_version: 3 })),
-            /버전이 대시보드와 호환되지 않아 사용량을 읽을 수 없습니다/,
+            /so usage cannot be read/,
         );
     });
 
     it("rejects a malformed group row instead of rendering garbage", () => {
         assert.throws(
             () => parseFsDfOutput(JSON.stringify({ ...validFsDf, groups: [{}] })),
-            /fs df 응답의 그룹 정보/,
+            /fs df response, group entry #/,
         );
     });
 });
@@ -1484,7 +1490,7 @@ describe("describeBackgroundActivity", () => {
     it("reads calm and idle when nothing is running -- no warning tone, no scary empty state", () => {
         assert.deepEqual(
             describeBackgroundActivity([makeArray("md0", null), makeArray("md1", null)], [makeGroupWithBand()]),
-            { tone: "good", headline: "유휴", detail: "진행 중인 백그라운드 작업 없음" },
+            { tone: "good", headline: "Idle", detail: "No background work in progress" },
         );
     });
 
@@ -1492,11 +1498,11 @@ describe("describeBackgroundActivity", () => {
         const arrays = [makeArray("md0", { action: "check", percent: 57.3, finish_min: 12.5 })];
         assert.deepEqual(describeBackgroundActivity(arrays, [makeGroupWithBand()]), {
             tone: "neutral",
-            headline: "스크럽 진행 중",
+            headline: "Scrub in progress",
             // FormatDuration rounds to whole minutes (round-half-up), same as
             // formatSyncProgress already did for this exact field elsewhere -- 12.5
             // is not a special case that keeps its fraction.
-            detail: "md0 스크럽 · 57.3% · 약 13분",
+            detail: "md0 Scrub · 57.3% · about 13 min",
         });
     });
 
@@ -1504,10 +1510,10 @@ describe("describeBackgroundActivity", () => {
         const arrays = [makeArray("md0", { action: "recovery", percent: null, finish_min: null })];
         assert.deepEqual(describeBackgroundActivity(arrays, [makeGroupWithBand()]), {
             tone: "warning",
-            headline: "복구 진행 중",
+            headline: "Recovery in progress",
             // Never fabricate a percent/ETA mdadm didn't report -- see ArrayRow's
             // identical wording in panels.tsx for the established honesty phrase.
-            detail: "md0 복구 · 진행률 계산 중",
+            detail: "md0 Recovery · calculating progress",
         });
     });
 
@@ -1515,23 +1521,23 @@ describe("describeBackgroundActivity", () => {
         const arrays = [makeArray("md0", { action: "reshape", percent: 8, finish_min: 300 })];
         assert.deepEqual(describeBackgroundActivity(arrays, [makeGroupWithBand()]), {
             tone: "warning",
-            headline: "확장 진행 중",
-            // This ETA must render via formatDuration ("5시간 0분"), the same
-            // helper formatSyncProgress already uses -- not an inline `.toFixed(1)}분`
-            // that reads "300.0분" one panel above the correctly-formatted duration.
-            detail: "md0 확장 · 8.0% · 약 5시간 0분",
+            headline: "Expansion in progress",
+            // This ETA must render via formatDuration ("5 h 0 min"), the same
+            // helper formatSyncProgress already uses -- not an inline `.toFixed(1)} min`
+            // that reads "300.0 min" one panel above the correctly-formatted duration.
+            detail: "md0 Expansion · 8.0% · about 5 h 0 min",
         });
     });
 
     // The task's own reported symptom -- a 9-hour rebuild ETA rendered as
-    // "약 540.0분" here (and in ArrayRow) while formatSyncProgress, one panel
-    // below, correctly said "9시간 0분" for the identical minute count.
+    // "about 540.0 min" here (and in ArrayRow) while formatSyncProgress, one panel
+    // below, correctly said "9 h 0 min" for the identical minute count.
     it("formats a multi-hour ETA the same way formatSyncProgress does, not as raw minutes", () => {
         const arrays = [makeArray("md0", { action: "recovery", percent: 12.3, finish_min: 540 })];
         assert.deepEqual(describeBackgroundActivity(arrays, [makeGroupWithBand()]), {
             tone: "warning",
-            headline: "복구 진행 중",
-            detail: "md0 복구 · 12.3% · 약 9시간 0분",
+            headline: "Recovery in progress",
+            detail: "md0 Recovery · 12.3% · about 9 h 0 min",
         });
     });
 
@@ -1539,7 +1545,7 @@ describe("describeBackgroundActivity", () => {
         const arrays = [makeArray("md0", { action: "repair", percent: 5, finish_min: null })];
         assert.deepEqual(describeBackgroundActivity(arrays, [makeGroupWithBand()]), {
             tone: "neutral",
-            headline: "repair 진행 중",
+            headline: "repair in progress",
             detail: "md0 repair · 5.0%",
         });
     });
@@ -1551,35 +1557,35 @@ describe("describeBackgroundActivity", () => {
         ];
         assert.deepEqual(describeBackgroundActivity(arrays, [makeGroupWithBand()]), {
             tone: "warning",
-            headline: "복구 외 1건 진행 중",
+            headline: "Recovery and 1 other in progress",
             // Same formatDuration rounding as the scrub test above.
-            detail: "md0 복구 · 진행률 계산 중 / md1 스크럽 · 57.3% · 약 13분",
+            detail: "md0 Recovery · calculating progress / md1 Scrub · 57.3% · about 13 min",
         });
     });
 
     // Measured live on a real guest with the array stopped (umount +
     // vgchange -an + mdadm --stop) but state.toml still describing a band --
     // `shr-rs status --json` then reports `health: degraded`, `arrays: []`.
-    // The old code read `arrays === []` as "유휴" (green), the same defect
+    // The old code read `arrays === []` as idle/green, the same defect
     // an earlier fix already addressed one card below on BandRow's sync cell (panels.tsx).
     it("flags an empty array list as unable-to-verify, not idle/green, when a group expects bands", () => {
         assert.deepEqual(describeBackgroundActivity([], [makeGroupWithBand()]), {
             tone: "warning",
-            headline: "확인 불가",
-            detail: "실시간 어레이 정보 없음",
+            headline: "Cannot verify",
+            detail: "No live array information",
         });
     });
 
     // Guard against over-correcting back into a naive `arrays.length ===
     // 0` check: a fresh host with no groups configured at all also has
-    // `arrays === []`, and for that host "유휴"/green is correct -- there is
+    // `arrays === []`, and for that host idle/green is correct -- there is
     // genuinely nothing to verify, unlike the case above where a band was
     // expected and didn't answer.
     it("still reads calm and idle when no groups are configured at all, even with an empty array list", () => {
         assert.deepEqual(describeBackgroundActivity([], []), {
             tone: "good",
-            headline: "유휴",
-            detail: "진행 중인 백그라운드 작업 없음",
+            headline: "Idle",
+            detail: "No background work in progress",
         });
     });
 });

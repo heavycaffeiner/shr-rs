@@ -153,6 +153,7 @@ import {
     type TypedConfirmState,
     type WritePreflight,
 } from "./actions.ts";
+import { _, format, ngettext } from "./i18n.ts";
 import { formatBytes, type DiskStatus, type GroupStatus } from "./model.ts";
 import { Badge, Caveat, MONO, Muted } from "./ui.js";
 
@@ -161,11 +162,11 @@ import { Badge, Caveat, MONO, Muted } from "./ui.js";
 // Shown mid-operation, both as the × button's tooltip and as the reason
 // text a dialog can show alongside its own now-disabled cancel button -- a
 // disabled control with no explanation reads as a bug, not a safeguard.
-const IN_FLIGHT_REASON = "작업이 진행 중입니다. 완료될 때까지 창을 닫을 수 없습니다.";
+const inFlightReason = () => _("dialogs.inFlightReason");
 
 // `closeDisabled`: a multi-hour reshape/rebuild has no surface other
 // than this dialog for its eventual success/error -- closing mid-operation
-// (via × or a "취소"/"닫기" button) discards that outcome even though the
+// (via × or a cancel/close button) discards that outcome even though the
 // backend command keeps running. Every caller passes its own `busy` state
 // (true exactly while its in-flight spawn is awaited), not the step-machine
 // state -- see ExpandDialog/ReplaceDialog's controller, whose `state.step`
@@ -220,8 +221,8 @@ export const Modal = ({
                         type="button"
                         onClick={onClose}
                         disabled={closeDisabled}
-                        aria-label="닫기"
-                        title={closeDisabled ? IN_FLIGHT_REASON : undefined}
+                        aria-label={_("common.close")}
+                        title={closeDisabled ? inFlightReason() : undefined}
                     >
                         ×
                     </button>
@@ -236,7 +237,9 @@ const CommandPreview = ({ commands }: { commands: string[] }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     return (
         <ExpandableSection
-            toggleText={`실행될 명령 (${commands.length}개)`}
+            toggleText={format(ngettext(
+                "wizard.commands.toggle.one", "wizard.commands.toggle.other", commands.length,
+            ), commands.length)}
             isExpanded={isExpanded}
             onToggle={(_event, expanded) => setIsExpanded(expanded)}
         >
@@ -250,18 +253,18 @@ const CommandPreview = ({ commands }: { commands: string[] }) => {
 const ErrorPanel = ({ message, onClose, onRetry }: { message: string | null; onClose: () => void; onRetry?: () => void }) => (
     <Stack hasGutter>
         <StackItem>
-            <Alert variant="danger" isInline title="실패했습니다.">
+            <Alert variant="danger" isInline title={_("dialogs.error.title")}>
                 <p className={MONO}>{message}</p>
             </Alert>
         </StackItem>
         <StackItem>
             <ActionList>
                 <ActionListItem>
-                    <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={onClose}>닫기</button>
+                    <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={onClose}>{_("common.close")}</button>
                 </ActionListItem>
                 {onRetry && (
                     <ActionListItem>
-                        <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={onRetry}>다시 시도</button>
+                        <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={onRetry}>{_("dialogs.retry")}</button>
                     </ActionListItem>
                 )}
             </ActionList>
@@ -272,21 +275,21 @@ const ErrorPanel = ({ message, onClose, onRetry }: { message: string | null; onC
 const describePreflightBlocker = (b: WritePreflight["blockers"][number]): string => {
     switch (b.kind) {
     case "system_disk":
-        return `${b.name}: 시스템 디스크입니다 (마운트: ${b.mounts.join(", ")}).`;
+        return format(_("blocker.systemDisk"), b.name, b.mounts.join(", "));
     case "has_content":
-        return `${b.name}: 이미 데이터/파티션이 있습니다.`;
+        return format(_("blocker.hasContentShort"), b.name);
     case "no_stable_id":
-        return `${b.name}: 안정적인 식별자(by-id)를 찾을 수 없습니다.`;
+        return format(_("blocker.noStableId"), b.name);
     case "size_unknown":
-        return `${b.name}: 용량을 확인할 수 없습니다.`;
+        return format(_("blocker.sizeUnknown"), b.name);
     case "not_found":
-        return `${b.reference}: 해당하는 디스크를 찾을 수 없습니다.`;
+        return format(_("blocker.notFound"), b.reference);
     default:
         // Covers "unknown" plus any future kind this file doesn't know yet.
         // Lead with plain language so the raw payload reads as supporting
         // detail rather than as the entire message. Still shown, not hidden:
         // a reason we cannot name is worth more than silence.
-        return `이 디스크는 사용할 수 없습니다 (자세한 내용: ${JSON.stringify(b)}).`;
+        return format(_("blocker.unknown"), JSON.stringify(b));
     }
 };
 
@@ -354,16 +357,16 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
     };
 
     return (
-        <Modal title={`그룹 "${group.name}" 스크럽`} onClose={handleClose} closeDisabled={busy}>
+        <Modal title={format(_("dialogs.scrub.title"), group.name)} onClose={handleClose} closeDisabled={busy}>
             <Stack hasGutter>
                 {loading && (
                     <StackItem>
-                        <p><Spinner isInline aria-hidden="true" /> 스크럽 상태를 확인하는 중입니다.</p>
+                        <p><Spinner isInline aria-hidden="true" /> {_("dialogs.scrub.loading")}</p>
                     </StackItem>
                 )}
                 {!loading && loadError && (
                     <StackItem>
-                        <Alert variant="danger" isInline title="상태를 불러오지 못했습니다.">
+                        <Alert variant="danger" isInline title={_("dialogs.loadFailed")}>
                             <p className={MONO}>{loadError}</p>
                         </Alert>
                     </StackItem>
@@ -372,12 +375,20 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
                     <StackItem>
                         <DescriptionList isHorizontal isCompact>
                             <DescriptionListGroup>
-                                <DescriptionListTerm>현재 상태</DescriptionListTerm>
-                                <DescriptionListDescription><strong>{status.running ? "스크럽 진행 중" : "진행 중 아님"}</strong></DescriptionListDescription>
+                                <DescriptionListTerm>{_("dialogs.scrub.currentState")}</DescriptionListTerm>
+                                <DescriptionListDescription>
+                                    <strong>{status.running ? _("model.scrub.inProgress") : _("dialogs.scrub.notRunning")}</strong>
+                                </DescriptionListDescription>
                             </DescriptionListGroup>
                             <DescriptionListGroup>
-                                <DescriptionListTerm>발견된 오류</DescriptionListTerm>
-                                <DescriptionListDescription><strong className={MONO}>{status.error_count}개</strong></DescriptionListDescription>
+                                <DescriptionListTerm>{_("dialogs.scrub.errorsFound")}</DescriptionListTerm>
+                                <DescriptionListDescription>
+                                    <strong className={MONO}>
+                                        {format(ngettext(
+                                            "model.scrub.errors.one", "model.scrub.errors.other", status.error_count,
+                                        ), status.error_count)}
+                                    </strong>
+                                </DescriptionListDescription>
                             </DescriptionListGroup>
                         </DescriptionList>
                     </StackItem>
@@ -388,9 +399,9 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
                         <Alert
                             variant="danger"
                             isInline
-                            title={status?.running ? "실행 중인 스크럽을 취소합니다." : "이 그룹 전체를 스크럽합니다."}
+                            title={status?.running ? _("dialogs.scrub.cancelTitle") : _("dialogs.scrub.startTitle")}
                         >
-                            <p>계속하려면 확인을 눌러 실행하세요.</p>
+                            <p>{_("dialogs.confirmPrompt")}</p>
                             {actionState.step === "error" && <p className={MONO}>{actionState.errorMessage}</p>}
                         </Alert>
                     </StackItem>
@@ -401,32 +412,32 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
                         <ActionListItem>
                             <button
                                 className="pf-v6-c-button pf-m-secondary" type="button"
-                                onClick={handleClose} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                                onClick={handleClose} disabled={busy} title={busy ? inFlightReason() : undefined}
                             >
-                                닫기
+                                {_("common.close")}
                             </button>
                         </ActionListItem>
                         <ActionListItem>
-                            <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={load} disabled={loading}>새로 고침</button>
+                            <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={load} disabled={loading}>{_("common.refresh")}</button>
                         </ActionListItem>
                         {!loading && status && !status.running && !action && (
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-primary" type="button" onClick={() => begin(scrubStartArgs)}>
-                                    스크럽 시작
+                                    {_("dialogs.scrub.start")}
                                 </button>
                             </ActionListItem>
                         )}
                         {!loading && status && status.running && !action && (
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-danger" type="button" onClick={() => begin(scrubCancelArgs)}>
-                                    스크럽 취소
+                                    {_("dialogs.scrub.cancel")}
                                 </button>
                             </ActionListItem>
                         )}
                         {action && actionState && actionState.step !== "done" && (
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-danger" type="button" disabled={busy} onClick={confirmAndRun}>
-                                    {busy ? "처리 중..." : "확인 후 실행"}
+                                    {busy ? _("dialogs.busy.working") : _("dialogs.confirmAndRun")}
                                 </button>
                             </ActionListItem>
                         )}
@@ -442,10 +453,12 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
 // The reshape speed profile `shr-rs expand --priority` accepts.
 // "balanced" is listed first and is the pre-selected default, matching
 // shr-cli's own `default_value = "balanced"`.
-const PRIORITY_OPTIONS: { value: ReshapePriority; label: string }[] = [
-    { value: "balanced", label: "균형 (기본값): 평소 디스크 사용과 재구성 속도를 절충" },
-    { value: "background", label: "백그라운드: 평소 디스크 사용을 우선, 재구성은 느려짐" },
-    { value: "max", label: "최대 속도: 재구성을 최대한 빨리, 평소 디스크 사용이 느려짐" },
+// A function, not a module-scope array: the labels have to be read at render
+// time so they follow the session language.
+const priorityOptions = (): { value: ReshapePriority; label: string }[] => [
+    { value: "balanced", label: _("dialogs.expand.priority.balanced") },
+    { value: "background", label: _("dialogs.expand.priority.background") },
+    { value: "max", label: _("dialogs.expand.priority.max") },
 ];
 
 const ExpandDialog = ({
@@ -530,13 +543,13 @@ const ExpandDialog = ({
     const canExecute = controller !== null && controller.canExecute();
 
     return (
-        <Modal title={`그룹 "${group.name}" 확장`} onClose={handleClose} closeDisabled={busy}>
+        <Modal title={format(_("dialogs.expand.title"), group.name)} onClose={handleClose} closeDisabled={busy}>
             {step === "select" && (
                 <Stack hasGutter>
                     <StackItem>
                         <fieldset>
-                            <legend>추가할 디스크 선택 (이미 다른 그룹에서 사용 중인 디스크는 표시되지 않습니다)</legend>
-                            {candidates.length === 0 && <p><Muted>추가 가능한 디스크가 없습니다.</Muted></p>}
+                            <legend>{_("dialogs.expand.legend")}</legend>
+                            {candidates.length === 0 && <p><Muted>{_("dialogs.expand.noCandidates")}</Muted></p>}
                             {candidates.map(disk => {
                                 // `filterExpandCandidates` deliberately does not
                                 // judge system-disk status itself (see its doc comment
@@ -578,18 +591,18 @@ const ExpandDialog = ({
                                             <span className={MONO}>/dev/{disk.name}</span>
                                         </span>
                                         <span className="pf-v6-c-check__description">
-                                            <span>{disk.model ?? "모델 정보 없음"}</span>{" "}
+                                            <span>{disk.model ?? _("wizard.disks.noModel")}</span>{" "}
                                             <span className={MONO}>{formatBytes(disk.size)}</span>
                                             {disabled && (
                                                 <>
                                                     {" "}
                                                     <Badge
                                                         tone={{
-                                                            label: `시스템 디스크 (선택 불가)${
+                                                            label: _("wizard.disks.systemDisk") + (
                                                                 disk.system_mounts && disk.system_mounts.length > 0
                                                                     ? ` (${disk.system_mounts.join(", ")})`
                                                                     : ""
-                                                            }`,
+                                                            ),
                                                             tone: "warning",
                                                         }}
                                                     />
@@ -609,14 +622,14 @@ const ExpandDialog = ({
                                 checked={forceContent}
                                 onChange={e => setForceContent(e.target.checked)}
                             />
-                            <span className="pf-v6-c-check__label">선택한 디스크에 기존 데이터가 있어도 진행합니다.</span>
+                            <span className="pf-v6-c-check__label">{_("dialogs.expand.forceContent")}</span>
                         </label>
                     </StackItem>
                     <StackItem>
-                        <FormGroup label="재구성 속도 우선순위" fieldId="expand-priority">
+                        <FormGroup label={_("dialogs.expand.priorityLabel")} fieldId="expand-priority">
                             <span className="pf-v6-c-form-control">
                                 <select id="expand-priority" value={priority} onChange={e => setPriority(e.target.value as ReshapePriority)}>
-                                    {PRIORITY_OPTIONS.map(o => <option value={o.value} key={o.value}>{o.label}</option>)}
+                                    {priorityOptions().map(o => <option value={o.value} key={o.value}>{o.label}</option>)}
                                 </select>
                             </span>
                         </FormGroup>
@@ -631,9 +644,9 @@ const ExpandDialog = ({
                             <ActionListItem>
                                 <button
                                     className="pf-v6-c-button pf-m-secondary" type="button"
-                                    onClick={handleClose} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                                    onClick={handleClose} disabled={busy} title={busy ? inFlightReason() : undefined}
                                 >
-                                    취소
+                                    {_("common.cancel")}
                                 </button>
                             </ActionListItem>
                             <ActionListItem>
@@ -642,7 +655,7 @@ const ExpandDialog = ({
                                     disabled={selected.length === 0 || busy}
                                     onClick={startPreflight}
                                 >
-                                    {busy ? "안전 점검 실행 중..." : "다음: 안전 점검"}
+                                    {busy ? _("wizard.action.preflightBusy") : _("wizard.action.preflight")}
                                 </button>
                             </ActionListItem>
                         </ActionList>
@@ -653,7 +666,7 @@ const ExpandDialog = ({
             {step === "blocked" && state?.preflight && (
                 <Stack hasGutter>
                     <StackItem>
-                        <Alert variant="danger" isInline title="안전 점검에서 문제가 발견되었습니다." />
+                        <Alert variant="danger" isInline title={_("dialogs.expand.blockedTitle")} />
                     </StackItem>
                     <StackItem>
                         <List>
@@ -663,7 +676,7 @@ const ExpandDialog = ({
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={startOver}>디스크 선택으로 돌아가기</button>
+                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={startOver}>{_("wizard.action.backToDisks")}</button>
                             </ActionListItem>
                         </ActionList>
                     </StackItem>
@@ -673,21 +686,21 @@ const ExpandDialog = ({
             {step === "preview" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <p>안전 점검을 통과했습니다. 확장 계획 미리보기를 생성합니다 (아직 아무것도 실행하지 않습니다).</p>
+                        <p>{_("dialogs.expand.previewIntro")}</p>
                     </StackItem>
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
                                 <button
                                     className="pf-v6-c-button pf-m-secondary" type="button"
-                                    onClick={startOver} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                                    onClick={startOver} disabled={busy} title={busy ? inFlightReason() : undefined}
                                 >
-                                    뒤로
+                                    {_("wizard.action.back")}
                                 </button>
                             </ActionListItem>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-primary" type="button" disabled={busy} onClick={runPreview}>
-                                    {busy ? "미리보기 생성 중..." : "실행 계획 미리보기"}
+                                    {busy ? _("wizard.action.previewBusy") : _("wizard.action.preview")}
                                 </button>
                             </ActionListItem>
                         </ActionList>
@@ -698,15 +711,21 @@ const ExpandDialog = ({
             {step === "confirm" && state?.preview && (
                 <Stack hasGutter>
                     <StackItem>
-                        <Alert variant="danger" isInline title="이 작업은 되돌릴 수 없습니다.">
-                            <p>RAID 재구성이 시작됩니다. 시작한 뒤에는 중간에 되돌릴 수 없습니다.</p>
+                        <Alert variant="danger" isInline title={_("wizard.confirm.title")}>
+                            <p>{_("dialogs.expand.confirmBody")}</p>
                         </Alert>
                     </StackItem>
                     <StackItem>
                         <DescriptionList isHorizontal isCompact>
                             <DescriptionListGroup>
-                                <DescriptionListTerm>확장 후 디스크</DescriptionListTerm>
-                                <DescriptionListDescription>{state.preview.disk_count}개</DescriptionListDescription>
+                                <DescriptionListTerm>{_("dialogs.expand.disksAfter")}</DescriptionListTerm>
+                                <DescriptionListDescription>
+                                    {format(ngettext(
+                                        "wizard.confirm.diskCount.one",
+                                        "wizard.confirm.diskCount.other",
+                                        state.preview.disk_count,
+                                    ), state.preview.disk_count)}
+                                </DescriptionListDescription>
                             </DescriptionListGroup>
                         </DescriptionList>
                     </StackItem>
@@ -715,7 +734,7 @@ const ExpandDialog = ({
                     </StackItem>
                     <StackItem>
                         <FormGroup
-                            label={<>계속하려면 그룹 이름 <strong className={MONO}>{group.name}</strong>을(를) 정확히 입력하세요</>}
+                            label={format(_("wizard.confirm.typeName"), group.name)}
                             fieldId="expand-confirm-name"
                         >
                             <span className="pf-v6-c-form-control">
@@ -731,14 +750,14 @@ const ExpandDialog = ({
                             <ActionListItem>
                                 <button
                                     className="pf-v6-c-button pf-m-secondary" type="button"
-                                    onClick={startOver} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                                    onClick={startOver} disabled={busy} title={busy ? inFlightReason() : undefined}
                                 >
-                                    취소
+                                    {_("common.cancel")}
                                 </button>
                             </ActionListItem>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-danger" type="button" disabled={!canExecute || busy} onClick={execute}>
-                                    {busy ? "확장 중..." : "확장 실행 (되돌릴 수 없음)"}
+                                    {busy ? _("dialogs.expand.busy") : _("dialogs.expand.execute")}
                                 </button>
                             </ActionListItem>
                         </ActionList>
@@ -747,7 +766,7 @@ const ExpandDialog = ({
             )}
 
             {step === "executing" && (
-                <p><Spinner isInline aria-hidden="true" /> 그룹을 확장하는 중입니다. 창을 닫지 마세요.</p>
+                <p><Spinner isInline aria-hidden="true" /> {_("dialogs.expand.executing")}</p>
             )}
             {/* Note (earlier investigation): `state.step` only reaches "executing" after
                 the controller's own state does, which happens synchronously before
@@ -760,15 +779,15 @@ const ExpandDialog = ({
             {step === "done" && state?.result && (
                 <Stack hasGutter>
                     <StackItem>
-                        <Alert variant="success" isInline title="확장이 완료되었습니다." />
+                        <Alert variant="success" isInline title={_("dialogs.expand.doneTitle")} />
                     </StackItem>
                     <StackItem>
-                        <p>이제 디스크 {state.result.disk_count}개로 구성됩니다.</p>
+                        <p>{format(_("dialogs.expand.doneBody"), state.result.disk_count)}</p>
                     </StackItem>
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>닫기</button>
+                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
                         </ActionList>
                     </StackItem>
@@ -789,11 +808,13 @@ const ExpandDialog = ({
 const describeReplaceUnavailable = (disk: DiskStatus, { checkSystemDisk }: { checkSystemDisk: boolean }): string | null => {
     const reasons: string[] = [];
     if (!hasStableId(disk))
-        reasons.push("안정적인 식별자(by-id) 없음");
+        reasons.push(_("dialogs.replace.noStableId"));
     if (checkSystemDisk && disk.system_disk === true) {
-        reasons.push(`시스템 디스크${disk.system_mounts && disk.system_mounts.length > 0 ? ` (${disk.system_mounts.join(", ")})` : ""}`);
+        reasons.push(_("dialogs.replace.systemDisk") + (
+            disk.system_mounts && disk.system_mounts.length > 0 ? ` (${disk.system_mounts.join(", ")})` : ""
+        ));
     }
-    return reasons.length > 0 ? `선택 불가: ${reasons.join(" · ")}` : null;
+    return reasons.length > 0 ? format(_("dialogs.replace.unavailable"), reasons.join(" · ")) : null;
 };
 
 export interface ReplaceConfirmStepProps {
@@ -831,15 +852,12 @@ export const ReplaceConfirmStep = ({
 }: ReplaceConfirmStepProps) => (
     <Stack hasGutter>
         <StackItem>
-            <Alert variant="danger" isInline title="이 작업은 되돌릴 수 없습니다.">
-                <p>
-                    <span className={MONO}>/dev/{oldName}</span>이(가)
-                    <span className={MONO}> /dev/{newName}</span>(으)로 교체되며, mdadm 리빌드가 시작됩니다.
-                </p>
+            <Alert variant="danger" isInline title={_("wizard.confirm.title")}>
+                <p>{format(_("dialogs.replace.confirmBody"), `/dev/${oldName}`, `/dev/${newName}`)}</p>
             </Alert>
         </StackItem>
         {/* Built from the same `replaceArgs` the controller itself spawns
-            (via `replaceInput`, captured at the moment "다음: 확인" was
+            (via `replaceInput`, captured at the moment the confirm step was
             pressed) -- not a hand-written string -- so this preview can
             never drift from what actually runs (it used to be built
             from `oldName`/`newName`, the kernel names, while the real spawn
@@ -850,7 +868,7 @@ export const ReplaceConfirmStep = ({
         </StackItem>
         <StackItem>
             <FormGroup
-                label={<>계속하려면 그룹 이름 <strong className={MONO}>{group.name}</strong>을(를) 정확히 입력하세요</>}
+                label={format(_("wizard.confirm.typeName"), group.name)}
                 fieldId="replace-confirm-name"
             >
                 <span className="pf-v6-c-form-control">
@@ -871,14 +889,14 @@ export const ReplaceConfirmStep = ({
                 <ActionListItem>
                     <button
                         className="pf-v6-c-button pf-m-secondary" type="button"
-                        onClick={onCancel} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                        onClick={onCancel} disabled={busy} title={busy ? inFlightReason() : undefined}
                     >
-                        취소
+                        {_("common.cancel")}
                     </button>
                 </ActionListItem>
                 <ActionListItem>
                     <button className="pf-v6-c-button pf-m-danger" type="button" disabled={!canExecute || busy} onClick={onExecute}>
-                        {busy ? "교체 중..." : "디스크 교체 실행 (되돌릴 수 없음)"}
+                        {busy ? _("dialogs.replace.busy") : _("dialogs.replace.execute")}
                     </button>
                 </ActionListItem>
             </ActionList>
@@ -891,7 +909,7 @@ const ReplaceDialog = ({
 }: { group: GroupStatus; disks: DiskStatus[]; onClose: () => void; onChanged: () => void }) => {
     const memberDisks = useMemo(() => groupMemberDisks(group, disks), [group, disks]);
     // Default to the first member disk that's actually usable -- picking an
-    // id-less member as the default would leave "다음: 확인" permanently
+    // id-less member as the default would leave the confirm button permanently
     // disabled with no action the operator could take to fix it.
     const [oldName, setOldName] = useState(memberDisks.find(hasStableId)?.name ?? memberDisks[0]?.name ?? "");
     const oldDisk = memberDisks.find(d => d.name === oldName) ?? null;
@@ -963,23 +981,23 @@ const ReplaceDialog = ({
     const step = state?.step ?? "review";
     const canExecute = controller !== null && controller.canExecute();
     // Defense in depth (mirrors this file's other dialogs): even if a
-    // disabled <option> were somehow selected, don't let "다음: 확인"
+    // disabled <option> were somehow selected, don't let the confirm button
     // proceed with a disk lacking a stable id -- `buildReplaceInput` would
     // otherwise silently send "" for that identifier.
     const canProceed = oldDisk !== null && newDisk !== null && hasStableId(oldDisk) && hasStableId(newDisk);
 
     return (
-        <Modal title={`그룹 "${group.name}" 디스크 교체`} onClose={handleClose} closeDisabled={busy}>
+        <Modal title={format(_("dialogs.replace.title"), group.name)} onClose={handleClose} closeDisabled={busy}>
             {step === "review" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <FormGroup label="교체할 기존 디스크" fieldId="replace-old-disk">
+                        <FormGroup label={_("dialogs.replace.oldLabel")} fieldId="replace-old-disk">
                             <span className="pf-v6-c-form-control">
                                 <select
                                     id="replace-old-disk" value={oldName}
                                     onChange={e => { setOldName(e.target.value); setNewName("") }}
                                 >
-                                    {memberDisks.length === 0 && <option value="">이 그룹의 멤버 디스크를 찾을 수 없습니다</option>}
+                                    {memberDisks.length === 0 && <option value="">{_("dialogs.replace.noMembers")}</option>}
                                     {memberDisks.map(d => {
                                         const reason = describeReplaceUnavailable(d, { checkSystemDisk: false });
                                         return (
@@ -993,10 +1011,10 @@ const ReplaceDialog = ({
                         </FormGroup>
                     </StackItem>
                     <StackItem>
-                        <FormGroup label="새 디스크 (같거나 더 큰 용량만 표시됩니다)" fieldId="replace-new-disk">
+                        <FormGroup label={_("dialogs.replace.newLabel")} fieldId="replace-new-disk">
                             <span className="pf-v6-c-form-control">
                                 <select id="replace-new-disk" value={newName} onChange={e => setNewName(e.target.value)}>
-                                    <option value="">선택하세요</option>
+                                    <option value="">{_("dialogs.replace.choose")}</option>
                                     {candidates.map(d => {
                                         // `filterReplacementCandidates` deliberately
                                         // does not judge stable-id or system-disk status
@@ -1013,7 +1031,9 @@ const ReplaceDialog = ({
                                 </select>
                             </span>
                             {oldDisk && candidates.length === 0 && (
-                                <HelperText><HelperTextItem variant="error">같거나 더 큰 용량의 미사용 디스크가 없습니다.</HelperTextItem></HelperText>
+                                <HelperText>
+                                    <HelperTextItem variant="error">{_("dialogs.replace.noCandidates")}</HelperTextItem>
+                                </HelperText>
                             )}
                         </FormGroup>
                     </StackItem>
@@ -1025,11 +1045,11 @@ const ReplaceDialog = ({
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>취소</button>
+                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>{_("common.cancel")}</button>
                             </ActionListItem>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-primary" type="button" disabled={!canProceed} onClick={proceed}>
-                                    다음: 확인
+                                    {_("dialogs.next.confirm")}
                                 </button>
                             </ActionListItem>
                         </ActionList>
@@ -1054,7 +1074,7 @@ const ReplaceDialog = ({
             )}
 
             {step === "executing" && (
-                <p><Spinner isInline aria-hidden="true" /> 디스크를 교체하는 중입니다. 창을 닫지 마세요.</p>
+                <p><Spinner isInline aria-hidden="true" /> {_("dialogs.replace.executing")}</p>
             )}
             {/* See ExpandDialog's identical note: TypedConfirmController.execute()
                 sets state.step="executing" synchronously before its awaited spawn,
@@ -1065,7 +1085,7 @@ const ReplaceDialog = ({
             {step === "done" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <Alert variant="success" isInline title="디스크 교체가 완료되었습니다." />
+                        <Alert variant="success" isInline title={_("dialogs.replace.doneTitle")} />
                     </StackItem>
                     <StackItem>
                         <p className={MONO}>{state?.result}</p>
@@ -1073,7 +1093,7 @@ const ReplaceDialog = ({
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>닫기</button>
+                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
                         </ActionList>
                     </StackItem>
@@ -1112,8 +1132,8 @@ export const RecompressConfirmStep = ({
 }: RecompressConfirmStepProps) => (
     <Stack hasGutter>
         <StackItem>
-            <Alert variant="danger" isInline title="이 작업은 마운트 옵션과 상태를 변경합니다.">
-                <p>되돌리려면 다시 압축 변경을 실행해야 합니다.</p>
+            <Alert variant="danger" isInline title={_("dialogs.recompress.confirmTitle")}>
+                <p>{_("dialogs.recompress.confirmBody")}</p>
             </Alert>
         </StackItem>
         <StackItem>
@@ -1121,7 +1141,7 @@ export const RecompressConfirmStep = ({
         </StackItem>
         <StackItem>
             <FormGroup
-                label={<>계속하려면 그룹 이름 <strong className={MONO}>{group.name}</strong>을(를) 정확히 입력하세요</>}
+                label={format(_("wizard.confirm.typeName"), group.name)}
                 fieldId="recompress-confirm-name"
             >
                 <span className="pf-v6-c-form-control">
@@ -1142,14 +1162,14 @@ export const RecompressConfirmStep = ({
                 <ActionListItem>
                     <button
                         className="pf-v6-c-button pf-m-secondary" type="button"
-                        onClick={onCancel} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                        onClick={onCancel} disabled={busy} title={busy ? inFlightReason() : undefined}
                     >
-                        취소
+                        {_("common.cancel")}
                     </button>
                 </ActionListItem>
                 <ActionListItem>
                     <button className="pf-v6-c-button pf-m-danger" type="button" disabled={!canExecute || busy} onClick={onExecute}>
-                        {busy ? "적용 중..." : "압축 변경 실행 (되돌릴 수 없음)"}
+                        {busy ? _("dialogs.recompress.busy") : _("dialogs.recompress.execute")}
                     </button>
                 </ActionListItem>
             </ActionList>
@@ -1214,11 +1234,11 @@ const RecompressDialog = ({ group, onClose, onChanged }: { group: GroupStatus; o
     const canExecute = controller !== null && controller.canExecute();
 
     return (
-        <Modal title={`그룹 "${group.name}" 압축 변경`} onClose={handleClose} closeDisabled={busy}>
+        <Modal title={format(_("dialogs.recompress.title"), group.name)} onClose={handleClose} closeDisabled={busy}>
             {step === "review" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <FormGroup label="압축 설정 (알고리즘 또는 알고리즘:레벨, 예: zstd:3)" fieldId="recompress-compression">
+                        <FormGroup label={_("dialogs.recompress.field")} fieldId="recompress-compression">
                             <span className="pf-v6-c-form-control">
                                 <input
                                     id="recompress-compression" type="text" value={compression}
@@ -1228,9 +1248,7 @@ const RecompressDialog = ({ group, onClose, onChanged }: { group: GroupStatus; o
                         </FormGroup>
                     </StackItem>
                     <StackItem>
-                        <Caveat>
-                            새 설정은 앞으로 새로 쓰이는 데이터에만 적용됩니다. 기존 데이터를 다시 압축하려면 재작성이 필요합니다.
-                        </Caveat>
+                        <Caveat>{_("dialogs.recompress.caveat")}</Caveat>
                     </StackItem>
                     {buildError && (
                         <StackItem>
@@ -1240,10 +1258,10 @@ const RecompressDialog = ({ group, onClose, onChanged }: { group: GroupStatus; o
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>취소</button>
+                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>{_("common.cancel")}</button>
                             </ActionListItem>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={proceed}>다음: 확인</button>
+                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={proceed}>{_("dialogs.next.confirm")}</button>
                             </ActionListItem>
                         </ActionList>
                     </StackItem>
@@ -1265,7 +1283,7 @@ const RecompressDialog = ({ group, onClose, onChanged }: { group: GroupStatus; o
             )}
 
             {step === "executing" && (
-                <p><Spinner isInline aria-hidden="true" /> 압축 설정을 적용하는 중입니다.</p>
+                <p><Spinner isInline aria-hidden="true" /> {_("dialogs.recompress.executing")}</p>
             )}
             {/* See ExpandDialog's identical note: TypedConfirmController.execute()
                 sets state.step="executing" synchronously before its awaited spawn,
@@ -1276,7 +1294,7 @@ const RecompressDialog = ({ group, onClose, onChanged }: { group: GroupStatus; o
             {step === "done" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <Alert variant="success" isInline title="압축 설정이 변경되었습니다." />
+                        <Alert variant="success" isInline title={_("dialogs.recompress.doneTitle")} />
                     </StackItem>
                     <StackItem>
                         <p className={MONO}>{state?.result}</p>
@@ -1284,7 +1302,7 @@ const RecompressDialog = ({ group, onClose, onChanged }: { group: GroupStatus; o
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>닫기</button>
+                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
                         </ActionList>
                     </StackItem>
@@ -1320,16 +1338,12 @@ export const DestroyConfirmStep = ({
 }: DestroyConfirmStepProps) => (
     <Stack hasGutter>
         <StackItem>
-            <Alert variant="danger" isInline title="이 작업은 되돌릴 수 없습니다.">
-                <p>
-                    그룹 <span className={MONO}>{group.name}</span>의 마운트가 해제되고,
-                    이 그룹이 사용하던 볼륨과 RAID 어레이가 모두 제거되며, 구성 기록에서도 완전히 사라집니다.
-                    그룹에 저장된 데이터는 복구할 수 없습니다.
-                </p>
+            <Alert variant="danger" isInline title={_("wizard.confirm.title")}>
+                <p>{format(_("dialogs.destroy.confirmBody"), group.name)}</p>
             </Alert>
         </StackItem>
         {/* Built from the same `destroyArgs` the controller itself spawns (via
-            `destroyInput`, captured at the moment "다음: 확인" was pressed) --
+            `destroyInput`, captured at the moment the confirm step was entered) --
             same reasoning as ReplaceConfirmStep's earlier fix -- so this preview
             can never drift from what actually runs, including whether
             --zero-superblocks is present. */}
@@ -1338,7 +1352,7 @@ export const DestroyConfirmStep = ({
         </StackItem>
         <StackItem>
             <FormGroup
-                label={<>계속하려면 그룹 이름 <strong className={MONO}>{group.name}</strong>을(를) 정확히 입력하세요</>}
+                label={format(_("wizard.confirm.typeName"), group.name)}
                 fieldId="destroy-confirm-name"
             >
                 <span className="pf-v6-c-form-control">
@@ -1359,14 +1373,14 @@ export const DestroyConfirmStep = ({
                 <ActionListItem>
                     <button
                         className="pf-v6-c-button pf-m-secondary" type="button"
-                        onClick={onCancel} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                        onClick={onCancel} disabled={busy} title={busy ? inFlightReason() : undefined}
                     >
-                        취소
+                        {_("common.cancel")}
                     </button>
                 </ActionListItem>
                 <ActionListItem>
                     <button className="pf-v6-c-button pf-m-danger" type="button" disabled={!canExecute || busy} onClick={onExecute}>
-                        {busy ? "삭제 중..." : "그룹 삭제 실행 (되돌릴 수 없음)"}
+                        {busy ? _("dialogs.destroy.busy") : _("dialogs.destroy.execute")}
                     </button>
                 </ActionListItem>
             </ActionList>
@@ -1437,16 +1451,12 @@ const DestroyDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onCl
     const canExecute = controller !== null && controller.canExecute();
 
     return (
-        <Modal title={`그룹 "${group.name}" 삭제`} onClose={handleClose} closeDisabled={busy}>
+        <Modal title={format(_("dialogs.destroy.title"), group.name)} onClose={handleClose} closeDisabled={busy}>
             {step === "review" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <Alert variant="danger" isInline title="이 그룹을 완전히 삭제합니다.">
-                            <p>
-                                마운트를 해제하고, 이 그룹의 볼륨과 RAID 어레이를 모두 제거한 뒤, 구성 기록에서도
-                                이 그룹을 지웁니다. 명령줄에서 손으로 해체하면 정리되지 않은 구성 정보가 남으므로,
-                                그룹을 지울 때는 이 기능을 사용하세요.
-                            </p>
+                        <Alert variant="danger" isInline title={_("dialogs.destroy.reviewTitle")}>
+                            <p>{_("dialogs.destroy.reviewBody")}</p>
                         </Alert>
                     </StackItem>
                     <StackItem>
@@ -1457,11 +1467,7 @@ const DestroyDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onCl
                                 checked={zeroSuperblocks}
                                 onChange={e => setZeroSuperblocks(e.target.checked)}
                             />
-                            <span className="pf-v6-c-check__label">
-                                디스크에 남는 RAID 표식까지 완전히 지웁니다. 끄면(기본값) 표식이 남아 나중에
-                                이 RAID 구성을 되살릴 여지가 있지만, 켜면 되살릴 수 없고 디스크는 완전히
-                                빈 상태가 됩니다.
-                            </span>
+                            <span className="pf-v6-c-check__label">{_("dialogs.destroy.zeroSuperblocks")}</span>
                         </label>
                     </StackItem>
                     {buildError && (
@@ -1472,10 +1478,10 @@ const DestroyDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onCl
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>취소</button>
+                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>{_("common.cancel")}</button>
                             </ActionListItem>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-danger" type="button" onClick={proceed}>다음: 확인</button>
+                                <button className="pf-v6-c-button pf-m-danger" type="button" onClick={proceed}>{_("dialogs.next.confirm")}</button>
                             </ActionListItem>
                         </ActionList>
                     </StackItem>
@@ -1497,7 +1503,7 @@ const DestroyDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onCl
             )}
 
             {step === "executing" && (
-                <p><Spinner isInline aria-hidden="true" /> 그룹을 삭제하는 중입니다. 창을 닫지 마세요.</p>
+                <p><Spinner isInline aria-hidden="true" /> {_("dialogs.destroy.executing")}</p>
             )}
             {/* See ExpandDialog's identical note: TypedConfirmController.execute()
                 sets state.step="executing" synchronously before its awaited spawn,
@@ -1508,7 +1514,7 @@ const DestroyDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onCl
             {step === "done" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <Alert variant="success" isInline title="그룹이 삭제되었습니다." />
+                        <Alert variant="success" isInline title={_("dialogs.destroy.doneTitle")} />
                     </StackItem>
                     <StackItem>
                         <p className={MONO}>{state?.result?.destroyed}</p>
@@ -1516,7 +1522,7 @@ const DestroyDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onCl
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>닫기</button>
+                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
                         </ActionList>
                     </StackItem>
@@ -1560,14 +1566,14 @@ export const SnapshotConfirmStep = ({
                 <ActionListItem>
                     <button
                         className="pf-v6-c-button pf-m-secondary" type="button"
-                        onClick={onCancel} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                        onClick={onCancel} disabled={busy} title={busy ? inFlightReason() : undefined}
                     >
-                        취소
+                        {_("common.cancel")}
                     </button>
                 </ActionListItem>
                 <ActionListItem>
                     <button className="pf-v6-c-button pf-m-primary" type="button" disabled={busy} onClick={onExecute}>
-                        {busy ? "생성 중..." : "스냅샷 생성 실행"}
+                        {busy ? _("wizard.action.executeBusy") : _("dialogs.snapshot.execute")}
                     </button>
                 </ActionListItem>
             </ActionList>
@@ -1624,11 +1630,11 @@ const SnapshotDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onC
     const step = state?.step ?? "review";
 
     return (
-        <Modal title={`그룹 "${group.name}" 스냅샷 생성`} onClose={handleClose} closeDisabled={busy}>
+        <Modal title={format(_("dialogs.snapshot.title"), group.name)} onClose={handleClose} closeDisabled={busy}>
             {step === "review" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <FormGroup label={"스냅샷 이름 (경로 구분자 \"/\" 포함 불가)"} fieldId="snapshot-name">
+                        <FormGroup label={_("dialogs.snapshot.field")} fieldId="snapshot-name">
                             <span className="pf-v6-c-form-control">
                                 <input
                                     id="snapshot-name" type="text" value={snapshotName}
@@ -1638,7 +1644,7 @@ const SnapshotDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onC
                         </FormGroup>
                     </StackItem>
                     <StackItem>
-                        <Caveat>읽기 전용 스냅샷이 <span className={MONO}>@snapshots/{snapshotName || "..."}</span> 경로에 생성됩니다.</Caveat>
+                        <Caveat>{format(_("dialogs.snapshot.caveat"), `@snapshots/${snapshotName || "..."}`)}</Caveat>
                     </StackItem>
                     {buildError && (
                         <StackItem>
@@ -1648,10 +1654,10 @@ const SnapshotDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onC
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>취소</button>
+                                <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>{_("common.cancel")}</button>
                             </ActionListItem>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={proceed}>다음: 확인</button>
+                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={proceed}>{_("dialogs.next.confirm")}</button>
                             </ActionListItem>
                         </ActionList>
                     </StackItem>
@@ -1672,7 +1678,7 @@ const SnapshotDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onC
             {step === "done" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <Alert variant="success" isInline title="스냅샷이 생성되었습니다." />
+                        <Alert variant="success" isInline title={_("dialogs.snapshot.doneTitle")} />
                     </StackItem>
                     <StackItem>
                         <p className={MONO}>{state?.result}</p>
@@ -1680,7 +1686,7 @@ const SnapshotDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onC
                     <StackItem>
                         <ActionList>
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>닫기</button>
+                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
                         </ActionList>
                     </StackItem>
@@ -1718,12 +1724,12 @@ const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged
     };
 
     return (
-        <Modal title="스크럽/헬스체크 스케줄 설치" onClose={handleClose} closeDisabled={busy}>
+        <Modal title={_("dialogs.schedule.title")} onClose={handleClose} closeDisabled={busy}>
             <Stack hasGutter>
                 {state.step !== "done" && (
                     <>
                         <StackItem>
-                            <p>모든 그룹의 정기 스크럽과, 상태 점검 및 재구성 속도 조절을 자동으로 실행하도록 예약합니다. 이미 예약되어 있으면 최신 설정으로 다시 등록합니다.</p>
+                            <p>{_("dialogs.schedule.body")}</p>
                         </StackItem>
                         <StackItem>
                             <CommandPreview commands={["shr-rs schedule install"]} />
@@ -1738,14 +1744,14 @@ const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged
                                 <ActionListItem>
                                     <button
                                         className="pf-v6-c-button pf-m-secondary" type="button"
-                                        onClick={handleClose} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                                        onClick={handleClose} disabled={busy} title={busy ? inFlightReason() : undefined}
                                     >
-                                        취소
+                                        {_("common.cancel")}
                                     </button>
                                 </ActionListItem>
                                 <ActionListItem>
                                     <button className="pf-v6-c-button pf-m-primary" type="button" disabled={busy} onClick={run}>
-                                        {busy ? "설치 중..." : "설치 실행"}
+                                        {busy ? _("dialogs.schedule.busy") : _("dialogs.schedule.execute")}
                                     </button>
                                 </ActionListItem>
                             </ActionList>
@@ -1755,7 +1761,7 @@ const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged
                 {state.step === "done" && (
                     <>
                         <StackItem>
-                            <Alert variant="success" isInline title="설치가 완료되었습니다." />
+                            <Alert variant="success" isInline title={_("dialogs.schedule.doneTitle")} />
                         </StackItem>
                         <StackItem>
                             <p className={MONO}>{state.result}</p>
@@ -1763,7 +1769,7 @@ const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged
                         <StackItem>
                             <ActionList>
                                 <ActionListItem>
-                                    <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>닫기</button>
+                                    <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                                 </ActionListItem>
                             </ActionList>
                         </StackItem>
@@ -1810,15 +1816,12 @@ const ReconcileDialog = ({ onClose, onChanged }: { onClose: () => void; onChange
     };
 
     return (
-        <Modal title="확장 마무리" onClose={handleClose} closeDisabled={busy}>
+        <Modal title={_("dialogs.reconcile.title")} onClose={handleClose} closeDisabled={busy}>
             <Stack hasGutter>
                 {state.step !== "done" && (
                     <>
                         <StackItem>
-                            <p>
-                                지난 용량 확장이 RAID 재구성이 끝나기를 기다리느라 미뤄둔 저장 공간 넓히기 작업을
-                                모든 그룹에서 마무리합니다. 미뤄둔 작업이 없어도 언제든 안전하게 실행할 수 있습니다.
-                            </p>
+                            <p>{_("dialogs.reconcile.body")}</p>
                         </StackItem>
                         <StackItem>
                             <CommandPreview commands={["shr-rs reconcile"]} />
@@ -1833,14 +1836,14 @@ const ReconcileDialog = ({ onClose, onChanged }: { onClose: () => void; onChange
                                 <ActionListItem>
                                     <button
                                         className="pf-v6-c-button pf-m-secondary" type="button"
-                                        onClick={handleClose} disabled={busy} title={busy ? IN_FLIGHT_REASON : undefined}
+                                        onClick={handleClose} disabled={busy} title={busy ? inFlightReason() : undefined}
                                     >
-                                        취소
+                                        {_("common.cancel")}
                                     </button>
                                 </ActionListItem>
                                 <ActionListItem>
                                     <button className="pf-v6-c-button pf-m-primary" type="button" disabled={busy} onClick={run}>
-                                        {busy ? "마무리하는 중..." : "확장 마무리 실행"}
+                                        {busy ? _("dialogs.reconcile.busy") : _("dialogs.reconcile.execute")}
                                     </button>
                                 </ActionListItem>
                             </ActionList>
@@ -1850,7 +1853,7 @@ const ReconcileDialog = ({ onClose, onChanged }: { onClose: () => void; onChange
                 {state.step === "done" && (
                     <>
                         <StackItem>
-                            <Alert variant="success" isInline title="확장 마무리가 완료되었습니다." />
+                            <Alert variant="success" isInline title={_("dialogs.reconcile.doneTitle")} />
                         </StackItem>
                         <StackItem>
                             <p className={MONO}>{state.result}</p>
@@ -1858,7 +1861,7 @@ const ReconcileDialog = ({ onClose, onChanged }: { onClose: () => void; onChange
                         <StackItem>
                             <ActionList>
                                 <ActionListItem>
-                                    <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>닫기</button>
+                                    <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                                 </ActionListItem>
                             </ActionList>
                         </StackItem>
@@ -1962,11 +1965,11 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
 
     return (
         <>
-            <Section title="운영 작업" note="스크럽 · 확장 · 디스크 교체 · 스냅샷 · 압축 변경 · 삭제 · 스케줄">
+            <Section title={_("dialogs.panel.title")} note={_("dialogs.panel.note")}>
                 <Stack hasGutter>
                     {groups.length === 0 && (
                         <StackItem>
-                            <Caveat>그룹이 없습니다. 먼저 그룹을 생성하세요.</Caveat>
+                            <Caveat>{_("dialogs.panel.empty")}</Caveat>
                         </StackItem>
                     )}
                     {groups.map(group => (
@@ -1980,7 +1983,7 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                                                 className="pf-v6-c-button pf-m-secondary" type="button"
                                                 onClick={() => setOpen({ kind: "scrub", group })}
                                             >
-                                                스크럽
+                                                {_("dialogs.panel.scrub")}
                                             </button>
                                         </ActionListItem>
                                         <ActionListItem>
@@ -1988,7 +1991,7 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                                                 className="pf-v6-c-button pf-m-secondary" type="button"
                                                 onClick={() => setOpen({ kind: "expand", group })}
                                             >
-                                                확장
+                                                {_("dialogs.panel.expand")}
                                             </button>
                                         </ActionListItem>
                                         <ActionListItem>
@@ -1996,7 +1999,7 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                                                 className="pf-v6-c-button pf-m-secondary" type="button"
                                                 onClick={() => setOpen({ kind: "replace", group })}
                                             >
-                                                디스크 교체
+                                                {_("dialogs.panel.replace")}
                                             </button>
                                         </ActionListItem>
                                         <ActionListItem>
@@ -2004,7 +2007,7 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                                                 className="pf-v6-c-button pf-m-secondary" type="button"
                                                 onClick={() => setOpen({ kind: "snapshot", group })}
                                             >
-                                                스냅샷 생성
+                                                {_("dialogs.panel.snapshot")}
                                             </button>
                                         </ActionListItem>
                                         <ActionListItem>
@@ -2012,7 +2015,7 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                                                 className="pf-v6-c-button pf-m-secondary" type="button"
                                                 onClick={() => setOpen({ kind: "recompress", group })}
                                             >
-                                                압축 변경
+                                                {_("dialogs.panel.recompress")}
                                             </button>
                                         </ActionListItem>
                                         <ActionListItem>
@@ -2020,7 +2023,7 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                                                 className="pf-v6-c-button pf-m-danger" type="button"
                                                 onClick={() => setOpen({ kind: "destroy", group })}
                                             >
-                                                삭제
+                                                {_("dialogs.panel.destroy")}
                                             </button>
                                         </ActionListItem>
                                     </ActionList>
@@ -2033,13 +2036,9 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                             <Alert
                                 variant="danger"
                                 isInline
-                                title={
-                                    <>
-                                        확장 마무리가 남은 그룹: <strong className={MONO}>{pendingGroups.join(", ")}</strong>
-                                    </>
-                                }
+                                title={format(_("dialogs.panel.pendingTitle"), pendingGroups.join(", "))}
                             >
-                                <p>아래 &quot;확장 마무리&quot;를 실행하면 넓어진 용량이 실제로 반영됩니다.</p>
+                                <p>{_("dialogs.panel.pendingBody")}</p>
                             </Alert>
                         </StackItem>
                     )}
@@ -2051,12 +2050,12 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                                     type="button"
                                     onClick={() => setOpen({ kind: "reconcile" })}
                                 >
-                                    확장 마무리
+                                    {_("dialogs.reconcile.title")}
                                 </button>
                             </ActionListItem>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={() => setOpen({ kind: "schedule" })}>
-                                    스케줄 설치
+                                    {_("dialogs.panel.schedule")}
                                 </button>
                             </ActionListItem>
                         </ActionList>

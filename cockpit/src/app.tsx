@@ -30,6 +30,7 @@ import { OperationsPanel } from "./actionsDialogs.js";
 import { SPAWN_OPTIONS, type Spawn } from "./actions.js";
 import cockpit, { type CockpitError } from "./cockpit.js";
 import { CreateGroupWizard } from "./createGroupWizard.js";
+import { _, format, ngettext } from "./i18n.js";
 import {
     type FsDfReport,
     type StatusReport,
@@ -65,9 +66,9 @@ const errorMessage = (error: unknown): string => {
         if (cockpitError.message?.trim())
             return cockpitError.message;
         if (cockpitError.problem)
-            return `Cockpit 연결 오류: ${cockpitError.problem}`;
+            return format(_("app.error.connection"), cockpitError.problem);
     }
-    return "상태 정보를 불러오지 못했습니다.";
+    return _("app.error.loadFailed");
 };
 
 /**
@@ -85,7 +86,7 @@ const errorMessage = (error: unknown): string => {
  * field Cockpit itself sets, not a substring match against the `message`
  * text. That distinction is not theoretical: the same rejection above was
  * observed rendering as "Not permitted to perform this action." on page load
- * and as "이 작업을 실행할 수 있는 권한이 없습니다." moments later in the
+ * and as its Korean translation moments later in the
  * same frame (Cockpit's translations load asynchronously), so any hint keyed
  * off the message string would fire inconsistently on one machine.
  * `"access-denied"` is Cockpit's own code
@@ -122,49 +123,69 @@ const Dashboard = (
     // the live `arrays` read.
     const activity = describeBackgroundActivity(report.arrays, report.groups);
     const rawCapacitySub = [
-        summary.unknownSizeDisks > 0 ? `크기 미확인 디스크 ${summary.unknownSizeDisks}개` : "모든 물리 디스크 크기 확인",
-        summary.systemDisks > 0 ? `시스템 디스크 ${summary.systemDisks}개 포함 (RAID 대상 아님)` : null,
+        summary.unknownSizeDisks > 0
+            ? format(
+                ngettext("app.raw.unknownSize.one", "app.raw.unknownSize.other", summary.unknownSizeDisks),
+                summary.unknownSizeDisks,
+            )
+            : _("app.raw.allSizesKnown"),
+        summary.systemDisks > 0
+            ? format(
+                ngettext(
+                    "app.raw.includesSystem.one",
+                    "app.raw.includesSystem.other",
+                    summary.systemDisks,
+                ),
+                summary.systemDisks,
+            )
+            : null,
     ].filter(Boolean).join(" · ");
 
     return (
         <>
-            <Gallery hasGutter minWidths={{ default: "220px" }} aria-label="스토리지 상태 요약">
+            <Gallery hasGutter minWidths={{ default: "220px" }} aria-label={_("app.summaryLabel")}>
                 <MetricCard
-                    label="백그라운드 작업"
+                    label={_("app.metric.background")}
                     value={<Badge tone={{ label: activity.headline, tone: activity.tone }} />}
                     sub={activity.detail}
                 />
                 <MetricCard
-                    label="전체 상태"
+                    label={_("app.metric.overall")}
                     value={<Badge tone={health} />}
-                    sub="RAID 어레이와 그룹 구성을 종합한 결과"
+                    sub={_("app.metric.overallSub")}
                 />
                 <MetricCard
-                    label="구성 드라이브"
-                    value={`${report.disks.length}개`}
-                    sub={`SMART 경고 ${summary.warningDisks}개`}
+                    label={_("app.metric.drives")}
+                    value={format(ngettext("common.driveCount.one", "common.driveCount.other", report.disks.length), report.disks.length)}
+                    sub={format(
+                        ngettext("common.smartWarningCount.one", "common.smartWarningCount.other", summary.warningDisks),
+                        summary.warningDisks,
+                    )}
                 />
                 <MetricCard
-                    label="감지된 원시 용량"
+                    label={_("common.rawCapacity")}
                     value={formatBytes(summary.rawBytes)}
                     sub={rawCapacitySub}
                 />
                 <MetricCard
-                    label="RAID 멤버"
+                    label={_("app.metric.members")}
                     value={`${summary.activeMembers}/${summary.expectedMembers}`}
-                    sub={`주의 어레이 ${summary.warningArrays}개`}
+                    sub={format(
+                        ngettext("app.metric.arraysNeedAttention.one", "app.metric.arraysNeedAttention.other", summary.warningArrays),
+                        summary.warningArrays,
+                    )}
                 />
             </Gallery>
 
             <CapacityOverviewPanel report={report} fsDf={fsDf} />
 
-            <Card component="div" aria-label="감지된 물리 용량">
+            <Card component="div" aria-label={_("app.physical.title")}>
                 <CardTitle>
                     <Split hasGutter>
                         <SplitItem isFilled>
-                            감지된 물리 용량
+                            {_("app.physical.title")}
                             <Content component="small" className="pf-v6-u-text-color-subtle">
-                                이 호스트에서 감지된 물리 디스크 크기의 합계입니다
+                                {_("app.physical.sub")}
                             </Content>
                         </SplitItem>
                         <SplitItem className={MONO}>{formatBytes(summary.rawBytes)}</SplitItem>
@@ -177,23 +198,39 @@ const Dashboard = (
                         naming a single hex value. */}
                     <Flex spaceItems={{ default: "spaceItemsSm" }} className="pf-v6-u-mb-md">
                         <FlexItem>
-                            <Label isCompact color="blue">RAID 연결 디스크 {summary.linkedDisks}개</Label>
+                            <Label isCompact color="blue">
+                                {format(
+                                    ngettext("app.legend.linked.one", "app.legend.linked.other", summary.linkedDisks),
+                                    summary.linkedDisks,
+                                )}
+                            </Label>
                         </FlexItem>
                         <FlexItem>
-                            <Label isCompact color="grey">RAID 미연결 디스크 {summary.unlinkedDisks}개</Label>
+                            <Label isCompact color="grey">
+                                {format(
+                                    ngettext("app.legend.unlinked.one", "app.legend.unlinked.other", summary.unlinkedDisks),
+                                    summary.unlinkedDisks,
+                                )}
+                            </Label>
                         </FlexItem>
                         {summary.systemDisks > 0 && (
                             <FlexItem>
                                 <Label isCompact color="orange">
-                                    시스템 디스크 {summary.systemDisks}개 (RAID 대상 아님)
+                                    {format(
+                                        ngettext(
+                                            "app.legend.system.one",
+                                            "app.legend.system.other",
+                                            summary.systemDisks,
+                                        ),
+                                        summary.systemDisks,
+                                    )}
                                 </Label>
                             </FlexItem>
                         )}
                     </Flex>
                     <Caveat>
-                        RAID 미연결 디스크는 아직 어떤 그룹에도 속하지 않은 여유 디스크입니다. OS가 설치된
-                        시스템 디스크는 안전을 위해 RAID 후보에서 자동으로 제외되므로 이 수치에 포함되지 않습니다.
-                        <span title="디스크 한 개가 RAID에 정확히 몇 바이트를 내주었는지는 아직 표시하지 않습니다. 위 숫자는 디스크 개수 기준입니다.">
+                        {_("app.physical.caveat")}
+                        <span title={_("app.physical.caveatHint")}>
                             {" "}ⓘ
                         </span>
                     </Caveat>
@@ -209,7 +246,11 @@ const Dashboard = (
             <CapacityMethodologyPanel report={report} />
 
             <Content component="small" className="pf-v6-u-text-color-subtle">
-                마지막 갱신: {refreshedAt.toLocaleString("ko-KR")}
+                {/* No explicit locale tag: `toLocaleString()` follows the
+                    browser's own language, which is also what decided which
+                    po.js Cockpit served us. Pinning "ko-KR" here printed a
+                    Korean date on an English page. */}
+                {format(_("app.lastRefreshed"), refreshedAt.toLocaleString())}
             </Content>
         </>
     );
@@ -278,7 +319,7 @@ export const Application = () => {
 
     const health = state.kind === "ready"
         ? healthTone(state.report.health)
-        : { label: state.kind === "error" ? "연결 오류" : "확인 중", tone: "neutral" as const };
+        : { label: state.kind === "error" ? _("app.badge.connectionError") : _("app.badge.checking"), tone: "neutral" as const };
 
     return (
         // `pf-m-no-sidebar` is PatternFly's own modifier, and the same one
@@ -325,7 +366,9 @@ export const Application = () => {
                             CSS on a bare <h1>, which is the kind of hand-written
                             rule this migration exists to delete. */}
                         <Title headingLevel="h1">SHR-RS RAID Manager</Title>
-                        <Content component="small">크기가 서로 다른 디스크를 묶어 하나의 저장 공간으로 사용합니다</Content>
+                        <Content component="small">
+                            {_("app.subtitle")}
+                        </Content>
                     </FlexItem>
                     <FlexItem>
                         <Flex
@@ -339,7 +382,7 @@ export const Application = () => {
                                     onClick={() => setShowWizard(true)}
                                     isDisabled={state.kind !== "ready"}
                                 >
-                                    그룹 만들기
+                                    {_("app.action.createGroup")}
                                 </Button>
                             </FlexItem>
                             <FlexItem>
@@ -348,7 +391,7 @@ export const Application = () => {
                                     onClick={refresh}
                                     isDisabled={state.kind === "loading"}
                                 >
-                                    {state.kind === "loading" ? "불러오는 중" : "새로 고침"}
+                                    {state.kind === "loading" ? _("app.action.loading") : _("app.action.refresh")}
                                 </Button>
                             </FlexItem>
                         </Flex>
@@ -360,13 +403,13 @@ export const Application = () => {
                 {state.kind === "loading" && (
                     <Bullseye>
                         <EmptyState
-                            titleText="스토리지 상태를 확인하고 있습니다"
+                            titleText={_("app.loading.title")}
                             headingLevel="h2"
                             icon={Spinner}
                             aria-live="polite"
                         >
                             <EmptyStateBody>
-                                디스크와 RAID 어레이를 조회하고 있습니다. 잠시만 기다려 주세요.
+                                {_("app.loading.body")}
                             </EmptyStateBody>
                         </EmptyState>
                     </Bullseye>
@@ -376,14 +419,14 @@ export const Application = () => {
                     <Alert
                         variant="danger"
                         isInline
-                        title="상태를 불러오지 못했습니다"
-                        actionLinks={<Button variant="link" isInline onClick={refresh}>다시 시도</Button>}
+                        title={_("app.error.title")}
+                        actionLinks={<Button variant="link" isInline onClick={refresh}>{_("app.error.retry")}</Button>}
                     >
                         <p>{state.message}</p>
                         <p>
                             {state.hint === "permission"
-                                ? <>Cockpit 상단의 <strong>관리 접근</strong>을 눌러 관리자 권한을 활성화한 뒤 다시 시도하세요.</>
-                                : <>이 서버에 <span className={MONO}>shr-rs</span> 명령이 설치되어 있는지 확인하세요.</>}
+                                ? _("app.error.hint.permission")
+                                : _("app.error.hint.installation")}
                         </p>
                     </Alert>
                 )}

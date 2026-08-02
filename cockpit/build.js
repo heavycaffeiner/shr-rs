@@ -7,6 +7,7 @@ import process from "node:process";
 import esbuild from "esbuild";
 
 import { buildNotices } from "./build-notices.js";
+import { cockpitPoEsbuildPlugin } from "./pkg/lib/cockpit-po-plugin.js";
 
 const watch = process.argv.includes("--watch") || process.argv.includes("-w");
 const production = process.env.NODE_ENV === "production";
@@ -24,6 +25,41 @@ const copyAssetsPlugin = {
                 return;
             fs.copyFileSync("src/manifest.json", path.join(outdir, "manifest.json"));
             fs.copyFileSync("src/index.html", path.join(outdir, "index.html"));
+        });
+    },
+};
+
+// The msgids in `src/` are dotted keys ("panels.drives.col.node"), not
+// English sentences, so English is a translation like any other and lives in
+// `po/en.po`. Cockpit does not expect that, and measuring it on a real
+// Cockpit 356 guest is what settled how to handle it:
+//
+//   - `GET po.js` with `CockpitLang=ko` serves `po.ko.js`.       (200, 39 kB)
+//   - `GET po.js` with `CockpitLang=en`, `ja`, or none serves an
+//     EMPTY body -- not a file named `po.js`, even when one exists,
+//     because cockpit-ws treats English as "the msgids themselves"
+//     and an untranslated language as "nothing to send".          (200, 0 B)
+//   - `GET po.en.js` directly is a 404: the per-language names are
+//     reachable only through that negotiation, never by hand.
+//
+// So the English catalogue cannot be delivered under any `po.*` name. It goes
+// out as `po-default.js`, which carries no language segment for cockpit-ws to
+// negotiate on and is therefore served verbatim to every session, and
+// index.html loads it *before* `po.js`. `cockpit.locale()` merges
+// (`Object.assign`), so a Korean session applies English first and Korean on
+// top -- which also means a future partial translation falls back to English
+// per-string instead of showing raw keys.
+//
+// Runs as its own plugin rather than after `rebuild()` so `--watch` gets it
+// too, and registered after `cockpitPoEsbuildPlugin` because esbuild invokes
+// `onEnd` hooks in registration order -- `po.en.js` has to exist first.
+const defaultCatalogPlugin = {
+    name: "default-po-catalog",
+    setup(build) {
+        build.onEnd(result => {
+            if (result.errors.length > 0)
+                return;
+            fs.copyFileSync(path.join(outdir, "po.en.js"), path.join(outdir, "po-default.js"));
         });
     },
 };
@@ -58,6 +94,12 @@ const context = await esbuild.context({
     // barrel import pulls in as a side effect.
     plugins: [
         copyAssetsPlugin,
+        // Compiles every po/*.po into `po.<lang>.js` (pages) and
+        // `po.manifest.<lang>.js` (the shell's menu entry). index.html asks
+        // for the extensionless `po.js`, and cockpit-ws rewrites that request
+        // to the catalogue matching the session language.
+        cockpitPoEsbuildPlugin(),
+        defaultCatalogPlugin,
     ],
     sourcemap: production ? false : "linked",
     target: ["es2020"],

@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// `BandRow` (panels.tsx) rendered a band's 동기화/스크럽 cell as "유휴"
+// `BandRow` (panels.tsx) rendered a band's sync/scrub cell as "Idle"
 // (idle) whenever `band.sync` was `null` -- but `band.sync === null` covers
 // TWO different situations (see `GroupBandStatus.sync`'s doc comment in
 // crates/shr-command/src/report.rs): (a) a live mdadm array that genuinely
 // has nothing syncing right now, and (b) no live mdadm array with this
 // `md_name` AT ALL (e.g. state.toml survived a reboot but the array never
 // reassembled). Confirmed on a real guest: stopping `/dev/md0` while
-// state.toml stayed intact still rendered "유휴" in this cell, directly
-// above an mdadm inventory panel correctly saying "구성된 mdadm 어레이가
-// 없습니다." `band.members.length === 0` is the same "no live array" signal
-// the member cell right next to it already reads (line 361's "실시간 멤버
-// 정보 없음") and that `crates/shr-command/src/render.rs`'s
+// state.toml stayed intact still rendered "Idle" in this cell, directly
+// above an mdadm inventory panel correctly saying "No mdadm arrays are
+// configured." `band.members.length === 0` is the same "no live array" signal
+// the member cell right next to it already reads ("No live member
+// information") and that `crates/shr-command/src/render.rs`'s
 // `render_band_detail_row`/`watch_band_row` already guard on for the exact
 // same field -- this brings `panels.tsx` in line with that precedent.
 //
@@ -29,6 +29,11 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { ArrayStatus, GroupStatus, StatusReport } from "./model.ts";
+import { installEnglishCatalog } from "./testCatalog.ts";
+
+// The msgids in `src/` are dotted keys, so without a catalogue every string
+// below would render as its key. See testCatalog.ts.
+installEnglishCatalog();
 
 const srcDir = path.dirname(fileURLToPath(import.meta.url));
 const panelsPath = path.join(srcDir, "panels.tsx");
@@ -120,17 +125,17 @@ test("BandRow does not render a dead band (no live members, no live sync) as idl
     // genuinely idle live one. This must not happen.
     assert.doesNotMatch(
         html,
-        />유휴</,
-        `a band with no live members must not render its sync cell as plain "유휴" (idle), got: ${html}`,
+        />Idle</,
+        `a band with no live members must not render its sync cell as plain "Idle", got: ${html}`,
     );
     assert.match(
         html,
-        /실시간 어레이 정보 없음/,
+        /No live array information/,
         `a band with no live members must say no live array exists, got: ${html}`,
     );
 });
 
-test("BandRow still renders a genuinely idle LIVE band (has live members, no sync in progress) as 유휴", async () => {
+test("BandRow still renders a genuinely idle LIVE band (has live members, no sync in progress) as idle", async () => {
     const { GroupsPanel } = await loadPanelsModule();
     const arrays: ArrayStatus[] = [{
         name: "md0",
@@ -149,10 +154,10 @@ test("BandRow still renders a genuinely idle LIVE band (has live members, no syn
     });
     const html = renderToStaticMarkup(React.createElement(GroupsPanel, { report }));
 
-    assert.match(html, />유휴</, `a live band that's genuinely idle must still say so, got: ${html}`);
+    assert.match(html, />Idle</, `a live band that's genuinely idle must still say so, got: ${html}`);
     assert.doesNotMatch(
         html,
-        /실시간 어레이 정보 없음/,
+        /No live array information/,
         `a live idle band must not also claim no live array exists, got: ${html}`,
     );
 });

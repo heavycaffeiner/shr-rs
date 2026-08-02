@@ -14,6 +14,33 @@ and each destructive one requires its preview first. Nothing is estimated: the
 page leaves usable capacity and assigned partition bytes blank rather than
 guessing when the status schema does not report them.
 
+## Languages
+
+The page follows the session language Cockpit is set to: English and Korean
+ship today, and anything else falls back to English.
+
+Source strings are stable dotted keys (`panels.drives.col.node`), not English
+sentences, so **English is a translation like any other** and lives in
+`po/en.po` next to `po/ko.po`. Adding a string means adding the key to both
+files; adding a language means one more `po/<lang>.po`.
+
+That choice needs one thing Cockpit does not do by itself. cockpit-ws answers
+a request for `po.js` with `po.<lang>.js` when it has one and with an *empty*
+body otherwise — English included, because it assumes English is the msgid.
+So `build.js` also emits `po-default.js` (the English catalogue under a name
+carrying no language segment, hence served verbatim to every session), and
+`index.html` loads it before `po.js`. `cockpit.locale()` merges, so a Korean
+session applies English first and Korean on top — which is also what makes a
+partial translation fall back per string instead of showing raw keys.
+
+`npm test` loads `po/en.po` (see `src/testCatalog.ts`) so assertions read as
+English text rather than keys, and a key missing from `po/en.po` fails a test.
+
+```sh
+make po/shr-rs.pot                     # re-extract keys from src/
+msgmerge -U po/ko.po po/shr-rs.pot     # fold them into a catalogue
+```
+
 ## Requirements
 
 - Cockpit 356 or newer

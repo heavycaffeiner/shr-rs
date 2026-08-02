@@ -16,6 +16,7 @@
  * silently drift from the first.
  */
 
+import { _ } from "./i18n.ts";
 import { requireBoolean, requireNumber, requireRecord, requireString } from "./model.ts";
 import type { DiskStatus, GroupStatus } from "./model.ts";
 import type { SpawnOptions } from "./cockpit.ts";
@@ -64,7 +65,7 @@ export const spawnErrorMessage = (error: unknown): string => {
         if (typeof message === "string" && message.trim())
             return message;
     }
-    return "명령 실행에 실패했습니다.";
+    return _("actions.error.commandFailed");
 };
 
 const requireNonEmptyName = (value: string, message: string): string => {
@@ -104,21 +105,21 @@ export interface ScrubStatusReport {
 }
 
 export const scrubStartArgs = (groupName: string): SpawnCall => ({
-    argv: ["shr-rs", "fs", "scrub", "start", "--name", requireNonEmptyName(groupName, "스크럽을 시작할 그룹 이름이 없습니다.")],
+    argv: ["shr-rs", "fs", "scrub", "start", "--name", requireNonEmptyName(groupName, _("actions.error.scrubStartNoName"))],
     options: SPAWN_OPTIONS,
 });
 
 export const scrubStatusArgs = (groupName: string): SpawnCall => ({
     argv: [
         "shr-rs", "fs", "scrub", "status",
-        "--name", requireNonEmptyName(groupName, "스크럽 상태를 조회할 그룹 이름이 없습니다."),
+        "--name", requireNonEmptyName(groupName, _("actions.error.scrubStatusNoName")),
         "--json",
     ],
     options: SPAWN_OPTIONS,
 });
 
 export const scrubCancelArgs = (groupName: string): SpawnCall => ({
-    argv: ["shr-rs", "fs", "scrub", "cancel", "--name", requireNonEmptyName(groupName, "스크럽을 취소할 그룹 이름이 없습니다.")],
+    argv: ["shr-rs", "fs", "scrub", "cancel", "--name", requireNonEmptyName(groupName, _("actions.error.scrubCancelNoName"))],
     options: SPAWN_OPTIONS,
 });
 
@@ -131,15 +132,15 @@ export const parseScrubStatus = (raw: string): ScrubStatusReport => {
     try {
         value = JSON.parse(raw);
     } catch {
-        throw new Error("shr-rs가 유효한 스크럽 상태 JSON을 반환하지 않았습니다.");
+        throw new Error(_("actions.error.scrubNotJson"));
     }
-    const report = requireRecord(value, "스크럽 상태 응답이 객체가 아닙니다.");
+    const report = requireRecord(value, _("actions.error.scrubNotObject"));
     if (typeof report.error === "string")
         throw new Error(report.error);
     return {
-        group_name: requireString(report.group, "스크럽 상태 응답의 group이 올바르지 않습니다."),
-        running: requireBoolean(report.running, "스크럽 상태 응답의 running이 올바르지 않습니다."),
-        error_count: requireNumber(report.error_count, "스크럽 상태 응답의 error_count가 올바르지 않습니다."),
+        group_name: requireString(report.group, _("actions.error.scrubGroup")),
+        running: requireBoolean(report.running, _("actions.error.scrubRunning")),
+        error_count: requireNumber(report.error_count, _("actions.error.scrubErrorCount")),
     };
 };
 
@@ -177,12 +178,12 @@ export interface ExpandInput {
 }
 
 export const expandPreflightArgs = (input: ExpandInput): SpawnCall => (
-    preflightArgs(requireNonEmptyDiskList(input.diskIds, "확장에 추가할 디스크를 선택하세요."), input.forceContent)
+    preflightArgs(requireNonEmptyDiskList(input.diskIds, _("actions.error.expandNoDisks")), input.forceContent)
 );
 
 export const expandDryRunArgs = (input: ExpandInput): SpawnCall => {
-    const name = requireNonEmptyName(input.groupName, "확장할 그룹 이름이 없습니다.");
-    const disks = requireNonEmptyDiskList(input.diskIds, "확장에 추가할 디스크를 선택하세요.");
+    const name = requireNonEmptyName(input.groupName, _("actions.error.expandNoName"));
+    const disks = requireNonEmptyDiskList(input.diskIds, _("actions.error.expandNoDisks"));
     return {
         argv: [
             "shr-rs", "expand",
@@ -408,15 +409,15 @@ export const buildReplaceInput = (
 });
 
 export const replaceArgs = (input: ReplaceInput): SpawnCall => {
-    const name = requireNonEmptyName(input.groupName, "디스크를 교체할 그룹 이름이 없습니다.");
-    const oldId = requireNonEmptyName(input.oldId, "교체할 기존 디스크를 선택하세요.");
-    const newId = requireNonEmptyName(input.newId, "교체할 새 디스크를 선택하세요.");
+    const name = requireNonEmptyName(input.groupName, _("actions.error.replaceNoName"));
+    const oldId = requireNonEmptyName(input.oldId, _("actions.error.replaceNoOld"));
+    const newId = requireNonEmptyName(input.newId, _("actions.error.replaceNoNew"));
     if (oldId === newId)
-        throw new Error("기존 디스크와 새 디스크가 같습니다.");
+        throw new Error(_("actions.error.replaceSameDisk"));
     if (input.oldSize === null || input.newSize === null)
-        throw new Error("디스크 용량을 확인할 수 없어 교체 가능 여부를 판단할 수 없습니다.");
+        throw new Error(_("actions.error.replaceSizeUnknown"));
     if (input.newSize < input.oldSize)
-        throw new Error("새 디스크는 기존 디스크와 같거나 더 커야 합니다.");
+        throw new Error(_("actions.error.replaceTooSmall"));
     return {
         argv: ["shr-rs", "disk", "replace", "--name", name, "--old", oldId, "--new", newId, "--yes"],
         options: SPAWN_OPTIONS,
@@ -433,10 +434,10 @@ export interface RecompressInput {
 }
 
 export const recompressArgs = (input: RecompressInput): SpawnCall => {
-    const name = requireNonEmptyName(input.groupName, "압축을 변경할 그룹 이름이 없습니다.");
+    const name = requireNonEmptyName(input.groupName, _("actions.error.recompressNoName"));
     const compression = input.compression.trim();
     if (!COMPRESSION_PATTERN.test(compression))
-        throw new Error("압축 설정은 \"알고리즘\" 또는 \"알고리즘:레벨\" 형식이어야 합니다 (예: zstd:3).");
+        throw new Error(_("actions.error.recompressFormat"));
     return {
         argv: ["shr-rs", "fs", "recompress", "--name", name, "--compression", compression],
         options: SPAWN_OPTIONS,
@@ -451,10 +452,10 @@ export interface SnapshotInput {
 }
 
 export const snapshotCreateArgs = (input: SnapshotInput): SpawnCall => {
-    const group = requireNonEmptyName(input.groupName, "스냅샷을 생성할 그룹 이름이 없습니다.");
-    const name = requireNonEmptyName(input.snapshotName, "스냅샷 이름을 입력하세요.");
+    const group = requireNonEmptyName(input.groupName, _("actions.error.snapshotNoGroup"));
+    const name = requireNonEmptyName(input.snapshotName, _("actions.error.snapshotNoName"));
     if (name.includes("/"))
-        throw new Error("스냅샷 이름에는 \"/\"를 포함할 수 없습니다.");
+        throw new Error(_("actions.error.snapshotSlash"));
     return {
         argv: ["shr-rs", "fs", "snapshot", "create", name, "--group", group],
         options: SPAWN_OPTIONS,
@@ -518,7 +519,7 @@ export interface DestroyResult {
  * mdadm superblocks intact (recoverable via `mdadm --assemble --scan`); on
  * makes them unrecoverable, so it must never be silently implied. */
 export const destroyArgs = (input: DestroyInput): SpawnCall => {
-    const name = requireNonEmptyName(input.groupName, "삭제할 그룹 이름이 없습니다.");
+    const name = requireNonEmptyName(input.groupName, _("actions.error.destroyNoName"));
     return {
         argv: [
             "shr-rs", "destroy",
@@ -539,10 +540,10 @@ export const parseDestroyResult = (raw: string): DestroyResult => {
     try {
         value = JSON.parse(raw);
     } catch {
-        throw new Error("shr-rs가 유효한 삭제 결과 JSON을 반환하지 않았습니다.");
+        throw new Error(_("actions.error.destroyNotJson"));
     }
-    const report = requireRecord(value, "삭제 결과 응답이 객체가 아닙니다.");
-    return { destroyed: requireString(report.destroyed, "삭제 결과 응답의 destroyed가 올바르지 않습니다.") };
+    const report = requireRecord(value, _("actions.error.destroyNotObject"));
+    return { destroyed: requireString(report.destroyed, _("actions.error.destroyDestroyed")) };
 };
 
 // --- Shared confirm-gated controllers ---------------------------------------

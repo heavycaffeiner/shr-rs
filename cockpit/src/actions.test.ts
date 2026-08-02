@@ -37,6 +37,11 @@ import {
     type Spawn,
 } from "./actions.ts";
 import type { DiskStatus, GroupStatus } from "./model.ts";
+import { installEnglishCatalog } from "./testCatalog.ts";
+
+// The msgids in `src/` are dotted keys, so without a catalogue every string
+// below would render as its key. See testCatalog.ts.
+installEnglishCatalog();
 
 const disk = (overrides: Partial<DiskStatus> = {}): DiskStatus => ({
     name: "sdb",
@@ -371,7 +376,7 @@ describe("disk replace: same-or-larger filtering and argument validation", () =>
     it("replaceArgs blocks a smaller replacement disk before spawn", () => {
         assert.throws(
             () => replaceArgs(replaceInput({ oldSize: 4_000_000_000_000, newSize: 2_000_000_000_000 })),
-            /같거나 더 커야/,
+            /must be the same size as the old one or larger/,
         );
     });
 
@@ -453,7 +458,7 @@ describe("buildReplaceInput (the actual proceed()-building step, not just replac
         const input = buildReplaceInput("demo1", null, null);
         assert.equal(input.oldId, "");
         assert.equal(input.newId, "");
-        assert.throws(() => replaceArgs(input), /교체할 기존 디스크를 선택하세요/);
+        assert.throws(() => replaceArgs(input), /Select the disk to replace/);
     });
 });
 

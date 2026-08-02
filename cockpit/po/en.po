@@ -1,0 +1,1894 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Message keys, not English sentences: the source carries a stable dotted
+# key and every language -- English included -- gets its wording from its
+# own catalogue here.
+msgid ""
+msgstr ""
+"Project-Id-Version: cockpit-shr-rs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: 2026-08-03 03:00+0900\n"
+"Last-Translator: heavycaffeiner <146043537+heavycaffeiner@users.noreply.github.com>\n"
+"Language-Team: English\n"
+"Language: en\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.entry.invalid"
+msgstr "$0 is not valid."
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.invalid"
+msgstr "$0: $1 is not valid."
+
+#: src/model.ts
+msgid "parse.subject.diskEntry"
+msgstr "Disk entry #$0"
+
+#: src/model.ts
+msgid "parse.subject.disk"
+msgstr "Disk $0"
+
+#: src/model.ts
+msgid "parse.subject.arrayEntry"
+msgstr "Array entry #$0"
+
+#: src/model.ts
+msgid "parse.subject.array"
+msgstr "Array $0"
+
+#: src/model.ts
+msgid "parse.subject.band"
+msgstr "Band #$1 of group $0"
+
+#: src/createGroup.ts
+msgid "parse.subject.bandIndex"
+msgstr "Band #$0"
+
+#: src/model.ts
+msgid "parse.subject.groupEntry"
+msgstr "Group entry #$0"
+
+#: src/model.ts
+msgid "parse.subject.group"
+msgstr "Group $0"
+
+#: src/model.ts
+msgid "parse.subject.memberState"
+msgstr "$0, member state #$1"
+
+#: src/model.ts
+msgid "parse.subject.fsDfGroupEntry"
+msgstr "fs df response, group entry #$0"
+
+#: src/model.ts
+msgid "parse.subject.fsDfGroup"
+msgstr "fs df for group $0"
+
+#: src/model.ts
+msgid "parse.field.name"
+msgstr "the name"
+
+#: src/model.ts
+msgid "parse.field.smartSection"
+msgstr "the SMART section"
+
+#: src/model.ts
+msgid "parse.field.smartState"
+msgstr "the SMART state"
+
+#: src/model.ts
+msgid "parse.field.temperature"
+msgstr "the temperature"
+
+#: src/model.ts
+msgid "parse.field.powerOnTime"
+msgstr "the power-on time"
+
+#: src/model.ts
+msgid "parse.field.pendingSectors"
+msgstr "the pending sector count"
+
+#: src/model.ts
+msgid "parse.field.reallocatedSectors"
+msgstr "the reallocated sector count"
+
+#: src/model.ts
+msgid "parse.field.uncorrectableSectors"
+msgstr "the uncorrectable sector count"
+
+#: src/model.ts
+msgid "parse.field.nvmeWarning"
+msgstr "the NVMe warning value"
+
+#: src/model.ts
+msgid "parse.field.rotational"
+msgstr "the rotational flag"
+
+#: src/model.ts
+msgid "parse.field.byIdName"
+msgstr "the by-id name"
+
+#: src/model.ts
+msgid "parse.field.capacity"
+msgstr "the capacity"
+
+#: src/model.ts
+msgid "parse.field.model"
+msgstr "the model name"
+
+#: src/model.ts
+msgid "parse.field.serial"
+msgstr "the serial number"
+
+#: src/model.ts
+msgid "parse.field.arrayList"
+msgstr "the array list"
+
+#: src/model.ts
+msgid "parse.field.systemDiskFlag"
+msgstr "the system-disk flag"
+
+#: src/model.ts
+msgid "parse.field.systemMountList"
+msgstr "the system mount list"
+
+#: src/model.ts
+msgid "parse.field.syncSection"
+msgstr "the sync section"
+
+#: src/model.ts
+msgid "parse.field.syncAction"
+msgstr "the sync action name"
+
+#: src/model.ts
+msgid "parse.field.syncPercent"
+msgstr "the sync percentage"
+
+#: src/model.ts
+msgid "parse.field.eta"
+msgstr "the estimated time"
+
+#: src/model.ts
+msgid "parse.field.scrubSection"
+msgstr "the scrub section"
+
+#: src/model.ts
+msgid "parse.field.scrubOutcome"
+msgstr "the scrub outcome"
+
+#: src/model.ts
+msgid "parse.field.scrubFinishedAt"
+msgstr "the scrub completion time"
+
+#: src/model.ts
+msgid "parse.field.scrubErrorCount"
+msgstr "the scrub error count"
+
+#: src/model.ts
+msgid "parse.field.role"
+msgstr "the role"
+
+#: src/model.ts
+msgid "parse.field.faultyFlag"
+msgstr "the faulty flag"
+
+#: src/model.ts
+msgid "parse.field.spareFlag"
+msgstr "the spare flag"
+
+#: src/model.ts
+msgid "parse.field.writeMostlyFlag"
+msgstr "the write_mostly flag"
+
+#: src/model.ts
+msgid "parse.field.replacementFlag"
+msgstr "the replacement flag"
+
+#: src/model.ts
+msgid "parse.field.memberStateList"
+msgstr "the member state list"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.raidLevel"
+msgstr "the RAID level"
+
+#: src/model.ts
+msgid "parse.field.state"
+msgstr "the state"
+
+#: src/model.ts
+msgid "parse.field.readOnlyFlag"
+msgstr "the read-only flag"
+
+#: src/model.ts
+msgid "parse.field.degradedFlag"
+msgstr "the degraded flag"
+
+#: src/model.ts
+msgid "parse.field.targetMembers"
+msgstr "the target member count"
+
+#: src/model.ts
+msgid "parse.field.activeMembers"
+msgstr "the active member count"
+
+#: src/model.ts
+msgid "parse.field.memberList"
+msgstr "the member list"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.index"
+msgstr "the index"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.mdName"
+msgstr "the mdadm name"
+
+#: src/createGroup.ts src/model.ts
+msgid "parse.field.usableCapacity"
+msgstr "the usable capacity"
+
+#: src/model.ts
+msgid "parse.field.resizePendingFlag"
+msgstr "the pending-expansion flag"
+
+#: src/model.ts
+msgid "parse.field.mdUuid"
+msgstr "the mdadm UUID"
+
+#: src/model.ts
+msgid "parse.field.scrubInProgressFlag"
+msgstr "the scrub-in-progress flag"
+
+#: src/model.ts
+msgid "parse.field.bandList"
+msgstr "the band list"
+
+#: src/model.ts
+msgid "parse.field.mode"
+msgstr "the mode"
+
+#: src/model.ts
+msgid "parse.field.layoutVersion"
+msgstr "the layout version"
+
+#: src/model.ts
+msgid "parse.field.mountPoint"
+msgstr "the mount point"
+
+#: src/model.ts
+msgid "parse.field.fsUuid"
+msgstr "the filesystem UUID"
+
+#: src/model.ts
+msgid "parse.field.memberDiskList"
+msgstr "the member disk list"
+
+#: src/model.ts
+msgid "parse.field.vgName"
+msgstr "the volume group name"
+
+#: src/model.ts
+msgid "parse.field.lvName"
+msgstr "the logical volume name"
+
+#: src/model.ts
+msgid "parse.field.compression"
+msgstr "the compression setting"
+
+#: src/model.ts
+msgid "parse.field.dataUsed"
+msgstr "the data usage"
+
+#: src/model.ts
+msgid "parse.field.dataTotal"
+msgstr "the data total"
+
+#: src/model.ts
+msgid "parse.field.metadataUsed"
+msgstr "the metadata usage"
+
+#: src/model.ts
+msgid "parse.field.metadataTotal"
+msgstr "the metadata total"
+
+#: src/model.ts
+msgid "parse.field.unallocated"
+msgstr "the unallocated capacity"
+
+#: src/model.ts
+msgid "parse.field.dfAvailable"
+msgstr "the df available capacity"
+
+#: src/model.ts
+msgid "status.error.notJson"
+msgstr "shr-rs did not return valid JSON status output."
+
+#: src/model.ts
+msgid "status.error.notObject"
+msgstr "The shr-rs status response is not an object."
+
+#: src/model.ts
+msgid "status.error.incompatible"
+msgstr "This server's shr-rs is not compatible with the dashboard. Please bring shr-rs and the Cockpit plugin to the same version. (response format $0)"
+
+#: src/model.ts
+msgid "status.error.health"
+msgstr "The overall health value in the status response is not valid."
+
+#: src/model.ts
+msgid "status.error.disks"
+msgstr "The disk list in the status response is not valid."
+
+#: src/model.ts
+msgid "status.error.arrays"
+msgstr "The array list in the status response is not valid."
+
+#: src/model.ts
+msgid "status.error.groups"
+msgstr "The group list in the status response is not valid."
+
+#: src/model.ts
+msgid "status.error.statePath"
+msgstr "The configuration file path in the status response is not valid."
+
+#: src/model.ts
+msgid "fsdf.error.notJson"
+msgstr "shr-rs did not return valid fs df JSON."
+
+#: src/model.ts
+msgid "fsdf.error.notObject"
+msgstr "The fs df response is not an object."
+
+#: src/model.ts
+msgid "fsdf.error.incompatible"
+msgstr "This server's shr-rs is not compatible with the dashboard, so usage cannot be read. Please bring shr-rs and the Cockpit plugin to the same version. (response format $0)"
+
+#: src/model.ts
+msgid "fsdf.error.groups"
+msgstr "The group list in the fs df response is not valid."
+
+#: src/model.ts src/panels.tsx
+msgid "common.unknown"
+msgstr "Unknown"
+
+#: src/model.ts src/panels.tsx
+msgid "common.idle"
+msgstr "Idle"
+
+#: src/model.ts src/panels.tsx
+msgid "common.noLiveArrayInfo"
+msgstr "No live array information"
+
+#: src/model.ts
+msgid "model.duration.underMinute"
+msgstr "less than a minute"
+
+#: src/model.ts
+msgid "model.duration.hoursMinutes"
+msgstr "$0 h $1 min"
+
+#: src/model.ts
+msgid "model.duration.minutes"
+msgstr "$0 min"
+
+#: src/model.ts
+msgid "model.sync.reshape"
+msgstr "Capacity reshape"
+
+#: src/model.ts
+msgid "model.sync.recovery"
+msgstr "Recovery"
+
+#: src/model.ts
+msgid "model.sync.resync"
+msgstr "Resync"
+
+#: src/model.ts
+msgid "model.sync.check"
+msgstr "Integrity check"
+
+#: src/model.ts
+msgid "model.sync.repair"
+msgstr "Repair"
+
+#: src/model.ts
+msgid "model.arrayState.active"
+msgstr "Active"
+
+#: src/model.ts
+msgid "model.arrayState.clean"
+msgstr "Active (no pending writes)"
+
+#: src/model.ts
+msgid "model.arrayState.inactive"
+msgstr "Stopped"
+
+#: src/model.ts
+msgid "model.sync.idleFull"
+msgstr "Idle (nothing in progress)"
+
+#: src/model.ts
+msgid "model.sync.percentUnknown"
+msgstr "progress unknown"
+
+#: src/model.ts
+msgid "model.sync.progress"
+msgstr "$0 · $1 · $2 remaining"
+
+#: src/model.ts
+msgid "model.sync.calculating"
+msgstr "calculating progress"
+
+#: src/model.ts
+msgid "model.sync.about"
+msgstr "about $0"
+
+#: src/actionsDialogs.tsx src/model.ts
+msgid "model.scrub.inProgress"
+msgstr "Scrub in progress"
+
+#: src/model.ts
+msgid "model.scrub.none"
+msgstr "No scrub history"
+
+#: src/model.ts
+msgid "model.scrub.completed"
+msgstr "completed"
+
+#: src/model.ts
+msgid "model.scrub.cancelled"
+msgstr "cancelled"
+
+#: src/model.ts
+msgid "model.scrub.failed"
+msgstr "failed"
+
+#: src/model.ts
+msgid "model.activity.recovery"
+msgstr "Recovery"
+
+#: src/model.ts
+msgid "model.activity.expansion"
+msgstr "Expansion"
+
+#: src/model.ts
+msgid "model.activity.resync"
+msgstr "Resync"
+
+#: src/model.ts
+msgid "model.activity.scrub"
+msgstr "Scrub"
+
+#: src/model.ts
+msgid "model.activity.cannotVerify"
+msgstr "Cannot verify"
+
+#: src/model.ts
+msgid "model.activity.none"
+msgstr "No background work in progress"
+
+#: src/model.ts
+msgid "model.activity.single"
+msgstr "$0 in progress"
+
+#: src/actions.ts src/createGroup.ts
+msgid "actions.error.commandFailed"
+msgstr "The command failed to run."
+
+#: src/actions.ts
+msgid "actions.error.scrubStartNoName"
+msgstr "No group name to start a scrub on."
+
+#: src/actions.ts
+msgid "actions.error.scrubStatusNoName"
+msgstr "No group name to query scrub status for."
+
+#: src/actions.ts
+msgid "actions.error.scrubCancelNoName"
+msgstr "No group name to cancel a scrub on."
+
+#: src/actions.ts
+msgid "actions.error.scrubNotJson"
+msgstr "shr-rs did not return valid scrub status JSON."
+
+#: src/actions.ts
+msgid "actions.error.scrubNotObject"
+msgstr "The scrub status response is not an object."
+
+#: src/actions.ts
+msgid "actions.error.scrubGroup"
+msgstr "The scrub status response has an invalid \"group\"."
+
+#: src/actions.ts
+msgid "actions.error.scrubRunning"
+msgstr "The scrub status response has an invalid \"running\"."
+
+#: src/actions.ts
+msgid "actions.error.scrubErrorCount"
+msgstr "The scrub status response has an invalid \"error_count\"."
+
+#: src/actions.ts
+msgid "actions.error.expandNoDisks"
+msgstr "Select the disks to add to the expansion."
+
+#: src/actions.ts
+msgid "actions.error.expandNoName"
+msgstr "No group name to expand."
+
+#: src/actions.ts
+msgid "actions.error.replaceNoName"
+msgstr "No group name to replace a disk in."
+
+#: src/actions.ts
+msgid "actions.error.replaceNoOld"
+msgstr "Select the disk to replace."
+
+#: src/actions.ts
+msgid "actions.error.replaceNoNew"
+msgstr "Select the replacement disk."
+
+#: src/actions.ts
+msgid "actions.error.replaceSameDisk"
+msgstr "The old and the new disk are the same."
+
+#: src/actions.ts
+msgid "actions.error.replaceSizeUnknown"
+msgstr "Disk capacity is unknown, so whether the replacement fits cannot be decided."
+
+#: src/actions.ts
+msgid "actions.error.replaceTooSmall"
+msgstr "The new disk must be the same size as the old one or larger."
+
+#: src/actions.ts
+msgid "actions.error.recompressNoName"
+msgstr "No group name to change compression on."
+
+#: src/actions.ts
+msgid "actions.error.recompressFormat"
+msgstr "The compression setting must be \"algorithm\" or \"algorithm:level\" (for example zstd:3)."
+
+#: src/actions.ts
+msgid "actions.error.snapshotNoGroup"
+msgstr "No group name to create a snapshot in."
+
+#: src/actions.ts
+msgid "actions.error.snapshotNoName"
+msgstr "Enter a snapshot name."
+
+#: src/actions.ts
+msgid "actions.error.snapshotSlash"
+msgstr "A snapshot name cannot contain \"/\"."
+
+#: src/actions.ts
+msgid "actions.error.destroyNoName"
+msgstr "No group name to destroy."
+
+#: src/actions.ts
+msgid "actions.error.destroyNotJson"
+msgstr "shr-rs did not return valid destroy-result JSON."
+
+#: src/actions.ts
+msgid "actions.error.destroyNotObject"
+msgstr "The destroy-result response is not an object."
+
+#: src/actions.ts
+msgid "actions.error.destroyDestroyed"
+msgstr "The destroy-result response has an invalid \"destroyed\"."
+
+#: src/createGroup.ts
+msgid "create.error.preflightNotJson"
+msgstr "shr-rs did not return valid preflight JSON."
+
+#: src/createGroup.ts
+msgid "create.error.preflightNotObject"
+msgstr "The preflight response is not an object."
+
+#: src/createGroup.ts
+msgid "create.error.preflightOk"
+msgstr "The preflight response has an invalid \"ok\" field."
+
+#: src/createGroup.ts
+msgid "create.error.preflightBlockers"
+msgstr "The preflight response has an invalid \"blockers\" list."
+
+#: src/createGroup.ts
+msgid "create.error.preflightWarnings"
+msgstr "The preflight response has an invalid \"warnings\" list."
+
+#: src/createGroup.ts
+msgid "create.error.preflightTargets"
+msgstr "The preflight response has an invalid \"targets\" list."
+
+#: src/createGroup.ts
+msgid "create.error.previewNotJson"
+msgstr "shr-rs did not return valid preview JSON."
+
+#: src/createGroup.ts
+msgid "create.error.previewNotObject"
+msgstr "The preview response is not an object."
+
+#: src/createGroup.ts
+msgid "create.error.previewFilesystem"
+msgstr "The preview response has an invalid \"filesystem\" section."
+
+#: src/createGroup.ts
+msgid "create.error.previewBands"
+msgstr "The preview response has an invalid \"bands\" list."
+
+#: src/createGroup.ts
+msgid "create.error.previewDisks"
+msgstr "The preview response has an invalid \"disks\" list."
+
+#: src/createGroup.ts
+msgid "create.error.previewName"
+msgstr "The preview response has an invalid \"name\"."
+
+#: src/createGroup.ts
+msgid "create.error.previewMode"
+msgstr "The preview response has an invalid \"mode\"."
+
+#: src/createGroup.ts
+msgid "create.error.previewLayoutVersion"
+msgstr "The preview response has an invalid \"layout_version\"."
+
+#: src/createGroup.ts
+msgid "create.error.previewMountPoint"
+msgstr "The preview response has an invalid \"mount_point\"."
+
+#: src/createGroup.ts
+msgid "create.error.previewPlannedCommands"
+msgstr "The preview response has an invalid \"planned_commands\" list."
+
+#: src/createGroup.ts
+msgid "create.error.resultNotJson"
+msgstr "shr-rs did not return valid create-result JSON."
+
+#: src/createGroup.ts
+msgid "create.error.resultNotObject"
+msgstr "The create-result response is not an object."
+
+#: src/createGroup.ts
+msgid "create.error.resultDisks"
+msgstr "The create-result response has an invalid \"disks\" list."
+
+#: src/createGroup.ts
+msgid "create.error.resultBands"
+msgstr "The create-result response has an invalid \"bands\" list."
+
+#: src/createGroup.ts
+msgid "create.error.resultName"
+msgstr "The create-result response has an invalid \"name\"."
+
+#: src/createGroup.ts
+msgid "create.error.resultMode"
+msgstr "The create-result response has an invalid \"mode\"."
+
+#: src/createGroup.ts
+msgid "create.error.resultLayoutVersion"
+msgstr "The create-result response has an invalid \"layout_version\"."
+
+#: src/createGroup.ts
+msgid "create.error.vgNameConflict"
+msgstr "Volume group name \"$0\" is already used by group \"$1\". Choose a different name."
+
+#: src/panels.tsx
+msgid "panels.health.healthy"
+msgstr "Healthy"
+
+#: src/panels.tsx
+msgid "panels.health.degraded"
+msgstr "Needs attention"
+
+#: src/panels.tsx
+msgid "panels.health.none"
+msgstr "No arrays"
+
+#: src/panels.tsx
+msgid "panels.smart.warning"
+msgstr "Warning"
+
+#: src/panels.tsx
+msgid "panels.smart.powerOnHours"
+msgstr "$0 h powered on"
+
+#: src/panels.tsx
+msgid "panels.smart.pendingSectors"
+msgstr "$0 pending sectors"
+
+#: src/panels.tsx
+msgid "panels.smart.reallocated"
+msgstr "$0 reallocated"
+
+#: src/panels.tsx
+msgid "panels.smart.uncorrectable"
+msgstr "$0 uncorrectable"
+
+#: src/panels.tsx
+msgid "panels.smart.nvmeWarning"
+msgstr "NVMe warning 0x$0"
+
+#: src/panels.tsx
+msgid "panels.drives.col.node"
+msgstr "Node"
+
+#: src/panels.tsx
+msgid "panels.drives.spinning"
+msgstr "Spinning disk"
+
+#: src/panels.tsx
+msgid "common.systemDisk"
+msgstr "System disk (not a RAID candidate)"
+
+#: src/panels.tsx
+msgid "panels.drives.col.model"
+msgstr "Model / serial number"
+
+#: src/panels.tsx
+msgid "panels.drives.noModel"
+msgstr "No model reported"
+
+#: src/panels.tsx
+msgid "panels.drives.noSerial"
+msgstr "No serial number"
+
+#: src/panels.tsx
+msgid "panels.drives.col.capacity"
+msgstr "Capacity"
+
+#: src/panels.tsx
+msgid "panels.drives.col.smart"
+msgstr "SMART state / temperature / power-on time"
+
+#: src/panels.tsx
+msgid "panels.drives.col.arrays"
+msgstr "Arrays"
+
+#: src/panels.tsx
+msgid "panels.drives.faultyPartition"
+msgstr "A partition of this disk is marked faulty in its array."
+
+#: src/panels.tsx
+msgid "panels.drives.notInRaid"
+msgstr "Not in a RAID"
+
+#: src/panels.tsx
+msgid "panels.drives.title"
+msgstr "Installed drives"
+
+#: src/panels.tsx
+msgid "panels.drives.empty"
+msgstr "No physical disks detected."
+
+#: src/panels.tsx
+msgid "panels.arrays.attention"
+msgstr "Attention"
+
+#: src/panels.tsx
+msgid "panels.arrays.col.device"
+msgstr "mdadm device"
+
+#: src/panels.tsx
+msgid "panels.arrays.col.members"
+msgstr "Active / target members"
+
+#: src/panels.tsx
+msgid "panels.arrays.noMemberInfo"
+msgstr "No member information"
+
+#: src/panels.tsx
+msgid "panels.arrays.col.sync"
+msgstr "Sync"
+
+#: src/panels.tsx
+msgid "panels.arrays.col.state"
+msgstr "State"
+
+#: src/panels.tsx
+msgid "panels.arrays.readOnly"
+msgstr "Read-only"
+
+#: src/panels.tsx
+msgid "panels.arrays.degraded"
+msgstr "Degraded"
+
+#: src/panels.tsx
+msgid "panels.arrays.invalidRaid6"
+msgstr "RAID6 needs at least 4 members"
+
+#: src/panels.tsx
+msgid "panels.arrays.title"
+msgstr "mdadm array inventory"
+
+#: src/panels.tsx
+msgid "panels.arrays.empty"
+msgstr "No mdadm arrays are configured."
+
+#: src/panels.tsx
+msgid "panels.tolerance.unknownMode"
+msgstr "Mode with unknown fault tolerance"
+
+#: src/panels.tsx
+msgid "panels.tolerance.remaining"
+msgstr "$0 of $1 tolerated disk failures left"
+
+#: src/panels.tsx
+msgid "panels.tolerance.exceeded"
+msgstr "Beyond tolerance (designed for $0 disk failures)"
+
+#: src/panels.tsx
+msgid "panels.band.col.band"
+msgstr "Band"
+
+#: src/panels.tsx
+msgid "panels.band.col.device"
+msgstr "mdadm device / UUID"
+
+#: src/panels.tsx
+msgid "panels.band.uuidUnknown"
+msgstr "UUID unknown"
+
+#: src/panels.tsx
+msgid "panels.band.col.members"
+msgstr "Members and slice size"
+
+#: src/panels.tsx
+msgid "panels.band.sliceHint"
+msgstr "Derived from usable_bytes together with the RAID level and the configured disk count (raid_disks). A failed member does not change this figure."
+
+#: src/panels.tsx
+msgid "panels.band.noLiveMembers"
+msgstr "No live member information"
+
+#: src/panels.tsx
+msgid "panels.band.col.capacity"
+msgstr "Usable / total physical capacity"
+
+#: src/panels.tsx
+msgid "panels.band.col.syncScrub"
+msgstr "Sync / scrub state"
+
+#: src/panels.tsx
+msgid "common.resizePending"
+msgstr "Waiting to finish expansion"
+
+#: src/panels.tsx
+msgid "panels.group.mountPoint"
+msgstr "Mount point"
+
+#: src/panels.tsx
+msgid "panels.group.fsUuid"
+msgstr "Filesystem UUID"
+
+#: src/panels.tsx
+msgid "panels.group.disks"
+msgstr "Member disks"
+
+#: src/panels.tsx
+msgid "common.none"
+msgstr "None"
+
+#: src/panels.tsx
+msgid "panels.group.bandTableLabel"
+msgstr "Band layout of $0"
+
+#: src/panels.tsx
+msgid "panels.group.noBands"
+msgstr "No bands are configured."
+
+#: src/panels.tsx
+msgid "panels.groups.title"
+msgstr "SHR groups"
+
+#: src/panels.tsx
+msgid "panels.groups.expansionPending"
+msgstr "an expansion is waiting to finish"
+
+#: src/panels.tsx
+msgid "panels.groups.empty"
+msgstr "No SHR group has been created yet. The panels below list the disks and RAID arrays currently detected on this server."
+
+#: src/panels.tsx
+msgid "panels.segment.used"
+msgstr "In use"
+
+#: src/panels.tsx
+msgid "panels.segment.free"
+msgstr "Free"
+
+#: src/panels.tsx
+msgid "panels.segment.unknown"
+msgstr "Usable capacity (use/free not measurable)"
+
+#: src/panels.tsx
+msgid "panels.segment.parity"
+msgstr "Parity protection"
+
+#: src/panels.tsx
+msgid "panels.segment.unassigned"
+msgstr "Unallocated physical capacity (available for RAID)"
+
+#: src/panels.tsx
+msgid "panels.capacity.usedUnknown.fsDfFailed"
+msgstr "Could not read usage (an older shr-rs, or a connection problem)"
+
+#: src/panels.tsx
+msgid "panels.capacity.usedUnknown.noGroups"
+msgstr "No groups are configured"
+
+#: src/panels.tsx
+msgid "panels.capacity.usedUnknown.partial"
+msgstr "Usage is missing for some groups (check that they are mounted)"
+
+#: src/panels.tsx
+msgid "panels.capacity.overviewLabel"
+msgstr "Group capacity overview"
+
+#: src/panels.tsx
+msgid "panels.capacity.usable"
+msgstr "Usable storage"
+
+#: src/panels.tsx
+msgid "panels.capacity.physicalSub"
+msgstr "$0 physical"
+
+#: src/panels.tsx
+msgid "panels.capacity.used"
+msgstr "Space in use"
+
+#: src/panels.tsx
+msgid "common.notMeasurable"
+msgstr "Not measurable"
+
+#: src/panels.tsx
+msgid "panels.capacity.usedMeasured"
+msgstr "Measured on the mounted filesystem"
+
+#: src/panels.tsx
+msgid "panels.capacity.free"
+msgstr "Free space"
+
+#: src/panels.tsx
+msgid "panels.capacity.freeUnknown"
+msgstr "Cannot be derived without the space in use"
+
+#: src/panels.tsx
+msgid "panels.capacity.freeAvailable"
+msgstr "Available to allocate"
+
+#: src/panels.tsx
+msgid "panels.capacity.protection"
+msgstr "Protection level"
+
+#: src/panels.tsx
+msgid "panels.capacity.parityValue"
+msgstr "$0 parity"
+
+#: src/panels.tsx
+msgid "panels.capacity.parityPartial"
+msgstr "(some bands have no live information)"
+
+#: src/panels.tsx
+msgid "panels.capacity.noGroups"
+msgstr "No groups configured"
+
+#: src/panels.tsx
+msgid "panels.allocation.title"
+msgstr "Storage allocation"
+
+#: src/panels.tsx
+msgid "panels.allocation.noGroups"
+msgstr "No groups"
+
+#: src/panels.tsx
+msgid "panels.allocation.systemDiskNote"
+msgstr "A system disk is one the OS is installed on. It is excluded from RAID candidates automatically, and its capacity is not counted as unallocated physical capacity."
+
+#: src/panels.tsx
+msgid "panels.allocation.empty"
+msgstr "There is no capacity information to show."
+
+#: src/panels.tsx
+msgid "panels.tech.groupName"
+msgstr "Group name"
+
+#: src/panels.tsx
+msgid "panels.tech.vg"
+msgstr "Volume group (LVM VG)"
+
+#: src/panels.tsx
+msgid "panels.tech.lv"
+msgstr "Logical volume (LVM LV) / mount point"
+
+#: src/panels.tsx
+msgid "panels.tech.compression"
+msgstr "Compression and mount options"
+
+#: src/panels.tsx
+msgid "panels.tech.statePath"
+msgstr "Configuration file"
+
+#: src/panels.tsx
+msgid "panels.tech.statePathHint"
+msgstr "This version of shr-rs does not report the configuration file path."
+
+#: src/panels.tsx
+msgid "panels.tech.title"
+msgstr "Volume and filesystem details"
+
+#: src/panels.tsx
+msgid "panels.tech.note"
+msgstr "LVM · Btrfs layout"
+
+#: src/panels.tsx
+msgid "panels.tech.empty"
+msgstr "No SHR group is configured."
+
+#: src/panels.tsx
+msgid "panels.method.title"
+msgstr "How capacity is calculated"
+
+#: src/panels.tsx
+msgid "panels.method.note"
+msgstr "where each figure comes from"
+
+#: src/panels.tsx
+msgid "panels.method.usableCapacity"
+msgstr "Group usable capacity (sum of the recorded layout)"
+
+#: src/panels.tsx
+msgid "panels.method.parityCapacity"
+msgstr "Calculated parity capacity"
+
+#: src/panels.tsx
+msgid "panels.method.usableTerm"
+msgstr "Usable capacity"
+
+#: src/panels.tsx
+msgid "panels.method.usableBody"
+msgstr "is the sum of what was recorded when each group was created, so it is always available."
+
+#: src/panels.tsx
+msgid "panels.method.parityTerm"
+msgstr "Parity capacity"
+
+#: src/panels.tsx
+msgid "panels.method.parityBody"
+msgstr "is calculated by this page from each array's configured disk count and RAID level. It cannot be calculated while an array is not assembled, and then reads \"Not measurable\". A member marked faulty does not change how many disks the array occupies, so this figure does not move either; faulty and spare markers show up only in the member list and the state badge. Being calculated, it can differ very slightly from the real size."
+
+#: src/panels.tsx
+msgid "panels.method.usedBody"
+msgstr "is measured directly on the mounted filesystem. If it is not mounted, or the query fails, this is left as \"Not measurable\" rather than estimated."
+
+#: src/panels.tsx
+msgid "panels.method.rawBody"
+msgstr "includes the system disk the OS is installed on, but that disk is excluded from RAID candidates and so does not appear in unallocated physical capacity."
+
+#: src/app.tsx
+msgid "app.error.connection"
+msgstr "Cockpit connection error: $0"
+
+#: src/app.tsx
+msgid "app.error.loadFailed"
+msgstr "Could not load the status information."
+
+#: src/app.tsx
+msgid "app.raw.allSizesKnown"
+msgstr "every physical disk size is known"
+
+#: src/app.tsx
+msgid "app.summaryLabel"
+msgstr "Storage status summary"
+
+#: src/app.tsx
+msgid "app.metric.background"
+msgstr "Background work"
+
+#: src/app.tsx
+msgid "app.metric.overall"
+msgstr "Overall state"
+
+#: src/app.tsx
+msgid "app.metric.overallSub"
+msgstr "RAID arrays and group layout taken together"
+
+#: src/app.tsx
+msgid "app.metric.drives"
+msgstr "Installed drives"
+
+#: src/app.tsx
+msgid "app.metric.members"
+msgstr "RAID members"
+
+#: src/app.tsx
+msgid "app.physical.title"
+msgstr "Detected physical capacity"
+
+#: src/app.tsx
+msgid "app.physical.sub"
+msgstr "The sum of the physical disk sizes detected on this host"
+
+#: src/app.tsx
+msgid "app.physical.caveat"
+msgstr "A disk not in a RAID is a spare that does not yet belong to any group. The system disk the OS is installed on is excluded from RAID candidates automatically and so is not counted here."
+
+#: src/app.tsx
+msgid "app.physical.caveatHint"
+msgstr "How many bytes an individual disk contributes to a RAID is not shown yet. The numbers above count disks."
+
+#: src/app.tsx
+msgid "app.lastRefreshed"
+msgstr "Last refreshed: $0"
+
+#: src/app.tsx
+msgid "app.badge.connectionError"
+msgstr "Connection error"
+
+#: src/app.tsx
+msgid "app.badge.checking"
+msgstr "Checking"
+
+#: src/app.tsx
+msgid "app.subtitle"
+msgstr "Pools disks of different sizes into a single storage space"
+
+#: src/app.tsx
+msgid "app.action.createGroup"
+msgstr "Create group"
+
+#: src/app.tsx
+msgid "app.action.loading"
+msgstr "Loading"
+
+#: src/app.tsx
+msgid "app.action.refresh"
+msgstr "Refresh"
+
+#: src/app.tsx
+msgid "app.loading.title"
+msgstr "Checking the storage status"
+
+#: src/app.tsx
+msgid "app.loading.body"
+msgstr "Querying the disks and RAID arrays. This will only take a moment."
+
+#: src/app.tsx
+msgid "app.error.title"
+msgstr "Could not load the status"
+
+#: src/app.tsx
+msgid "app.error.retry"
+msgstr "Try again"
+
+#: src/app.tsx
+msgid "app.error.hint.permission"
+msgstr "Click \"Limited access\" at the top of Cockpit to turn administrative access on, then try again."
+
+#: src/app.tsx
+msgid "app.error.hint.installation"
+msgstr "Check that the shr-rs command is installed on this server."
+
+#: src/panels.tsx
+msgid "common.ok"
+msgstr "OK"
+
+#: src/panels.tsx
+msgid "common.raidLevel"
+msgstr "RAID level"
+
+#: src/app.tsx src/panels.tsx
+msgid "common.rawCapacity"
+msgstr "Detected raw capacity"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "common.close"
+msgstr "Close"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "common.cancel"
+msgstr "Cancel"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.title"
+msgstr "Create SHR group"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.name"
+msgstr "Group name"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.nameTaken"
+msgstr "That group name already exists."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.mode"
+msgstr "Mode"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.mode.shr"
+msgstr "SHR (single parity)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.mode.shr2"
+msgstr "SHR-2 (dual parity)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.mount"
+msgstr "Mount point"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.legend"
+msgstr "Select disks"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.select"
+msgstr "Select"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.node"
+msgstr "Node"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.model"
+msgstr "Model"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.capacity"
+msgstr "Capacity"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.col.state"
+msgstr "State"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.empty"
+msgstr "No disks were detected."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.selectAria"
+msgstr "Select /dev/$0"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.disks.noModel"
+msgstr "No model reported"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.disks.systemDisk"
+msgstr "System disk (cannot be selected)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.disks.alreadyInRaid"
+msgstr "Already in a RAID"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.advanced.toggle"
+msgstr "Advanced: LVM volume group / logical volume names"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.advanced.caveat"
+msgstr "Left blank, these are derived from the group name (volume group $0, logical volume $1). A volume group name must be unique across the whole host, so reusing one is rejected at the safety-check step."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.vgName"
+msgstr "Volume group (VG) name"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.field.lvName"
+msgstr "Logical volume (LV) name"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.forceContent"
+msgstr "Proceed even if the selected disks already contain data. Disks with data are blocked by the safety check by default, and this checkbox explicitly bypasses that block."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.selectCaveat"
+msgstr "Even after picking disks, the group is only created once the safety check and the execution-plan preview have both run. Nothing on this screen erases a disk."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.preflightBusy"
+msgstr "Running the safety check..."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.preflight"
+msgstr "Next: safety check"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.preflight.blockedTitle"
+msgstr "The safety check found problems, so this cannot continue."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.backToDisks"
+msgstr "Back to disk selection"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.preview.intro"
+msgstr "The safety check passed. The execution plan will now be generated (still without touching a single disk)."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.back"
+msgstr "Back"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.previewBusy"
+msgstr "Generating the preview..."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.preview"
+msgstr "Preview the execution plan"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.confirm.title"
+msgstr "This action cannot be undone."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.body"
+msgstr "The disks below will be partitioned and formatted. Any data already on them is lost."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.group"
+msgstr "Group"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.mode"
+msgstr "Mode"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.mount"
+msgstr "Mount"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.bands"
+msgstr "Bands"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.confirm.typeName"
+msgstr "Type the group name $0 exactly to continue"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.action.executeBusy"
+msgstr "Creating..."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.action.execute"
+msgstr "Create the group (cannot be undone)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.executing"
+msgstr "Creating the group. Do not close this window."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.done.title"
+msgstr "Group \"$0\" has been created."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.done.mode"
+msgstr "Mode $0"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.error.title"
+msgstr "It failed."
+
+#: src/createGroupWizard.tsx
+msgid "wizard.action.startOver"
+msgstr "Start over"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.systemDisk"
+msgstr "$0: this is a system disk (mounted at: $1)."
+
+#: src/createGroupWizard.tsx
+msgid "blocker.hasContent"
+msgstr "$0: it already contains data or partitions. Select \"Proceed even if the selected disks already contain data\" to continue."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.noStableId"
+msgstr "$0: no stable identifier (by-id) could be found."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.sizeUnknown"
+msgstr "$0: its capacity could not be determined."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.notFound"
+msgstr "$0: no matching disk was found."
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "blocker.unknown"
+msgstr "This disk cannot be used (details: $0)."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.inFlightReason"
+msgstr "An operation is in progress. This window cannot be closed until it finishes."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.error.title"
+msgstr "It failed."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.retry"
+msgstr "Try again"
+
+#: src/actionsDialogs.tsx
+msgid "common.refresh"
+msgstr "Refresh"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.loadFailed"
+msgstr "Could not load the status."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.confirmPrompt"
+msgstr "Press confirm to run it."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.confirmAndRun"
+msgstr "Confirm and run"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.busy.working"
+msgstr "Working..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.next.confirm"
+msgstr "Next: confirm"
+
+#: src/actionsDialogs.tsx
+msgid "blocker.hasContentShort"
+msgstr "$0: it already contains data or partitions."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.title"
+msgstr "Scrub group \"$0\""
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.loading"
+msgstr "Checking the scrub status."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.currentState"
+msgstr "Current state"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.notRunning"
+msgstr "Not running"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.errorsFound"
+msgstr "Errors found"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.cancelTitle"
+msgstr "The running scrub will be cancelled."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.startTitle"
+msgstr "This whole group will be scrubbed."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.start"
+msgstr "Start scrub"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.cancel"
+msgstr "Cancel scrub"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.title"
+msgstr "Expand group \"$0\""
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.legend"
+msgstr "Select the disks to add (disks already used by another group are not listed)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.noCandidates"
+msgstr "There is no disk available to add."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.forceContent"
+msgstr "Proceed even if the selected disks already contain data."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.priorityLabel"
+msgstr "Reshape speed priority"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.priority.balanced"
+msgstr "Balanced (default): trades everyday disk use against reshape speed"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.priority.background"
+msgstr "Background: everyday disk use comes first, the reshape runs slower"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.priority.max"
+msgstr "Maximum speed: reshape as fast as possible, everyday disk use gets slower"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.blockedTitle"
+msgstr "The safety check found problems."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.previewIntro"
+msgstr "The safety check passed. The expansion plan will now be generated (nothing is executed yet)."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.confirmBody"
+msgstr "The RAID reshape starts now. Once it has started it cannot be rolled back part-way."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.disksAfter"
+msgstr "Disks after expansion"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.busy"
+msgstr "Expanding..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.execute"
+msgstr "Run the expansion (cannot be undone)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.executing"
+msgstr "Expanding the group. Do not close this window."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.doneTitle"
+msgstr "The expansion is complete."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.doneBody"
+msgstr "It is now made up of $0 disks."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.title"
+msgstr "Replace a disk in group \"$0\""
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.noStableId"
+msgstr "no stable identifier (by-id)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.systemDisk"
+msgstr "system disk"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.unavailable"
+msgstr "Cannot be selected: $0"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.confirmBody"
+msgstr "$0 is replaced by $1, and an mdadm rebuild starts."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.oldLabel"
+msgstr "Disk to replace"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.noMembers"
+msgstr "No member disk of this group could be found"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.newLabel"
+msgstr "New disk (only same-or-larger capacities are listed)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.choose"
+msgstr "Choose one"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.noCandidates"
+msgstr "There is no unused disk of the same size or larger."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.busy"
+msgstr "Replacing..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.execute"
+msgstr "Run the disk replacement (cannot be undone)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.executing"
+msgstr "Replacing the disk. Do not close this window."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.replace.doneTitle"
+msgstr "The disk replacement is complete."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.title"
+msgstr "Change compression for group \"$0\""
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.confirmTitle"
+msgstr "This changes the mount options and the recorded state."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.confirmBody"
+msgstr "Undoing it means running another compression change."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.field"
+msgstr "Compression setting (algorithm, or algorithm:level, e.g. zstd:3)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.caveat"
+msgstr "The new setting applies only to data written from now on. Recompressing existing data requires rewriting it."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.busy"
+msgstr "Applying..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.execute"
+msgstr "Apply the compression change (cannot be undone)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.executing"
+msgstr "Applying the compression setting."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.recompress.doneTitle"
+msgstr "The compression setting has been changed."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.title"
+msgstr "Destroy group \"$0\""
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.confirmBody"
+msgstr "Group $0 is unmounted, every volume and RAID array it used is removed, and it disappears from the configuration record entirely. The data stored in the group cannot be recovered."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.reviewTitle"
+msgstr "This destroys the group completely."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.reviewBody"
+msgstr "It unmounts the group, removes its volumes and RAID arrays, and erases it from the configuration record. Tearing a group down by hand on the command line leaves configuration entries behind, so use this when removing a group."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.zeroSuperblocks"
+msgstr "Also wipe the RAID markers left on the disks. Left off (the default), those markers stay behind and this RAID layout could still be revived later; turned on, it cannot be revived and the disks are left completely empty."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.busy"
+msgstr "Destroying..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.execute"
+msgstr "Destroy the group (cannot be undone)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.executing"
+msgstr "Destroying the group. Do not close this window."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.destroy.doneTitle"
+msgstr "The group has been destroyed."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.title"
+msgstr "Create a snapshot of group \"$0\""
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.field"
+msgstr "Snapshot name (cannot contain the path separator \"/\")"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.caveat"
+msgstr "A read-only snapshot is created at $0."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.execute"
+msgstr "Create the snapshot"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.snapshot.doneTitle"
+msgstr "The snapshot has been created."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.title"
+msgstr "Install the scrub/health-check schedule"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.body"
+msgstr "Schedules a periodic scrub for every group, plus automatic health checks and reshape throttling. If a schedule already exists it is re-registered with the current settings."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.busy"
+msgstr "Installing..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.execute"
+msgstr "Run the install"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.doneTitle"
+msgstr "The install is complete."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.title"
+msgstr "Finish the expansion"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.body"
+msgstr "Finishes, across every group, the storage-growing work a previous capacity expansion had to defer while its RAID reshape ran. It is safe to run at any time, even when nothing was deferred."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.busy"
+msgstr "Finishing..."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.execute"
+msgstr "Run the expansion finish"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.reconcile.doneTitle"
+msgstr "The expansion finish is complete."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.title"
+msgstr "Operations"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.note"
+msgstr "scrub · expand · replace a disk · snapshot · change compression · destroy · schedule"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.empty"
+msgstr "There are no groups. Create one first."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.scrub"
+msgstr "Scrub"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.expand"
+msgstr "Expand"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.replace"
+msgstr "Replace a disk"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.snapshot"
+msgstr "Create a snapshot"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.recompress"
+msgstr "Change compression"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.destroy"
+msgstr "Destroy"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.schedule"
+msgstr "Install the schedule"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.pendingTitle"
+msgstr "Groups still waiting for an expansion to finish: $0"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.panel.pendingBody"
+msgstr "Running \"Finish the expansion\" below is what makes the added capacity actually take effect."
+
+#: src/actionsDialogs.tsx src/model.ts
+msgid "model.scrub.errors.one"
+msgid_plural "model.scrub.errors.other"
+msgstr[0] "$0 error"
+msgstr[1] "$0 errors"
+
+#: src/model.ts
+msgid "model.activity.multi.one"
+msgid_plural "model.activity.multi.other"
+msgstr[0] "$0 and $1 other in progress"
+msgstr[1] "$0 and $1 others in progress"
+
+#: src/app.tsx src/panels.tsx
+msgid "common.driveCount.one"
+msgid_plural "common.driveCount.other"
+msgstr[0] "$0 drive"
+msgstr[1] "$0 drives"
+
+#: src/app.tsx src/panels.tsx
+msgid "common.smartWarningCount.one"
+msgid_plural "common.smartWarningCount.other"
+msgstr[0] "$0 SMART warning"
+msgstr[1] "$0 SMART warnings"
+
+#: src/panels.tsx
+msgid "panels.arrays.note.one"
+msgid_plural "panels.arrays.note.other"
+msgstr[0] "$0 array (live query)"
+msgstr[1] "$0 arrays (live query)"
+
+#: src/panels.tsx
+msgid "panels.tolerance.nominal.one"
+msgid_plural "panels.tolerance.nominal.other"
+msgstr[0] "Tolerates $0 disk failure"
+msgstr[1] "Tolerates $0 disk failures"
+
+#: src/panels.tsx
+msgid "panels.tolerance.design.one"
+msgid_plural "panels.tolerance.design.other"
+msgstr[0] "Tolerates $0 disk failure by design (no live member information)"
+msgstr[1] "Tolerates $0 disk failures by design (no live member information)"
+
+#: src/panels.tsx
+msgid "panels.band.slice.one"
+msgid_plural "panels.band.slice.other"
+msgstr[0] "$0 slice × $1 disk"
+msgstr[1] "$0 slice × $1 disks"
+
+#: src/panels.tsx
+msgid "panels.groups.scrubWarn.one"
+msgid_plural "panels.groups.scrubWarn.other"
+msgstr[0] "$0 band needs scrub attention"
+msgstr[1] "$0 bands need scrub attention"
+
+#: src/panels.tsx
+msgid "panels.groups.note.one"
+msgid_plural "panels.groups.note.other"
+msgstr[0] "$0 group"
+msgstr[1] "$0 groups"
+
+#: src/app.tsx
+msgid "app.raw.unknownSize.one"
+msgid_plural "app.raw.unknownSize.other"
+msgstr[0] "$0 disk of unknown size"
+msgstr[1] "$0 disks of unknown size"
+
+#: src/app.tsx
+msgid "app.raw.includesSystem.one"
+msgid_plural "app.raw.includesSystem.other"
+msgstr[0] "includes $0 system disk (not a RAID candidate)"
+msgstr[1] "includes $0 system disks (not RAID candidates)"
+
+#: src/app.tsx
+msgid "app.metric.arraysNeedAttention.one"
+msgid_plural "app.metric.arraysNeedAttention.other"
+msgstr[0] "$0 array needs attention"
+msgstr[1] "$0 arrays need attention"
+
+#: src/app.tsx
+msgid "app.legend.linked.one"
+msgid_plural "app.legend.linked.other"
+msgstr[0] "$0 disk in a RAID"
+msgstr[1] "$0 disks in a RAID"
+
+#: src/app.tsx
+msgid "app.legend.unlinked.one"
+msgid_plural "app.legend.unlinked.other"
+msgstr[0] "$0 disk not in a RAID"
+msgstr[1] "$0 disks not in a RAID"
+
+#: src/app.tsx
+msgid "app.legend.system.one"
+msgid_plural "app.legend.system.other"
+msgstr[0] "$0 system disk (not a RAID candidate)"
+msgstr[1] "$0 system disks (not RAID candidates)"
+
+#: src/createGroupWizard.tsx
+msgid "wizard.confirm.bandCount.one"
+msgid_plural "wizard.confirm.bandCount.other"
+msgstr[0] "$0 band"
+msgstr[1] "$0 bands"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.confirm.diskCount.one"
+msgid_plural "wizard.confirm.diskCount.other"
+msgstr[0] "$0 disk"
+msgstr[1] "$0 disks"
+
+#: src/actionsDialogs.tsx src/createGroupWizard.tsx
+msgid "wizard.commands.toggle.one"
+msgid_plural "wizard.commands.toggle.other"
+msgstr[0] "$0 command to run"
+msgstr[1] "$0 commands to run"
