@@ -4797,6 +4797,78 @@ fn snapshot_create_still_unmounts_the_scratch_mount_when_the_snapshot_itself_fai
 }
 
 #[test]
+fn snapshot_create_rejects_a_name_that_already_exists_instead_of_letting_btrfs_report_read_only() {
+    // Real-guest repro, through Cockpit on a `tank` group: asking for a
+    // snapshot name that already existed failed with btrfs's own `ERROR:
+    // Could not create subvolume: Read-only file system`, which names
+    // neither the cause nor the operator's own input. That message is
+    // btrfs behaving correctly -- `subvolume snapshot -r <src> <dest>`
+    // treats an EXISTING `dest` as the parent directory to create the new
+    // subvolume inside, and every snapshot here is read-only (`-r`), so the
+    // create lands in a read-only subvolume and is refused. The collision
+    // is knowable before then, so it is caught here instead.
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let healthy = FailingRunner::healthy();
+    let create_engine =
+        OrchestrationEngine::new(&healthy, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
+    let created = create_engine.create(create_req(three_disks())).unwrap();
+    state_store.save(&StateFile::new(vec![created])).unwrap();
+
+    let runner =
+        FailingRunner { ls_response: "nightly\nbefore-upgrade\n".to_string(), ..FailingRunner::healthy() };
+    let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
+
+    let err = engine.snapshot_create(None, "before-upgrade").unwrap_err();
+    match &err {
+        OrchestrateError::Validation(message) => {
+            assert!(message.contains("before-upgrade"), "must name the snapshot asked for: {message}");
+        }
+        other => panic!("expected Validation, got {other:?}"),
+    }
+
+    let cmds = runner.get_recorded();
+    assert!(
+        !cmds.iter().any(|c| c.starts_with("btrfs subvolume snapshot")),
+        "must not reach btrfs once the collision is known: {cmds:?}"
+    );
+    // The collision is only visible with the top-level subvolume mounted,
+    // so the scratch mount still has to come down on this path too.
+    assert!(
+        cmds.iter().any(|c| c == "umount /run/shr-rs/snapshot-mount-default"),
+        "must still unmount the scratch mount: {cmds:?}"
+    );
+}
+
+#[test]
+fn snapshot_create_still_proceeds_when_other_snapshots_exist_under_a_different_name() {
+    // The collision check must key off the requested name, not off
+    // "@snapshots is non-empty" -- every group past its first snapshot
+    // would otherwise be unable to take another.
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let healthy = FailingRunner::healthy();
+    let create_engine =
+        OrchestrationEngine::new(&healthy, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
+    let created = create_engine.create(create_req(three_disks())).unwrap();
+    state_store.save(&StateFile::new(vec![created])).unwrap();
+
+    let runner =
+        FailingRunner { ls_response: "nightly\nbefore-upgrade\n".to_string(), ..FailingRunner::healthy() };
+    let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
+
+    engine.snapshot_create(None, "after-upgrade").unwrap();
+
+    let cmds = runner.get_recorded();
+    let scratch = "/run/shr-rs/snapshot-mount-default";
+    assert!(
+        cmds.iter()
+            .any(|c| c == &format!("btrfs subvolume snapshot -r {scratch}/@ {scratch}/@snapshots/after-upgrade")),
+        "{cmds:?}"
+    );
+}
+
+#[test]
 fn snapshot_create_rejects_the_reserved_auto_prefix() {
     // The `auto-` namespace is reserved for `snapshot_auto_run`'s own
     // automated snapshots -- an operator (or a script) must never be able

@@ -2281,10 +2281,31 @@ impl<'a> OrchestrationEngine<'a> {
         self.runner.run("mkdir", &["-p", &scratch])?;
         btrfs.mount(&dev_path, &scratch, Some(&filesystem.compression), None)?;
 
-        let snapshot_result = btrfs.create_snapshot(
-            &format!("{scratch}/@"),
-            &format!("{scratch}/@snapshots/{snapshot_name}"),
-        );
+        let group_name = state.groups[group_idx].name.clone();
+        let snapshot_result = (|| -> Result<(), OrchestrateError> {
+            // A name that is already taken must be rejected here, by name.
+            // `btrfs subvolume snapshot -r <src> <dest>` treats an EXISTING
+            // `dest` as the parent directory to create the new subvolume
+            // inside, and every snapshot here is read-only, so btrfs
+            // otherwise reports `Could not create subvolume: Read-only file
+            // system` -- true, but naming neither the cause nor the
+            // operator's own input (seen on a real guest through Cockpit).
+            // It cannot be checked before the mount above: `@snapshots` is
+            // a sibling of `@` and is unreachable from the group's own
+            // `subvol=@` mount.
+            let existing = btrfs.list_snapshot_names(&format!("{scratch}/@snapshots"))?;
+            if existing.iter().any(|existing_name| existing_name == snapshot_name) {
+                return Err(OrchestrateError::Validation(format!(
+                    "snapshot `{snapshot_name}` already exists in group `{group_name}` -- choose a \
+                     different name, or delete the existing one first"
+                )));
+            }
+            btrfs.create_snapshot(
+                &format!("{scratch}/@"),
+                &format!("{scratch}/@snapshots/{snapshot_name}"),
+            )?;
+            Ok(())
+        })();
         // Always attempt to unmount the scratch mount, even if the
         // snapshot itself failed -- leaving it mounted on error would be a
         // silent resource leak an operator has to discover by hand. The
