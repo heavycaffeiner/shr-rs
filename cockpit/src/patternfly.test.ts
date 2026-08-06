@@ -40,6 +40,19 @@
 // coordinated PatternFly bump passes untouched and only a partial one --
 // exactly the shape of this defect, and the shape a grouped Dependabot update
 // produces when one package in the group is held back -- fails.
+//
+// It has since caught a second, different route to the same split, which is
+// why `package.json` carries an `overrides` entry for
+// `@patternfly/react-tokens`. The five PatternFly packages this project
+// depends on directly are pinned to exact versions, but `react-tokens` is
+// pulled in transitively by `react-core` at `^6.6.0`, and `package-lock.json`
+// is gitignored here (cockpit/.gitignore, inherited from the starter kit,
+// whose Makefile deletes the lock on purpose to stay on latest). So a release
+// build resolved it fresh months after the pins were chosen and picked up
+// 6.6.1 against a 6.6.0 token set. It is not a harmless mismatch: the module
+// is in the shipped bundle, listed in `runtime-npm-modules.txt`. The override
+// pins the transitive one to match, and this test is what would notice if a
+// seventh package ever arrives by the same route.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
