@@ -1,9 +1,45 @@
 # shr-rs
 
+*Read this in [한국어](README.ko.md).*
+
 **SHR — Sliced Hybrid RAID: mixed-size disks, one pool, nothing but stock
 Linux.** `mdadm` + `LVM` + `Btrfs` — no custom kernel module, no proprietary
 format, no vendor hardware. If shr-rs disappeared tomorrow your array would
 still assemble with the tools already on the system.
+
+**In one sentence:** you have hard disks of different sizes, you want them to
+behave as one big drive that survives a disk dying, and you do not want to
+waste the extra space on the larger ones. That is what this does.
+
+New to RAID? Open the box below first. Everything after it assumes those few
+words.
+
+<details>
+<summary><b>The words used in this README</b></summary>
+
+- **RAID** keeps your data on several disks at once so that one disk dying
+  does not lose it. It is not a backup: it protects against a disk failing,
+  not against deleting the wrong file.
+- **Parity** is the extra copy, or the arithmetic that stands in for one. It
+  is why a pool of four 4 TB disks stores 12 TB and not 16 TB: one disk's
+  worth is spent so any one disk can die.
+- **RAID5** survives one disk failing and costs one disk of capacity.
+  **RAID6** survives two and costs two. **RAID1** is a plain mirror of two
+  disks: half the capacity, either one can die.
+- **Band** is this project's own word. Disks of different sizes are cut into
+  horizontal slices, and each slice becomes its own small RAID. See the
+  picture below.
+- **Stranded** space is capacity that exists but cannot be protected, because
+  only one disk reaches that high. shr-rs shows it rather than counting it as
+  usable.
+- **mdadm, LVM, Btrfs** are the three standard Linux tools this drives.
+  `mdadm` builds the RAIDs, `LVM` glues them into one volume, `Btrfs` is the
+  filesystem you actually store files on. All three ship with your
+  distribution; this project gives orders to them and nothing more.
+- **Scrub** is a routine read of everything on the disks to find rot before
+  you need the data. Run it monthly; the scheduler does it for you.
+
+</details>
 
 ## Why
 
@@ -29,6 +65,17 @@ Planned layout (mode: shr, DRY RUN)
 
   ! disk3: 2001454759936 B stranded (no redundancy)
 ```
+
+Reading that, line by line, because it is the densest output here:
+
+- `band0  raid5  4.0 TB  4  12.0 TB` means all four disks contribute their
+  first 4 TB, those four slices form a RAID5, and after parity that band
+  stores 12 TB.
+- `band1  raid1  2.0 TB  2  2.0 TB` means only two disks reach higher (the
+  6 TB and the 8 TB), so their next 2 TB pair up as a mirror worth 2 TB.
+- `Stranded 2.0 TB` is the top of the 8 TB disk. No second disk reaches that
+  high, so nothing can protect it and shr-rs refuses to count it as capacity.
+- The bar is that same story as a picture: `#` data, `+` parity, `.` stranded.
 
 14 TB usable instead of 12, still single-disk-fault tolerant — and it says
 plainly which 2 TB it cannot protect and why, rather than quietly counting
@@ -103,8 +150,21 @@ error checks, rebuild throttling, health checks, snapshots — are created by
 
 ## Quick start
 
-Nothing below writes to a disk until the `create` on line four, and that one
-asks you to type the group name first.
+**Everything you are about to do erases the disks you name.** Nothing below
+writes to one until the `create` on step four, and that one stops and asks you
+to type the group name before it does. Steps one to three change nothing at
+all, so run them freely.
+
+First, which disks are yours? `sdb,sdc,sdd,sde` below is an example, not a
+default. Find your own:
+
+```bash
+lsblk -o NAME,SIZE,MODEL,MOUNTPOINTS
+```
+
+Pick the ones with no mountpoints and nothing you want to keep. The disk your
+system boots from is refused automatically, in both the CLI and the dashboard,
+so you cannot pick it by accident.
 
 ```bash
 # 1. Are these disks safe to use? Changes nothing.
@@ -123,6 +183,11 @@ sudo shr-rs create --mode shr --disks sdb,sdc,sdd,sde \
 # 5. Where things stand.
 sudo shr-rs status --detail
 ```
+
+Afterwards your files live at `/mnt/tank`, and the array keeps working while
+it finishes building itself in the background. `status` shows that progress.
+Set up the routine maintenance once, with `schedule install` below, and you
+can leave it alone.
 
 Add a disk later — same shape, `--dry-run` first:
 
@@ -220,7 +285,7 @@ toolchain; the dashboard is a normal npm build needing node ≥ 22.18.
 
 ```bash
 cargo build --release --target x86_64-unknown-linux-musl --workspace
-(cd cockpit && npm install --ignore-scripts && npm run build)
+(cd cockpit && npm ci --ignore-scripts && npm run build)
 ```
 
 ```bash
