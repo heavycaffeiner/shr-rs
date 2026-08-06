@@ -23,6 +23,7 @@
 /metafile.json
 /pkg/
 /node_modules/
+/.npm-installed
 /runtime-npm-modules.txt
 /tmp/
 /tools/

@@ -12,13 +12,24 @@ SPEC=$(RPM_NAME).spec
 PREFIX ?= /usr/local
 APPSTREAMFILE=org.cockpit_project.$(subst -,_,$(PACKAGE_NAME)).metainfo.xml
 VM_IMAGE=$(CURDIR)/test/images/$(TEST_OS)
-# stamp file to check for node_modules/. npm writes this marker inside
-# node_modules on both `install` and `ci`, which is what makes it a stamp for
-# "the tree is installed". It used to be package-lock.json itself; that stopped
-# working the moment the lock became a committed file, because then it exists
-# from checkout and every rule depending on it looks satisfied before anything
-# has been installed.
-NODE_MODULES_TEST=node_modules/.package-lock.json
+# stamp file to check for node_modules/
+#
+# This was package-lock.json, which worked only while the lock was generated
+# rather than committed, and it was doing two jobs at once. In a checkout its
+# absence meant "npm has not run yet". In the dist tarball its presence meant
+# "there is nothing to install here": that tarball ships a prebuilt dist/ and
+# no node_modules, and the rpm/deb/arch containers that unpack it have no npm
+# at all, so `make install` must never reach the install rule.
+#
+# Committing the lock broke the first job (the file now exists from checkout)
+# while the second still mattered. Moving the stamp to
+# node_modules/.package-lock.json broke the second instead, since the tarball
+# excludes node_modules: the packaging containers then tried to install and
+# died on `env: 'npm': No such file or directory`.
+#
+# So the stamp is its own marker now, doing only the one job, and the tarball
+# ships it exactly as it used to ship the lock.
+NODE_MODULES_TEST=.npm-installed
 # build.js ran in non-watch mode
 DIST_TEST=runtime-npm-modules.txt
 # one example file in pkg/lib to check if it was already checked out
@@ -111,6 +122,7 @@ clean:
 	rm -f $(SPEC) packaging/arch/PKGBUILD
 	rm -f po/LINGUAS
 	rm -f metafile.json runtime-npm-modules.txt
+	rm -f .npm-installed
 
 install: $(DIST_TEST) po/LINGUAS
 	mkdir -p $(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)
@@ -141,15 +153,16 @@ dist: $(TARFILE)
 # pre-built dist/ (so it's not necessary) and ship package-lock.json (so that
 # node_modules/ can be reconstructed if necessary)
 #
-# package-lock.json is no longer named explicitly here: it is a tracked file
-# now, so `git ls-files` already carries it, and $(NODE_MODULES_TEST) points
-# inside node_modules, which this tarball excludes.
+# $(NODE_MODULES_TEST) is shipped for the reason its own comment gives: it is
+# what tells the packaging containers, which have no npm, that there is
+# nothing left to install. package-lock.json rides along in `git ls-files`
+# now that it is tracked.
 $(TARFILE): export NODE_ENV=production
 $(TARFILE): $(DIST_TEST) $(SPEC) packaging/arch/PKGBUILD
 	if type appstream-util >/dev/null 2>&1; then appstream-util validate-relax --nonet *.metainfo.xml; fi
 	tar --xz $(TAR_ARGS) -cf $(TARFILE) --transform 's,^,$(RPM_NAME)/,' \
 		--exclude packaging/$(SPEC).in --exclude node_modules \
-		$$(git ls-files) $(COCKPIT_REPO_FILES) $(DIST_TEST) \
+		$$(git ls-files) $(COCKPIT_REPO_FILES) $(NODE_MODULES_TEST) $(DIST_TEST) \
 		$(SPEC) packaging/arch/PKGBUILD dist/
 
 # Not a prerequisite of srpm/rpm any more: the spec only unpacks this under
@@ -233,6 +246,6 @@ bots: $(COCKPIT_REPO_STAMP)
 # instead of a silently different tree.
 $(NODE_MODULES_TEST): package.json package-lock.json
 	# unset NODE_ENV, skips devDependencies otherwise; this often hangs, so try a few times
-	for _ in `seq 3`; do timeout 10m env -u NODE_ENV npm ci --ignore-scripts && exit 0; done; exit 1
+	for _ in `seq 3`; do timeout 10m env -u NODE_ENV npm ci --ignore-scripts && touch $@ && exit 0; done; exit 1
 
 .PHONY: all clean install devel-install devel-uninstall print-version dist node-cache rpm prepare-check check vm print-vm
