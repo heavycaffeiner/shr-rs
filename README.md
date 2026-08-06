@@ -40,7 +40,10 @@ Here are the same two bands in the web dashboard: one group, two mdadm arrays
 at different RAID levels, each with its own slice size, members and rebuild
 state.
 
-![The SHR groups panel showing group shr1, with band0 as RAID5 over three 4.0 TB slices and band1 as RAID1 over two 3.9 TB slices. Each band lists its mdadm device and UUID, its member devices with a faulty member marked, usable against total capacity, and sync and scrub state.](docs/images/group-bands.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/group-bands-dark.png">
+  <img alt="The SHR groups panel showing group shr1, with band0 as RAID5 over three 4.0 TB slices and band1 as RAID1 over two 3.9 TB slices. Each band lists its mdadm device and UUID, its member devices with a faulty member marked, usable against total capacity, and sync and scrub state." src="docs/images/group-bands-light.png">
+</picture>
 
 ## How it works
 
@@ -168,7 +171,10 @@ the dashboard follows Cockpit's.</sub>
 At a phone width the tables stack into labelled rows, the description lists
 turn vertical, and the action rows wrap instead of running off the card:
 
-<img alt="The same group panel at a 390-pixel width: the band table stacked into labelled rows, one field per line, with the filesystem UUID and member-disk names wrapped inside the card." src="docs/images/mobile-dark.png" width="320">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/mobile-dark.png">
+  <img alt="The same group panel at a 390-pixel width: the band table stacked into labelled rows, one field per line, with the filesystem UUID and member-disk names wrapped inside the card." src="docs/images/mobile-light.png" width="320">
+</picture>
 
 <sub>Screenshots use example data; the layouts are the shipped build.</sub>
 
