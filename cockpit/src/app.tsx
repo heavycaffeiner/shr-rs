@@ -417,7 +417,34 @@ export const Application = () => {
                 </Flex>
             </PageSection>
 
-            <PageSection hasBodyWrapper={false}>
+            {/* `pf-v6-u-display-block` is load-bearing, and the defect it fixes
+                was invisible to every horizontal-overflow check in this
+                project's test rig, because the content was clipped INSIDE a
+                scroll container rather than pushed past the viewport.
+                Reported from a phone and then reproduced at 390px: the capacity
+                allocation card rendered 197px tall around 227px of content, so
+                it grew its own scrollbar and cut the caveat text off mid-line.
+
+                The cause is a chain of nested column flexboxes.
+                `.pf-v6-c-page__main` is `display: flex; flex-direction: column`
+                with a viewport-height `height` and `overflow-y: auto`, so every
+                `PageSection` inside it is a flex ITEM that may be shrunk. A
+                PatternFly `Card` sets `overflow-y: auto`, which makes it a
+                scroll container, and a scroll container's `min-height: auto`
+                resolves to 0 rather than to its content height. So a card is
+                the one thing in the section that CAN absorb an over-constraint,
+                and it absorbs it silently.
+
+                Measured, not guessed. `flex-shrink: 0` on the section does not
+                help (PatternFly's own `pf-m-no-fill` only touches `flex-grow`,
+                so `isFilled={false}` is not this fix either), nor does it help
+                on the inner Flex or on its children, nor does `flex-wrap`,
+                `align-content` or `min-height` on the column. Taking the
+                section out of flex formatting is what works: the cards become
+                block-level boxes sized by their content and nothing can shrink
+                them. The section holds one child here, so the `gap` that
+                `display: block` discards was never doing anything. */}
+            <PageSection hasBodyWrapper={false} className="pf-v6-u-display-block">
                 {state.kind === "loading" && (
                     <Bullseye>
                         <EmptyState

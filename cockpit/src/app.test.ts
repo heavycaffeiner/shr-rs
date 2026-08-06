@@ -189,3 +189,45 @@ test("the dashboard draws no masthead of its own, and keeps every header control
         "with no masthead, the page must carry pf-m-no-sidebar or PatternFly's grid reserves 290px for a sidebar that is never rendered",
     );
 });
+
+// The capacity allocation card rendered 197px tall around 227px of content on
+// a phone, so it grew its own scrollbar and cut the caveat text off mid-line.
+// Reported from a real phone, then reproduced at 390px in a real Cockpit
+// session on the guest.
+//
+// Every horizontal-overflow check this project had was blind to it. Those look
+// for elements sticking out past the viewport; this content was clipped INSIDE
+// a scroll container, so nothing stuck out and `scrollWidth` never grew.
+//
+// The cause is nested column flexboxes. `.pf-v6-c-page__main` is
+// `display: flex; flex-direction: column` with a viewport-height `height` and
+// `overflow-y: auto`, so each `PageSection` is a flex ITEM that can be shrunk.
+// A PatternFly `Card` sets `overflow-y: auto`, which makes it a scroll
+// container, and a scroll container's `min-height: auto` resolves to 0 instead
+// of to its content height -- so the card is the one box in the section that
+// CAN absorb an over-constraint, and it does so silently.
+//
+// Measured in the browser, not guessed: `flex-shrink: 0` on the section does
+// not help, and neither does PatternFly's own `pf-m-no-fill` (`isFilled={false}`
+// sets `flex-grow` only), nor `flex-shrink` on the inner Flex or its children,
+// nor `flex-wrap`, `align-content` or `min-height` on the column. Taking the
+// section out of flex formatting is the only thing that worked.
+//
+// This asserts the class survives, which is all a DOM-free test can do here.
+// The layout itself has no assertion available without a real browser, which is
+// exactly why the defect reached a phone.
+test("the content page section is block-formatted so cards cannot be flex-shrunk", async () => {
+    const { Application } = await loadAppModule();
+    const html = renderToStaticMarkup(React.createElement(Application));
+
+    const sections = html.match(/class="[^"]*pf-v6-c-page__main-section[^"]*"/g) ?? [];
+    assert.ok(
+        sections.length >= 2,
+        `expected the header and content page sections, found ${sections.length}: ${JSON.stringify(sections)}`,
+    );
+    assert.ok(
+        sections.some(cls => cls.includes("pf-v6-u-display-block")),
+        "the section holding the dashboard cards must be block-formatted (pf-v6-u-display-block); as a column-flex item it shrinks its cards, and a PatternFly Card is a scroll container, so the loss shows up as a scrollbar inside the card instead of as overflow. Sections found: " +
+        JSON.stringify(sections),
+    );
+});
