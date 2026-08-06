@@ -115,6 +115,7 @@ import {
     Stack,
     StackItem,
 } from "@patternfly/react-core";
+import TimesIcon from "@patternfly/react-icons/dist/esm/icons/times-icon";
 
 import cockpit from "./cockpit.ts";
 import {
@@ -155,7 +156,7 @@ import {
 } from "./actions.ts";
 import { _, format, ngettext } from "./i18n.ts";
 import { formatBytes, type DiskStatus, type GroupStatus } from "./model.ts";
-import { Badge, Caveat, MONO, Muted } from "./ui.js";
+import { ACTION_ROW, Badge, Caveat, MONO, Muted } from "./ui.js";
 
 // --- shared UI bits ----------------------------------------------------------
 
@@ -224,7 +225,24 @@ export const Modal = ({
                         aria-label={_("common.close")}
                         title={closeDisabled ? inFlightReason() : undefined}
                     >
-                        ×
+                        {/* `TimesIcon`, not a literal "×". The element stays a
+                            raw <button> for the SSR reason above, but its
+                            CONTENT has to match the wizard's close button
+                            (createGroupWizard.tsx), which already renders this
+                            icon. A text glyph inherits the body font, size and
+                            colour instead of the icon token set, so the two
+                            dialogs' close buttons did not match each other in
+                            either theme. The icon is `aria-hidden`, so the
+                            accessible name still comes from `aria-label`.
+
+                            The `pf-v6-c-button__icon` span is what PatternFly's
+                            own `Button` puts around an `icon` prop, and it
+                            carries the icon's box sizing. Measured in a real
+                            browser without it, this button came out 37x30 while
+                            the wizard's `<Button variant="plain">` was 37x37 --
+                            a smaller touch target for the same control, on the
+                            dialogs that include the destructive ones. */}
+                        <span className="pf-v6-c-button__icon"><TimesIcon /></span>
                     </button>
                 </div>
                 <ModalBody>{children}</ModalBody>
@@ -258,7 +276,7 @@ const ErrorPanel = ({ message, onClose, onRetry }: { message: string | null; onC
             </Alert>
         </StackItem>
         <StackItem>
-            <ActionList>
+            <ActionList className={ACTION_ROW}>
                 <ActionListItem>
                     <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={onClose}>{_("common.close")}</button>
                 </ActionListItem>
@@ -373,7 +391,7 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
                 )}
                 {!loading && status && (
                     <StackItem>
-                        <DescriptionList isHorizontal isCompact>
+                        <DescriptionList orientation={{ md: "horizontal" }} isCompact>
                             <DescriptionListGroup>
                                 <DescriptionListTerm>{_("dialogs.scrub.currentState")}</DescriptionListTerm>
                                 <DescriptionListDescription>
@@ -408,7 +426,7 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
                 )}
 
                 <StackItem>
-                    <ActionList>
+                    <ActionList className={ACTION_ROW}>
                         <ActionListItem>
                             <button
                                 className="pf-v6-c-button pf-m-secondary" type="button"
@@ -640,7 +658,7 @@ const ExpandDialog = ({
                         </StackItem>
                     )}
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button
                                     className="pf-v6-c-button pf-m-secondary" type="button"
@@ -674,7 +692,7 @@ const ExpandDialog = ({
                         </List>
                     </StackItem>
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={startOver}>{_("wizard.action.backToDisks")}</button>
                             </ActionListItem>
@@ -689,7 +707,7 @@ const ExpandDialog = ({
                         <p>{_("dialogs.expand.previewIntro")}</p>
                     </StackItem>
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button
                                     className="pf-v6-c-button pf-m-secondary" type="button"
@@ -716,7 +734,7 @@ const ExpandDialog = ({
                         </Alert>
                     </StackItem>
                     <StackItem>
-                        <DescriptionList isHorizontal isCompact>
+                        <DescriptionList orientation={{ md: "horizontal" }} isCompact>
                             <DescriptionListGroup>
                                 <DescriptionListTerm>{_("dialogs.expand.disksAfter")}</DescriptionListTerm>
                                 <DescriptionListDescription>
@@ -746,7 +764,7 @@ const ExpandDialog = ({
                         </FormGroup>
                     </StackItem>
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button
                                     className="pf-v6-c-button pf-m-secondary" type="button"
@@ -785,7 +803,7 @@ const ExpandDialog = ({
                         <p>{format(_("dialogs.expand.doneBody"), state.result.disk_count)}</p>
                     </StackItem>
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
@@ -885,7 +903,7 @@ export const ReplaceConfirmStep = ({
             </StackItem>
         )}
         <StackItem>
-            <ActionList>
+            <ActionList className={ACTION_ROW}>
                 <ActionListItem>
                     <button
                         className="pf-v6-c-button pf-m-secondary" type="button"
@@ -1043,7 +1061,7 @@ const ReplaceDialog = ({
                         </StackItem>
                     )}
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>{_("common.cancel")}</button>
                             </ActionListItem>
@@ -1091,7 +1109,7 @@ const ReplaceDialog = ({
                         <p className={MONO}>{state?.result}</p>
                     </StackItem>
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
@@ -1158,7 +1176,7 @@ export const RecompressConfirmStep = ({
             </StackItem>
         )}
         <StackItem>
-            <ActionList>
+            <ActionList className={ACTION_ROW}>
                 <ActionListItem>
                     <button
                         className="pf-v6-c-button pf-m-secondary" type="button"
@@ -1256,7 +1274,7 @@ const RecompressDialog = ({ group, onClose, onChanged }: { group: GroupStatus; o
                         </StackItem>
                     )}
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>{_("common.cancel")}</button>
                             </ActionListItem>
@@ -1300,7 +1318,7 @@ const RecompressDialog = ({ group, onClose, onChanged }: { group: GroupStatus; o
                         <p className={MONO}>{state?.result}</p>
                     </StackItem>
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
@@ -1369,7 +1387,7 @@ export const DestroyConfirmStep = ({
             </StackItem>
         )}
         <StackItem>
-            <ActionList>
+            <ActionList className={ACTION_ROW}>
                 <ActionListItem>
                     <button
                         className="pf-v6-c-button pf-m-secondary" type="button"
@@ -1476,7 +1494,7 @@ const DestroyDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onCl
                         </StackItem>
                     )}
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>{_("common.cancel")}</button>
                             </ActionListItem>
@@ -1520,7 +1538,7 @@ const DestroyDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onCl
                         <p className={MONO}>{state?.result?.destroyed}</p>
                     </StackItem>
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
@@ -1562,7 +1580,7 @@ export const SnapshotConfirmStep = ({
             </StackItem>
         )}
         <StackItem>
-            <ActionList>
+            <ActionList className={ACTION_ROW}>
                 <ActionListItem>
                     <button
                         className="pf-v6-c-button pf-m-secondary" type="button"
@@ -1652,7 +1670,7 @@ const SnapshotDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onC
                         </StackItem>
                     )}
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-secondary" type="button" onClick={handleClose}>{_("common.cancel")}</button>
                             </ActionListItem>
@@ -1684,7 +1702,7 @@ const SnapshotDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onC
                         <p className={MONO}>{state?.result}</p>
                     </StackItem>
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                             </ActionListItem>
@@ -1740,7 +1758,7 @@ const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged
                             </StackItem>
                         )}
                         <StackItem>
-                            <ActionList>
+                            <ActionList className={ACTION_ROW}>
                                 <ActionListItem>
                                     <button
                                         className="pf-v6-c-button pf-m-secondary" type="button"
@@ -1767,7 +1785,7 @@ const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged
                             <p className={MONO}>{state.result}</p>
                         </StackItem>
                         <StackItem>
-                            <ActionList>
+                            <ActionList className={ACTION_ROW}>
                                 <ActionListItem>
                                     <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                                 </ActionListItem>
@@ -1832,7 +1850,7 @@ const ReconcileDialog = ({ onClose, onChanged }: { onClose: () => void; onChange
                             </StackItem>
                         )}
                         <StackItem>
-                            <ActionList>
+                            <ActionList className={ACTION_ROW}>
                                 <ActionListItem>
                                     <button
                                         className="pf-v6-c-button pf-m-secondary" type="button"
@@ -1859,7 +1877,7 @@ const ReconcileDialog = ({ onClose, onChanged }: { onClose: () => void; onChange
                             <p className={MONO}>{state.result}</p>
                         </StackItem>
                         <StackItem>
-                            <ActionList>
+                            <ActionList className={ACTION_ROW}>
                                 <ActionListItem>
                                     <button className="pf-v6-c-button pf-m-primary" type="button" onClick={handleClose}>{_("common.close")}</button>
                                 </ActionListItem>
@@ -1977,7 +1995,7 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                             <Card isCompact>
                                 <CardTitle><strong className={MONO}>{group.name}</strong></CardTitle>
                                 <CardBody>
-                                    <ActionList>
+                                    <ActionList className={ACTION_ROW}>
                                         <ActionListItem>
                                             <button
                                                 className="pf-v6-c-button pf-m-secondary" type="button"
@@ -2043,7 +2061,7 @@ export const OperationsPanel = ({ groups, disks, onChanged }: OperationsPanelPro
                         </StackItem>
                     )}
                     <StackItem>
-                        <ActionList>
+                        <ActionList className={ACTION_ROW}>
                             <ActionListItem>
                                 <button
                                     className={pendingGroups.length > 0 ? "pf-v6-c-button pf-m-primary" : "pf-v6-c-button pf-m-secondary"}

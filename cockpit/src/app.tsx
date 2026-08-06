@@ -181,7 +181,19 @@ const Dashboard = (
 
             <Card component="div" aria-label={_("app.physical.title")}>
                 <CardTitle>
-                    <Split hasGutter>
+                    {/* `isWrappable` on every card-title Split in this plugin.
+                        `.pf-v6-l-split` declares no `flex-wrap` at all, so it
+                        takes the initial `nowrap` and its items can only
+                        compress, never reflow; `pf-m-wrap` is the modifier that
+                        changes that, and `isWrappable` is what emits it.
+                        (Measured on the pre-change bundle: `nowrap` at both
+                        widths. Unlike the action rows, no Split item was
+                        actually pushed past the viewport at 390px, so this
+                        corrects the mechanism, not a clipping defect.)
+                        `isFilled` on the left item is kept: on a wrapped line
+                        it simply takes the full width, which is the stacked
+                        result we want. */}
+                    <Split hasGutter isWrappable>
                         <SplitItem isFilled>
                             {_("app.physical.title")}
                             <Content component="small" className="pf-v6-u-text-color-subtle">
@@ -352,6 +364,12 @@ export const Application = () => {
               * actions right).
               */}
             <PageSection hasBodyWrapper={false}>
+                {/* No `flexWrap` here or on the action group below: PatternFly's
+                    Flex already defaults to `--pf-v6-l-flex--FlexWrap: wrap`,
+                    so both rows reflow at a phone width on their own and
+                    `flexWrap={{ default: "wrap" }}` would only re-declare the
+                    value already in effect. `Split` is the layout that does
+                    NOT wrap by default; see the card titles below. */}
                 <Flex
                     justifyContent={{ default: "justifyContentSpaceBetween" }}
                     alignItems={{ default: "alignItemsCenter" }}

@@ -28,6 +28,41 @@ import { Card, CardBody, CardTitle, Content, Label } from "@patternfly/react-cor
  * family itself. */
 export const MONO = "pf-v6-u-font-family-monospace";
 
+/* No wrapping class accompanies `MONO`. That was tried and removed: a
+ * `pf-v6-u-text-break-word` variant for long unbreakable values (`fs_uuid`,
+ * `md_uuid`, a `by-id` name) turned out to change nothing measurable, because
+ * PatternFly already sets `overflow-wrap: break-word` on the table cells and
+ * description-list descriptions those values live in. Measured at 390px with
+ * and without it: identical, a 44-character `by-id` name wrapping to 138px
+ * inside a 246px parent either way, zero elements past the viewport in both.
+ *
+ * It was not free either. `word-break: break-word` is defined as
+ * `overflow-wrap: anywhere`, and `anywhere` also drops min-content width to a
+ * single character; while it sat on `MONO` itself the band table's auto layout
+ * squeezed its short columns to nothing, rendering `band0` as "band" / "0" and
+ * `RAID5` as "RAID" / "5" at 1280px. */
+
+/** Goes on every `ActionList` in this plugin.
+ *
+ * `ActionList` is the one layout here that genuinely cannot wrap on its own.
+ * PatternFly's `Flex` defaults to `--pf-v6-l-flex--FlexWrap: wrap` and `Split`
+ * at least offers `isWrappable`, but `.pf-v6-c-action-list` is a bare
+ * `display: flex` with no wrap declaration and no modifier for one. Its only
+ * layout prop is the beta `isVertical`, which would stack buttons at every
+ * width including desktop.
+ *
+ * So the wrapping comes from `patternfly-addons.css`'s own utility rather than
+ * from a rule this package writes. It is inert wherever the buttons already
+ * fit, which is every dialog at desktop width.
+ *
+ * What it fixes was measured on the pre-change bundle at 390px: `OperationsPanel`'s
+ * six-button row ran to x=1057 in a 390-pixel viewport, and the four buttons past
+ * the fold ("Replace a disk", "Create a snapshot", "Change compression" and
+ * "Destroy") were clipped by the card rather than merely pushed offscreen. The
+ * document's own scrollWidth never grew, so there was no sideways scrollbar to
+ * hint at them: they were simply unreachable. */
+export const ACTION_ROW = "pf-v6-u-flex-wrap";
+
 export interface Tone {
     label: string;
     tone: "good" | "warning" | "neutral";

@@ -119,7 +119,12 @@ const Section = (
         <Card id={`section-${title}`} isExpanded={expanded} component="div">
             <CardHeader onExpand={() => setExpanded(value => !value)}>
                 <CardTitle>
-                    <Split hasGutter>
+                    {/* `isWrappable`: Split declares no `flex-wrap`, so it takes
+                        the initial `nowrap` and this heading and its note can
+                        only compress against each other rather than reflow.
+                        See app.tsx's card title for the measurement; same
+                        reasoning at every card title in this file. */}
+                    <Split hasGutter isWrappable>
                         <SplitItem isFilled>{title}</SplitItem>
                         <SplitItem className="pf-v6-u-font-size-sm pf-v6-u-text-color-subtle">{note}</SplitItem>
                     </Split>
@@ -478,7 +483,7 @@ const GroupCard = ({ group, arrays }: { group: GroupStatus; arrays: ArrayStatus[
     return (
         <Card isCompact component="div">
             <CardTitle>
-                <Split hasGutter>
+                <Split hasGutter isWrappable>
                     <SplitItem isFilled>
                         <Flex spaceItems={{ default: "spaceItemsSm" }} alignItems={{ default: "alignItemsCenter" }}>
                             <FlexItem><strong className={MONO}>{group.name}</strong></FlexItem>
@@ -510,7 +515,23 @@ const GroupCard = ({ group, arrays }: { group: GroupStatus; arrays: ArrayStatus[
                 </Split>
             </CardTitle>
             <CardBody>
-                <DescriptionList isHorizontal isCompact className="pf-v6-u-mb-md">
+                {/* `orientation={{ md: "horizontal" }}` rather than
+                    `isHorizontal`, and the two are NOT additive. `isHorizontal`
+                    emits the unconditional `pf-m-horizontal`, which pins the
+                    list to a term column plus a value column at every width.
+                    Measured on the pre-change bundle at 390px: a 111px term
+                    column left the value column 135px, for values like a
+                    36-character `fs_uuid`. It is 262px after this change.
+                    `orientation` has no `default` key (its keys are
+                    sm/md/lg/xl/2xl), so `{ md: "horizontal" }` emits
+                    `pf-m-horizontal-on-md`: horizontal from 768px up, and the
+                    component's own vertical base layout below it. Keeping
+                    `isHorizontal` alongside would re-pin it and defeat the
+                    change, so it is removed rather than supplemented.
+                    768px is deliberate: it is the same width the tables
+                    already collapse at (`gridBreakPoint: grid-md`), so the
+                    whole page changes shape once rather than twice. */}
+                <DescriptionList orientation={{ md: "horizontal" }} isCompact className="pf-v6-u-mb-md">
                     <DescriptionListGroup>
                         <DescriptionListTerm>{_("panels.group.mountPoint")}</DescriptionListTerm>
                         <DescriptionListDescription className={MONO}>{group.mount_point}</DescriptionListDescription>
@@ -530,7 +551,18 @@ const GroupCard = ({ group, arrays }: { group: GroupStatus; arrays: ArrayStatus[
                             {group.disks.length > 0
                                 ? (
                                     <Flex spaceItems={{ default: "spaceItemsXs" }}>
-                                        {group.disks.map(id => <FlexItem key={id}><Chip>{id}</Chip></FlexItem>)}
+                                        {/* `title` because PatternFly's Label
+                                            truncates its own text with an
+                                            ellipsis rather than wrapping, and a
+                                            `by-id` name is long enough to lose
+                                            its distinguishing tail at a phone
+                                            width: two disks of the same model
+                                            differ only in the serial at the
+                                            end. The full value stays reachable
+                                            on hover and to a screen reader. */}
+                                        {group.disks.map(id => (
+                                            <FlexItem key={id}><Chip title={id}>{id}</Chip></FlexItem>
+                                        ))}
                                     </Flex>
                                 )
                                 : <Muted>{_("common.none")}</Muted>}
@@ -671,7 +703,7 @@ export const CapacityOverviewPanel = ({ report, fsDf }: { report: StatusReport; 
 
             <Card component="div" aria-label={_("panels.allocation.title")}>
                 <CardTitle>
-                    <Split hasGutter>
+                    <Split hasGutter isWrappable>
                         <SplitItem isFilled>{_("panels.allocation.title")}</SplitItem>
                         <SplitItem className={MONO}>
                             {report.groups.map(g => modeLabel(g.mode)).join(", ") || _("panels.allocation.noGroups")}
@@ -730,7 +762,7 @@ const KvItem = ({ label, value, hint }: { label: string; value: string; hint?: s
 const TechSpecCard = ({ group, statePath }: { group: GroupStatus; statePath: string | null }) => {
     const unknown = _("common.unknown");
     return (
-        <DescriptionList isHorizontal isCompact>
+        <DescriptionList orientation={{ md: "horizontal" }} isCompact>
             <KvItem label={_("panels.tech.groupName")} value={group.name} />
             <KvItem label={_("panels.tech.vg")} value={group.vg_name ?? unknown} />
             <KvItem
@@ -789,7 +821,7 @@ export const CapacityMethodologyPanel = ({ report }: { report: StatusReport }) =
             note={_("panels.method.note")}
             defaultExpanded={false}
         >
-            <DescriptionList isHorizontal isCompact className="pf-v6-u-mb-md">
+            <DescriptionList orientation={{ md: "horizontal" }} isCompact className="pf-v6-u-mb-md">
                 <DescriptionListGroup>
                     <DescriptionListTerm>{_("common.rawCapacity")}</DescriptionListTerm>
                     <DescriptionListDescription className={MONO}>

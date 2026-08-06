@@ -81,7 +81,7 @@ import {
 } from "./createGroup.ts";
 import { _, format, ngettext } from "./i18n.ts";
 import { formatBytes, type DiskStatus } from "./model.ts";
-import { Caveat, Chip, MONO, Muted } from "./ui.js";
+import { ACTION_ROW, Caveat, Chip, MONO, Muted } from "./ui.js";
 
 interface Props {
     disks: DiskStatus[];
@@ -423,7 +423,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                 </StackItem>
 
                                 <StackItem>
-                                    <ActionList>
+                                    <ActionList className={ACTION_ROW}>
                                         <ActionListItem>
                                             <Button variant="secondary" onClick={onClose}>{_("common.cancel")}</Button>
                                         </ActionListItem>
@@ -470,7 +470,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                     </Alert>
                                 </StackItem>
                                 <StackItem>
-                                    <ActionList>
+                                    <ActionList className={ACTION_ROW}>
                                         <ActionListItem>
                                             <Button variant="secondary" onClick={startOver}>
                                                 {_("wizard.action.backToDisks")}
@@ -487,7 +487,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                     <p>{_("wizard.preview.intro")}</p>
                                 </StackItem>
                                 <StackItem>
-                                    <ActionList>
+                                    <ActionList className={ACTION_ROW}>
                                         <ActionListItem>
                                             <Button variant="secondary" onClick={startOver}>{_("wizard.action.back")}</Button>
                                         </ActionListItem>
@@ -514,7 +514,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                 </StackItem>
 
                                 <StackItem>
-                                    <DescriptionList isHorizontal isCompact>
+                                    <DescriptionList orientation={{ md: "horizontal" }} isCompact>
                                         <DescriptionListGroup>
                                             <DescriptionListTerm>{_("wizard.confirm.group")}</DescriptionListTerm>
                                             <DescriptionListDescription><strong className={MONO}>{wizardState.preview.name}</strong></DescriptionListDescription>
@@ -581,7 +581,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                 </StackItem>
 
                                 <StackItem>
-                                    <ActionList>
+                                    <ActionList className={ACTION_ROW}>
                                         <ActionListItem>
                                             <Button variant="secondary" onClick={startOver}>{_("common.cancel")}</Button>
                                         </ActionListItem>
@@ -634,7 +634,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                     </p>
                                 </StackItem>
                                 <StackItem>
-                                    <ActionList>
+                                    <ActionList className={ACTION_ROW}>
                                         <ActionListItem>
                                             <Button variant="primary" onClick={onClose}>{_("common.close")}</Button>
                                         </ActionListItem>
@@ -651,7 +651,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                     </Alert>
                                 </StackItem>
                                 <StackItem>
-                                    <ActionList>
+                                    <ActionList className={ACTION_ROW}>
                                         <ActionListItem>
                                             <Button variant="secondary" onClick={onClose}>{_("common.close")}</Button>
                                         </ActionListItem>
