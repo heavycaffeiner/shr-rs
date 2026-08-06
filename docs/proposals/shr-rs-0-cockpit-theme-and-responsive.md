@@ -848,3 +848,48 @@ from the host fails because the guest's key lives inside the hypervm-mcp service
 rather than in the host's SSH agent. Guest-to-host HTTP is blocked by the host
 firewall. What worked was pushing the tarball through a host-to-guest `ssh`-mode
 tunnel into a throwaway receiver on the guest.
+
+### 8.7 A defect this verification missed, found on a real phone
+
+Reported after the work above shipped: on a phone the capacity allocation card
+grew its own scrollbar and cut the caveat text off mid-line. Reproduced at 390px
+in the real Cockpit session, where the card rendered 197px tall around 227px of
+content.
+
+**Every check in §8.4 and §8.5 was blind to it.** They ask whether anything
+sticks out past the viewport, and measure `scrollWidth - clientWidth` plus the
+bounding box of every element. This content was clipped INSIDE a scroll
+container, so nothing stuck out, no scrollWidth grew, and the defect sat one
+element deep in a page that reported zero overflow in all four combinations. A
+check for horizontal overflow cannot see a vertical clip, and a check for
+overflow past the viewport cannot see overflow inside a box that scrolls.
+
+The cause is a chain of nested column flexboxes. `.pf-v6-c-page__main` is
+`display: flex; flex-direction: column` with a viewport-height `height` and
+`overflow-y: auto`, so every `PageSection` is a flex item that can be shrunk. A
+PatternFly `Card` sets `overflow-y: auto`, which makes it a scroll container,
+and a scroll container's `min-height: auto` resolves to 0 rather than to its
+content height. The card is therefore the one box in the section that can absorb
+an over-constraint, and it absorbs it without any visible failure.
+
+Fixes ruled out by measurement, in this order: `flex-shrink: 0` on the section,
+on the inner column `Flex`, and on each of its children; PatternFly's own
+`pf-m-no-fill` (`isFilled={false}`), which sets `flex-grow` only; `flex-wrap`,
+`align-content` and `min-height` on the column; and `display: grid` on the
+wrapper. What worked was taking the section out of flex formatting entirely with
+`pf-v6-u-display-block`, which makes the cards block-level boxes sized by their
+content. The section holds one child, so the `gap` that `display: block`
+discards was doing nothing.
+
+`app.test.ts` gains a test pinning the class, which is all a DOM-free test can
+assert here. The layout itself has no assertion available without a browser,
+which is precisely why this reached a phone.
+
+The rig now also flags any element whose `scrollHeight` or `scrollWidth`
+exceeds its client size, not only elements past the viewport edge. Three
+exclusions, each because the truncation is PatternFly's own and keeps the full
+text reachable: a `Label`'s text ellipsis, a table column header's, and
+`.pf-v6-c-page__main`, which is the page's intended vertical scroll. With those
+in place the check reports nothing on the fixed build across all four
+combinations, and reports the clipped card on the pre-change build at both
+phone-width combinations, so it discriminates rather than merely passing.

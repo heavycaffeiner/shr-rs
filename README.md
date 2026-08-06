@@ -36,6 +36,12 @@ them as capacity. That slicing is what the name describes: **SHR** is
 *Sliced Hybrid RAID*, hybrid because one pool is several RAID levels at once.
 **SHR-2** (`--mode shr2`) is the same idea at two-disk tolerance.
 
+Here are the same two bands in the web dashboard: one group, two mdadm arrays
+at different RAID levels, each with its own slice size, members and rebuild
+state.
+
+![The SHR groups panel showing group shr1, with band0 as RAID5 over three 4.0 TB slices and band1 as RAID1 over two 3.9 TB slices. Each band lists its mdadm device and UUID, its member devices with a faulty member marked, usable against total capacity, and sync and scrub state.](docs/images/group-bands.png)
+
 ## How it works
 
 ```
@@ -147,7 +153,24 @@ of them can do something the others cannot see.
   live, with a guided add-disk wizard.
 - **Cockpit** — the web dashboard renders the same `status --json` payload,
   plus a group-creation wizard and an operations panel (scrub, expand,
-  replace, recompress, snapshot, schedule).
+  replace, recompress, snapshot, schedule). It follows the Cockpit shell's
+  own light/dark setting rather than deciding for itself, and reflows down to
+  a phone.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
+  <img alt="The SHR-RS dashboard: a row of summary tiles for background work, overall state, installed drives, detected raw capacity and RAID members, a second row for usable, in-use and free space and protection level, then a storage allocation card breaking the pool into in-use, free, parity and system-disk shares." src="docs/images/dashboard-light.png">
+</picture>
+
+<sub>This screenshot follows your own light or dark preference, the same way
+the dashboard follows Cockpit's.</sub>
+
+At a phone width the tables stack into labelled rows, the description lists
+turn vertical, and the action rows wrap instead of running off the card:
+
+<img alt="The same group panel at a 390-pixel width: the band table stacked into labelled rows, one field per line, with the filesystem UUID and member-disk names wrapped inside the card." src="docs/images/mobile-dark.png" width="320">
+
+<sub>Screenshots use example data; the layouts are the shipped build.</sub>
 
 ## Safety
 
