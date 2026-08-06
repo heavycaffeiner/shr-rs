@@ -12,8 +12,13 @@ SPEC=$(RPM_NAME).spec
 PREFIX ?= /usr/local
 APPSTREAMFILE=org.cockpit_project.$(subst -,_,$(PACKAGE_NAME)).metainfo.xml
 VM_IMAGE=$(CURDIR)/test/images/$(TEST_OS)
-# stamp file to check for node_modules/
-NODE_MODULES_TEST=package-lock.json
+# stamp file to check for node_modules/. npm writes this marker inside
+# node_modules on both `install` and `ci`, which is what makes it a stamp for
+# "the tree is installed". It used to be package-lock.json itself; that stopped
+# working the moment the lock became a committed file, because then it exists
+# from checkout and every rule depending on it looks satisfied before anything
+# has been installed.
+NODE_MODULES_TEST=node_modules/.package-lock.json
 # build.js ran in non-watch mode
 DIST_TEST=runtime-npm-modules.txt
 # one example file in pkg/lib to check if it was already checked out
@@ -135,12 +140,16 @@ dist: $(TARFILE)
 # we don't ship node_modules for license and compactness reasons; we ship a
 # pre-built dist/ (so it's not necessary) and ship package-lock.json (so that
 # node_modules/ can be reconstructed if necessary)
+#
+# package-lock.json is no longer named explicitly here: it is a tracked file
+# now, so `git ls-files` already carries it, and $(NODE_MODULES_TEST) points
+# inside node_modules, which this tarball excludes.
 $(TARFILE): export NODE_ENV=production
 $(TARFILE): $(DIST_TEST) $(SPEC) packaging/arch/PKGBUILD
 	if type appstream-util >/dev/null 2>&1; then appstream-util validate-relax --nonet *.metainfo.xml; fi
 	tar --xz $(TAR_ARGS) -cf $(TARFILE) --transform 's,^,$(RPM_NAME)/,' \
 		--exclude packaging/$(SPEC).in --exclude node_modules \
-		$$(git ls-files) $(COCKPIT_REPO_FILES) $(NODE_MODULES_TEST) $(DIST_TEST) \
+		$$(git ls-files) $(COCKPIT_REPO_FILES) $(DIST_TEST) \
 		$(SPEC) packaging/arch/PKGBUILD dist/
 
 # Not a prerequisite of srpm/rpm any more: the spec only unpacks this under
@@ -209,11 +218,21 @@ codecheck: test/common $(NODE_MODULES_TEST)
 bots: $(COCKPIT_REPO_STAMP)
 	test/common/make-bots
 
-$(NODE_MODULES_TEST): package.json
-	# if it exists already, npm install won't update it; force that so that we always get up-to-date packages
-	rm -f package-lock.json
+# `npm ci` from the committed lock, not `npm install` after deleting it.
+#
+# The starter kit deleted package-lock.json here on purpose, to stay on the
+# latest of everything. That makes a release only as reproducible as the
+# registry on the day it runs, and v0.2.0's first build is what it cost:
+# @patternfly/react-tokens is pulled in transitively at `^6.6.0`, 6.6.1 had
+# been published since the direct dependencies were pinned at 6.6.0, and the
+# resulting split token set failed `src/patternfly.test.ts`. That module ships
+# inside the bundle, so it was not a build-only mismatch.
+#
+# `npm ci` also refuses to run when the lock and package.json disagree, which
+# turns "someone edited package.json and forgot the lock" into a loud failure
+# instead of a silently different tree.
+$(NODE_MODULES_TEST): package.json package-lock.json
 	# unset NODE_ENV, skips devDependencies otherwise; this often hangs, so try a few times
-	for _ in `seq 3`; do timeout 10m env -u NODE_ENV npm install --ignore-scripts && exit 0; done; exit 1
-	env -u NODE_ENV npm prune
+	for _ in `seq 3`; do timeout 10m env -u NODE_ENV npm ci --ignore-scripts && exit 0; done; exit 1
 
 .PHONY: all clean install devel-install devel-uninstall print-version dist node-cache rpm prepare-check check vm print-vm

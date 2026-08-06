@@ -146,11 +146,17 @@ jobs:
         with:
           node-version: '22'
 
+      # `npm ci`, not `npm install`: it installs exactly what package-lock.json
+      # records and fails if the lock and package.json disagree, so a release
+      # builds the tree that was tested rather than whatever the registry
+      # offers on the day. v0.2.0's first build is why: it resolved
+      # @patternfly/react-tokens to 6.6.1 against 6.6.0 pins and failed the
+      # PatternFly coherence test.
       - name: Check
         working-directory: cockpit
         run: |
           set -eux
-          npm install --ignore-scripts
+          npm ci --ignore-scripts
           npm test
           npm run typecheck
           npm run eslint
