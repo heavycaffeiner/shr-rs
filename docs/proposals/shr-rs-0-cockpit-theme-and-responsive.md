@@ -893,3 +893,65 @@ text reachable: a `Label`'s text ellipsis, a table column header's, and
 in place the check reports nothing on the fixed build across all four
 combinations, and reports the clipped card on the pre-change build at both
 phone-width combinations, so it discriminates rather than merely passing.
+
+### 8.8 The dialogs, swept again with the check that had been missing
+
+The earlier dialog pass (§8.4) asked whether each modal fitted the viewport and
+whether its body scrolled. Both were true everywhere, and both were the wrong
+question, as §8.7 showed. A dialog is a stack of scroll containers by
+construction, so it is the most likely place for the same defect to hide. All
+nine dialogs were re-swept at 390px in both themes, now also asking whether any
+descendant is clipped inside something that scrolls.
+
+Three real defects, none of which the first pass could see:
+
+- **The close button was rendered after the header, not before it.** PatternFly
+  positions `.pf-v6-c-modal-box__close` absolutely and reserves room for it with
+  a sibling rule, `.pf-v6-c-modal-box__close + * { margin-inline-end: ... }`, so
+  the gap lands on whatever element directly follows it. With the header first,
+  that margin went to `ModalBody`: the body was needlessly 40px narrower and the
+  title had no reserved space at all, so it ran underneath the button.
+  `Change compression for group "shr1"` rendered as
+  `Change compression for group "s` with the close button sitting on the last
+  characters. `createGroupWizard.tsx` had the right order all along, which is
+  why only these dialogs showed it.
+- **Dialog titles truncated exactly where the group name is.** PatternFly gives
+  `.pf-v6-c-modal-box__title` and its inner `__title-text` `white-space: nowrap`
+  with an ellipsis, which is reasonable on a desktop. Every dialog title in this
+  plugin ends in the group it acts on, and the change-compression dialog never
+  names the group again in its body, so on a phone the operator had nothing left
+  to tell two groups apart by. Both modal shells now pass their title through a
+  span carrying `pf-v6-u-text-wrap`, and it takes a second line instead.
+- **The expand dialog's disk picker overflowed the modal, twice over.** A
+  `<fieldset>` carries the UA default `min-inline-size: min-content`, which no
+  other element does, so it refused to shrink below its widest child and sat at
+  344px inside a 326px body. Releasing that with `pf-v6-u-min-width` exposed a
+  second layer: `.pf-v6-c-check` is a grid whose second track is `1fr`, and a
+  `1fr` track's automatic minimum is its content's min-content width, which the
+  non-wrapping system-disk `Label` held open at 340px. The same utility on the
+  description releases it, and the Label falls back to its own ellipsis.
+
+The wizard's own long control label was a fourth: PatternFly renders an
+`ExpandableSection` toggle as a `Button`, and a button is `white-space: nowrap`,
+so "Advanced: LVM volume group / logical volume name" came out 369px wide inside
+a 326px body with its tail clipped. It is passed as `toggleContent` now so the
+label can wrap.
+
+After those, all 18 dialog/theme combinations report no clipping, no control
+outside its box, no document overflow, and a close button that hit-tests to
+itself at 37x37.
+
+**One finding left unfixed, deliberately.** The create-group wizard's five
+disk-selection checkboxes are bare 13x13 inputs: they live in table cells with
+an `aria-label` and no `<label>` element, so the hit target is the box itself,
+under WCAG 2.5.8's 24x24 minimum. Every other checkbox in the plugin is nested
+inside a `<label>` and so has a 340x47 target. The 13x13 figure is the browser's
+native checkbox size, which PatternFly does not override anywhere, so Cockpit's
+own tables have the same target; changing it here means either duplicating the
+device name as a visible label or writing the local CSS this work exists to
+avoid. Recorded rather than papered over.
+
+Two corrections to the sweep itself, since a checker that cries wolf gets
+ignored: it measured the input rather than the label a finger actually lands on,
+and it counted PatternFly's deliberate `Label` and table-header ellipsis as
+findings. Both are excluded now, and the remaining count is real.

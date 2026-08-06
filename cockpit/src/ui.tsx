@@ -63,6 +63,35 @@ export const MONO = "pf-v6-u-font-family-monospace";
  * hint at them: they were simply unreachable. */
 export const ACTION_ROW = "pf-v6-u-flex-wrap";
 
+/** Wraps the text passed as a dialog's `ModalHeader title`.
+ *
+ * PatternFly gives both `.pf-v6-c-modal-box__title` and its inner
+ * `__title-text` `white-space: nowrap` with `text-overflow: ellipsis`, so a
+ * modal title is a single line by design. That is fine on a desktop and not
+ * fine here: every one of this plugin's dialog titles ends in the group it is
+ * about, so the phone-width ellipsis eats exactly the identifying part.
+ * Measured at 390px, "Change compression for group \"shr1\"" ended at
+ * `...for grou` -- and that dialog's body never names the group again, so the
+ * operator had nothing left to tell two groups apart by.
+ *
+ * The utility goes on a span INSIDE the title rather than on the title itself:
+ * `white-space: normal` on a descendant is enough to let the text wrap, while
+ * the title element keeps the rest of PatternFly's header styling. The title
+ * box has no fixed height, so it simply grows to two lines. */
+export const TITLE_WRAP = "pf-v6-u-text-wrap";
+
+/** Goes on every `<fieldset>` in this plugin.
+ *
+ * A `<fieldset>` carries the UA default `min-inline-size: min-content`, which
+ * no other element does and which means it refuses to shrink below its widest
+ * child no matter how narrow its container is. Measured in the expand dialog
+ * at 390px: the fieldset sat at 344px inside a 326px body and its content was
+ * clipped by the modal, so the disk list ran under the dialog's edge.
+ *
+ * `pf-v6-u-min-width` is PatternFly's `min-width: 0 !important`, which is the
+ * standard remedy and the reason the utility exists. */
+export const FIELDSET_SHRINK = "pf-v6-u-min-width";
+
 export interface Tone {
     label: string;
     tone: "good" | "warning" | "neutral";

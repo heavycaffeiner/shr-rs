@@ -1070,3 +1070,74 @@ test("no dialog wires its raw onClose prop directly to a JSX callback -- every d
         `a dialog wired its raw onClose prop directly to a JSX callback instead of its own handleClose: ${JSON.stringify(rawWiring)}`,
     );
 });
+
+// PatternFly positions `.pf-v6-c-modal-box__close` absolutely and reserves
+// room for it with a SIBLING rule:
+//
+//   .pf-v6-c-modal-box__close + * { margin-inline-end: <spacer> }
+//
+// so the gap lands on whatever element directly follows the close button. With
+// the header rendered first and the close button after it, that margin went to
+// `ModalBody` instead: measured at 390px, the body was needlessly 40px
+// narrower while the title had no reserved space at all and ran underneath the
+// button. `Change compression for group "shr1"` rendered as
+// `Change compression for group "s` with the close button sitting on top of
+// the last characters, so the group name was exactly what disappeared.
+//
+// `createGroupWizard.tsx` had the close button first all along, which is why
+// only these dialogs showed it, and is the order this pins.
+//
+// Asserted on source ORDER rather than on any computed style, because the
+// rule that makes it matter lives in PatternFly's stylesheet and no test in
+// this project has a layout engine. That is also why it is worth pinning: a
+// reordering here breaks the layout with nothing else failing.
+test("Modal renders its close button before the header, which is how PatternFly reserves room for it", async () => {
+    const { Modal } = await loadActionsDialogsModule();
+    const html = renderToStaticMarkup(
+        React.createElement(Modal, { title: "Change compression for group \"shr1\"", onClose: () => {} }, "body"),
+    );
+
+    const closeAt = html.indexOf("pf-v6-c-modal-box__close");
+    const headerAt = html.indexOf("pf-v6-c-modal-box__header");
+    const bodyAt = html.indexOf("pf-v6-c-modal-box__body");
+
+    assert.ok(closeAt >= 0, `no close element in the rendered modal: ${html.slice(0, 300)}`);
+    assert.ok(headerAt >= 0, `no header element in the rendered modal: ${html.slice(0, 300)}`);
+    assert.ok(bodyAt >= 0, `no body element in the rendered modal: ${html.slice(0, 300)}`);
+
+    assert.ok(
+        closeAt < headerAt,
+        "the close button must precede the header: PatternFly reserves its space with `.pf-v6-c-modal-box__close + *`, so with the header first the gap goes to the body and the title runs under the button",
+    );
+    assert.ok(
+        headerAt < bodyAt,
+        "the header must still precede the body, so the reserved gap lands on the header rather than on the body",
+    );
+});
+
+// Both of this plugin's modal shells pass their title through a span carrying
+// `pf-v6-u-text-wrap`. PatternFly gives `.pf-v6-c-modal-box__title` and its
+// inner `__title-text` `white-space: nowrap` with an ellipsis, which is fine
+// on a desktop and not fine here: every dialog title in this plugin ends in
+// the group it acts on, so at 390px the ellipsis ate exactly the identifying
+// part -- `Change compression for group "shr1"` stopped at `...for grou`, and
+// that dialog's body never names the group again.
+test("both modal shells let their title wrap, so a phone keeps the group name", async () => {
+    const { Modal } = await loadActionsDialogsModule();
+    const html = renderToStaticMarkup(
+        React.createElement(Modal, { title: "Change compression for group \"shr1\"", onClose: () => {} }, "body"),
+    );
+    assert.match(
+        html,
+        /pf-v6-c-modal-box__title[\s\S]{0,200}pf-v6-u-text-wrap/,
+        `the dialog title must carry pf-v6-u-text-wrap or PatternFly truncates it to one line: ${html.slice(0, 400)}`,
+    );
+
+    // The wizard is a separate hand-built shell, so it needs its own guard.
+    const wizardSource = fs.readFileSync(path.join(srcDir, "createGroupWizard.tsx"), "utf8");
+    assert.match(
+        wizardSource,
+        /<ModalHeader title=\{<span className=\{TITLE_WRAP\}>/,
+        "createGroupWizard.tsx's ModalHeader must wrap its title in TITLE_WRAP too, for the same reason",
+    );
+});

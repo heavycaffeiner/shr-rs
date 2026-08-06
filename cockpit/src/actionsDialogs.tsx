@@ -156,7 +156,7 @@ import {
 } from "./actions.ts";
 import { _, format, ngettext } from "./i18n.ts";
 import { formatBytes, type DiskStatus, type GroupStatus } from "./model.ts";
-import { ACTION_ROW, Badge, Caveat, MONO, Muted } from "./ui.js";
+import { ACTION_ROW, Badge, Caveat, FIELDSET_SHRINK, MONO, Muted, TITLE_WRAP } from "./ui.js";
 
 // --- shared UI bits ----------------------------------------------------------
 
@@ -215,7 +215,20 @@ export const Modal = ({
                 aria-modal="true"
                 aria-label={title}
             >
-                <ModalHeader title={title} />
+                {/* The close button comes BEFORE the header, which is not a
+                    style choice. PatternFly positions `__close` absolutely and
+                    reserves room for it with
+                    `.pf-v6-c-modal-box__close + * { margin-inline-end: ... }`,
+                    so whatever follows the close button is what gets the gap.
+                    With the header first, that margin landed on `ModalBody`
+                    instead: measured at 390px, the body was needlessly 40px
+                    narrower while the title had no reserved space at all and
+                    ran underneath the button. "Change compression for group
+                    \"shr1\"" rendered as `Change compression for group "s`
+                    with the × sitting on top of the last characters, so the
+                    group name was the part that disappeared.
+                    `createGroupWizard.tsx` already had this order, which is
+                    why its dialog never showed the fault. */}
                 <div className="pf-v6-c-modal-box__close">
                     <button
                         className="pf-v6-c-button pf-m-plain"
@@ -245,6 +258,7 @@ export const Modal = ({
                         <span className="pf-v6-c-button__icon"><TimesIcon /></span>
                     </button>
                 </div>
+                <ModalHeader title={<span className={TITLE_WRAP}>{title}</span>} />
                 <ModalBody>{children}</ModalBody>
             </div>
         </Bullseye>
@@ -565,7 +579,7 @@ const ExpandDialog = ({
             {step === "select" && (
                 <Stack hasGutter>
                     <StackItem>
-                        <fieldset>
+                        <fieldset className={FIELDSET_SHRINK}>
                             <legend>{_("dialogs.expand.legend")}</legend>
                             {candidates.length === 0 && <p><Muted>{_("dialogs.expand.noCandidates")}</Muted></p>}
                             {candidates.map(disk => {
@@ -608,7 +622,18 @@ const ExpandDialog = ({
                                         >
                                             <span className={MONO}>/dev/{disk.name}</span>
                                         </span>
-                                        <span className="pf-v6-c-check__description">
+                                        {/* `FIELDSET_SHRINK` (min-width: 0) again, for the
+                                            same reason one level down. `pf-v6-c-check` is a
+                                            grid whose second track is `1fr`, and a `1fr`
+                                            track's automatic minimum is its content's
+                                            min-content width. The system-disk `Badge` below
+                                            is a PatternFly `Label`, which does not wrap, so
+                                            its min-content held that track open: measured at
+                                            390px, this row demanded 340px inside a 322px
+                                            fieldset and the badge ran past the dialog edge.
+                                            With the minimum released the track shrinks and
+                                            the Label falls back to its own ellipsis. */}
+                                        <span className={`pf-v6-c-check__description ${FIELDSET_SHRINK}`}>
                                             <span>{disk.model ?? _("wizard.disks.noModel")}</span>{" "}
                                             <span className={MONO}>{formatBytes(disk.size)}</span>
                                             {disabled && (

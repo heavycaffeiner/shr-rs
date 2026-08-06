@@ -81,7 +81,7 @@ import {
 } from "./createGroup.ts";
 import { _, format, ngettext } from "./i18n.ts";
 import { formatBytes, type DiskStatus } from "./model.ts";
-import { ACTION_ROW, Caveat, Chip, MONO, Muted } from "./ui.js";
+import { ACTION_ROW, Caveat, Chip, FIELDSET_SHRINK, MONO, Muted, TITLE_WRAP } from "./ui.js";
 
 interface Props {
     disks: DiskStatus[];
@@ -249,7 +249,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                     <div className={MODAL_BOX_CLOSE}>
                         <Button variant="plain" onClick={onClose} aria-label={_("common.close")} icon={<TimesIcon />} />
                     </div>
-                    <ModalHeader title={_("wizard.title")} />
+                    <ModalHeader title={<span className={TITLE_WRAP}>{_("wizard.title")}</span>} />
                     <ModalBody>
                         {step === "select-disks" && (
                             <Stack hasGutter>
@@ -296,7 +296,7 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                 </StackItem>
 
                                 <StackItem>
-                                    <fieldset>
+                                    <fieldset className={FIELDSET_SHRINK}>
                                         <legend>{_("wizard.disks.legend")}</legend>
                                         <Table variant="compact" aria-label={_("wizard.disks.legend")}>
                                             <Thead>
@@ -373,8 +373,17 @@ export const CreateGroupWizard = ({ disks, existingGroupNames, existingGroupVgNa
                                 </StackItem>
 
                                 <StackItem>
+                                    {/* `toggleContent`, not `toggleText`, only so the
+                                        label can carry `TITLE_WRAP`. PatternFly renders
+                                        the toggle as a `Button`, and a button is
+                                        `white-space: nowrap` by design. Measured at
+                                        390px, this one came out 369px wide inside a
+                                        326px modal body and the tail of
+                                        "...logical volume name" was clipped by the
+                                        dialog edge. Letting it wrap costs a second line
+                                        and keeps the whole label readable. */}
                                     <ExpandableSection
-                                    toggleText={_("wizard.advanced.toggle")}
+                                    toggleContent={<span className={TITLE_WRAP}>{_("wizard.advanced.toggle")}</span>}
                                     isExpanded={advancedOpen}
                                     onToggle={() => setAdvancedOpen(value => !value)}
                                     >
