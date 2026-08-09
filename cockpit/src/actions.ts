@@ -195,6 +195,12 @@ export interface ExpandInput {
     diskIds: string[];
     forceContent: boolean;
     priority: ReshapePriority;
+    /** `shr-rs expand --skip-scrub-check`: waives the engine's requirement
+     * that every band of the target group has a scrub that COMPLETED within
+     * the last 30 days. Always starts `false`; only
+     * `ExpandController.acceptScrubCheckRisk()` turns it on, and only after
+     * the engine itself has reported the check failing. */
+    skipScrubCheck: boolean;
 }
 
 export const expandPreflightArgs = (input: ExpandInput): SpawnCall => (
@@ -211,6 +217,7 @@ export const expandDryRunArgs = (input: ExpandInput): SpawnCall => {
             "--add", disks.join(","),
             "--dry-run", "--json",
             ...(input.forceContent ? ["--force-content"] : []),
+            ...(input.skipScrubCheck ? ["--skip-scrub-check"] : []),
             // Only appended for a non-default choice -- "balanced"
             // already matches shr-cli's own default_value, so omitting the
             // flag there keeps this argv byte-for-byte what it was before
@@ -234,7 +241,8 @@ export const expandArgs = (input: ExpandInput): SpawnCall => {
     return { argv: [...preview.argv.filter(arg => arg !== "--dry-run"), "--yes"], options: preview.options };
 };
 
-export type ExpandStep = "preflight" | "blocked" | "preview" | "confirm" | "executing" | "done" | "error";
+export type ExpandStep =
+    "preflight" | "blocked" | "preview" | "scrubWarning" | "confirm" | "executing" | "done" | "error";
 
 export interface ExpandState {
     step: ExpandStep;
@@ -243,6 +251,9 @@ export interface ExpandState {
     confirmationText: string;
     result: CreatedGroupSummary | null;
     errorMessage: string | null;
+    /** The engine's own scrub-freshness text, kept verbatim for the
+     * `scrubWarning` step to show. Null on every other step. */
+    scrubCheckWarning: string | null;
 }
 
 export const initialExpandState = (): ExpandState => ({
@@ -252,7 +263,21 @@ export const initialExpandState = (): ExpandState => ({
     confirmationText: "",
     result: null,
     errorMessage: null,
+    scrubCheckWarning: null,
 });
+
+/**
+ * Whether a failed expand is the pre-reshape scrub-freshness refusal
+ * specifically, as opposed to any other validation error (a degraded band, a
+ * reshape already running) that waiving the check would do nothing about.
+ *
+ * Matched on the `--skip-scrub-check` substring, the same way `shr-tui`'s
+ * `is_scrub_check_warning` does it -- that flag name is what the engine's
+ * message tells the operator to pass, so its presence IS the signal that an
+ * override exists for this refusal. Survives both error shapes Cockpit can
+ * receive: the plain stderr line and `--json`'s `{"error": "..."}` envelope.
+ */
+export const isScrubCheckWarning = (message: string): boolean => message.includes("--skip-scrub-check");
 
 /** Drives one expand run through preflight -> dry-run preview -> typed
  * confirmation -> execute, mirroring `CreateGroupController` in
@@ -260,11 +285,18 @@ export const initialExpandState = (): ExpandState => ({
 export class ExpandController {
     state: ExpandState = initialExpandState();
     private readonly spawn: Spawn;
-    private readonly input: ExpandInput;
+    private input: ExpandInput;
 
     constructor(spawn: Spawn, input: ExpandInput) {
         this.spawn = spawn;
         this.input = input;
+    }
+
+    /** Whether this run is going ahead without a fresh scrub, for the UI to
+     * repeat at the final confirmation. Read from the input the argv builders
+     * use, so it can never disagree with the command actually spawned. */
+    get scrubCheckSkipped(): boolean {
+        return this.input.skipScrubCheck;
     }
 
     async runPreflight(): Promise<ExpandState> {
@@ -286,10 +318,39 @@ export class ExpandController {
         try {
             const raw = await this.spawn(argv, options);
             const preview = parseCreatePreview(raw);
-            this.state = { ...this.state, step: "confirm", preview };
+            this.state = { ...this.state, step: "confirm", preview, scrubCheckWarning: null };
         } catch (error) {
-            this.state = { ...this.state, step: "error", errorMessage: spawnErrorMessage(error) };
+            const message = spawnErrorMessage(error);
+            // The dry run is where the engine's scrub-freshness gate fires,
+            // and Cockpit used to dead-end on it: the operator saw the raw
+            // refusal on the error panel with no way past it, making this the
+            // only surface with no equivalent of `--skip-scrub-check`
+            // (shr-cli has the flag, shr-tui has `Step::ScrubCheckWarning`).
+            // A brand-new group has no scrub history at all, so the very
+            // first expand after a create always landed here.
+            //
+            // `!skipScrubCheck` guards the branch: once the override is on,
+            // a message still naming the flag is a different refusal, and
+            // offering the same override again would just loop.
+            if (!this.input.skipScrubCheck && isScrubCheckWarning(message))
+                this.state = { ...this.state, step: "scrubWarning", scrubCheckWarning: message };
+            else
+                this.state = { ...this.state, step: "error", errorMessage: message };
         }
+        return this.state;
+    }
+
+    /**
+     * Waive the scrub-freshness requirement for this run, the Cockpit
+     * equivalent of `--skip-scrub-check`. Callable only from `scrubWarning`,
+     * so the bypass cannot be armed ahead of time: the operator can only
+     * reach it after the engine has said which band is stale and why it
+     * matters. The caller re-runs `runPreview()` to proceed.
+     */
+    acceptScrubCheckRisk(): ExpandState {
+        if (this.state.step !== "scrubWarning")
+            throw new Error("acceptScrubCheckRisk() called outside the scrub warning step -- this is a caller bug");
+        this.input = { ...this.input, skipScrubCheck: true };
         return this.state;
     }
 

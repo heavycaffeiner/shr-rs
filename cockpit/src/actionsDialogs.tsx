@@ -561,7 +561,10 @@ const ExpandDialog = ({
 
     const startPreflight = async () => {
         setBuildError(null);
-        const input: ExpandInput = { groupName: group.name, diskIds: selected, forceContent, priority };
+        // `skipScrubCheck: false` is not configurable here on purpose --
+        // only the `scrubWarning` step below can turn it on, and only after
+        // the engine has refused this specific expand.
+        const input: ExpandInput = { groupName: group.name, diskIds: selected, forceContent, priority, skipScrubCheck: false };
         const next = new ExpandController(cockpit.spawn.bind(cockpit), input);
         setBusy(true);
         try {
@@ -584,6 +587,16 @@ const ExpandDialog = ({
         } finally {
             setBusy(false);
         }
+    };
+
+    // Re-runs the same dry run with the scrub-freshness gate waived. Two
+    // deliberate operator actions still stand between here and any write:
+    // this button, and the typed group name at the confirm step.
+    const acceptScrubRiskAndRetry = async () => {
+        if (!controller)
+            return;
+        controller.acceptScrubCheckRisk();
+        await runPreview();
     };
 
     const setConfirmationText = (text: string) => {
@@ -792,6 +805,41 @@ const ExpandDialog = ({
                 </Stack>
             )}
 
+            {step === "scrubWarning" && (
+                <Stack hasGutter>
+                    <StackItem>
+                        <Alert variant="warning" isInline title={_("dialogs.expand.scrubWarningTitle")}>
+                            <p>{_("dialogs.expand.scrubWarningBody")}</p>
+                        </Alert>
+                    </StackItem>
+                    {/* The engine's own sentence, verbatim -- it names the band
+                        and the window, which no translated summary above can. */}
+                    <StackItem>
+                        <p><Muted>{state?.scrubCheckWarning}</Muted></p>
+                    </StackItem>
+                    <StackItem>
+                        <ActionList className={ACTION_ROW}>
+                            <ActionListItem>
+                                <button
+                                    className="pf-v6-c-button pf-m-secondary" type="button"
+                                    onClick={startOver} disabled={busy} title={busy ? inFlightReason() : undefined}
+                                >
+                                    {_("wizard.action.backToDisks")}
+                                </button>
+                            </ActionListItem>
+                            <ActionListItem>
+                                <button
+                                    className="pf-v6-c-button pf-m-warning" type="button"
+                                    disabled={busy} onClick={acceptScrubRiskAndRetry}
+                                >
+                                    {busy ? _("wizard.action.previewBusy") : _("dialogs.expand.scrubWarningAccept")}
+                                </button>
+                            </ActionListItem>
+                        </ActionList>
+                    </StackItem>
+                </Stack>
+            )}
+
             {step === "confirm" && state?.preview && (
                 <Stack hasGutter>
                     <StackItem>
@@ -799,6 +847,14 @@ const ExpandDialog = ({
                             <p>{_("dialogs.expand.confirmBody")}</p>
                         </Alert>
                     </StackItem>
+                    {/* A waived safety check has to be visible at the moment of
+                        the irreversible click, not only on the step where it
+                        was accepted. */}
+                    {controller?.scrubCheckSkipped && (
+                        <StackItem>
+                            <Alert variant="warning" isInline title={_("dialogs.expand.scrubOverridden")} />
+                        </StackItem>
+                    )}
                     <StackItem>
                         <DescriptionList orientation={{ md: "horizontal" }} isCompact>
                             <DescriptionListGroup>

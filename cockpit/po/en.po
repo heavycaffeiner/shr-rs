@@ -1536,6 +1536,22 @@ msgid "dialogs.expand.previewIntro"
 msgstr "The safety check passed. The expansion plan will now be generated (nothing is executed yet)."
 
 #: src/actionsDialogs.tsx
+msgid "dialogs.expand.scrubWarningTitle"
+msgstr "This group has no completed error check from the last 30 days."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.scrubWarningBody"
+msgstr "An expansion rebuilds redundancy from what each disk holds right now, so corruption that has not been found yet is written into the new layout instead of being caught. Run a scrub first, or continue and accept that risk. A group that was only just created has no scrub history yet, which is normal: the initial sync writes parity, it does not verify anything."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.scrubWarningAccept"
+msgstr "Expand without the check"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.scrubOverridden"
+msgstr "Continuing without a recent error check."
+
+#: src/actionsDialogs.tsx
 msgid "dialogs.expand.confirmBody"
 msgstr "The RAID reshape starts now. Once it has started it cannot be rolled back part-way."
 

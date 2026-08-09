@@ -1536,6 +1536,22 @@ msgid "dialogs.expand.previewIntro"
 msgstr "안전 점검을 통과했습니다. 확장 계획 미리보기를 생성합니다 (아직 아무것도 실행하지 않습니다)."
 
 #: src/actionsDialogs.tsx
+msgid "dialogs.expand.scrubWarningTitle"
+msgstr "이 그룹에는 최근 30일 안에 완료된 오류 검사가 없습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.scrubWarningBody"
+msgstr "확장은 각 디스크가 지금 담고 있는 내용으로 이중화를 다시 만듭니다. 아직 발견되지 않은 손상이 있으면 걸러지지 않고 새 레이아웃에 그대로 기록됩니다. 스크럽을 먼저 실행하거나, 그 위험을 감수하고 계속하십시오. 방금 만든 그룹이라면 스크럽 기록이 없는 것이 정상입니다. 최초 동기화는 패리티를 쓸 뿐 검증하지 않습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.scrubWarningAccept"
+msgstr "검사 없이 확장"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.expand.scrubOverridden"
+msgstr "최근 오류 검사 없이 진행합니다."
+
+#: src/actionsDialogs.tsx
 msgid "dialogs.expand.confirmBody"
 msgstr "RAID 재구성이 시작됩니다. 시작한 뒤에는 중간에 되돌릴 수 없습니다."
 

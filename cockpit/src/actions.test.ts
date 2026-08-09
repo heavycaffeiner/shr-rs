@@ -19,6 +19,7 @@ import {
     groupMemberDisks,
     hasStableId,
     isConfirmationValid,
+    isScrubCheckWarning,
     isValidReplacement,
     parseDestroyResult,
     parseScrubStatus,
@@ -95,11 +96,23 @@ const expandedJson = JSON.stringify({
     filesystem: { fs_uuid: "abc-123", mount_point: "/mnt/shr_data", vg_name: "shr_vg", lv_name: "data", compression: "zstd:3" },
 });
 
+/** Verbatim from `OrchestrationEngine::expand`'s scrub-freshness refusal --
+ * the never-scrubbed variant, which is what a group created minutes ago
+ * produces and therefore the one Cockpit hits most. A copy that drifted from
+ * the engine's would make these tests pass while the real dialog dead-ends,
+ * so what they key on is the advice tail every variant shares. */
+const scrubStaleMessage = "Validation error: band 0 (md0) has never been checked for errors (a group starts " +
+    "with no scrub history: the initial sync writes redundancy, it does not verify what it reads); run " +
+    "`shr-rs fs scrub start` first, or pass --skip-scrub-check to expand anyway (expanding rebuilds the " +
+    "redundancy from each disk's CURRENT data, so undetected corruption gets baked into the new layout " +
+    "instead of being caught)";
+
 const expandInput = (overrides: Partial<ExpandInput> = {}): ExpandInput => ({
     groupName: "shr1",
     diskIds: ["sde"],
     forceContent: false,
     priority: "balanced",
+    skipScrubCheck: false,
     ...overrides,
 });
 
@@ -198,6 +211,13 @@ describe("expand argument builders reject bad input before spawn", () => {
         assert.ok(!expandDryRunArgs(expandInput({ forceContent: false })).argv.includes("--force-content"));
         assert.ok(expandDryRunArgs(expandInput({ forceContent: true })).argv.includes("--force-content"));
     });
+
+    it("--skip-scrub-check only appears when explicitly requested, on the dry run and the real call alike", () => {
+        assert.ok(!expandDryRunArgs(expandInput()).argv.includes("--skip-scrub-check"));
+        assert.ok(!expandArgs(expandInput()).argv.includes("--skip-scrub-check"));
+        assert.ok(expandDryRunArgs(expandInput({ skipScrubCheck: true })).argv.includes("--skip-scrub-check"));
+        assert.ok(expandArgs(expandInput({ skipScrubCheck: true })).argv.includes("--skip-scrub-check"));
+    });
 });
 
 // `shr-rs expand --priority <background|balanced|max>` (shr-cli's
@@ -255,6 +275,19 @@ describe("scrub speed (--priority pass-through)", () => {
 
     it("still refuses an empty group name, profile or not", () => {
         assert.throws(() => scrubStartArgs("", "max"));
+    });
+});
+
+describe("scrub-freshness refusal detection", () => {
+    it("recognises the engine's message in both shapes Cockpit can receive it in", () => {
+        assert.ok(isScrubCheckWarning(scrubStaleMessage));
+        assert.ok(isScrubCheckWarning(JSON.stringify({ error: scrubStaleMessage })));
+    });
+
+    it("does not claim a refusal the override cannot fix", () => {
+        assert.ok(!isScrubCheckWarning("Validation error: band 0 (md0) is degraded; expand is blocked"));
+        assert.ok(!isScrubCheckWarning("group `shr1` currently has a scrub running; wait for it to finish"));
+        assert.ok(!isScrubCheckWarning(""));
     });
 });
 
@@ -316,6 +349,75 @@ describe("ExpandController (no execution without preview + matching confirmation
         assert.ok(spawn.calls[2].argv.includes("expand"));
         assert.ok(spawn.calls[2].argv.includes("--yes"));
         assert.ok(!spawn.calls[2].argv.includes("--dry-run"));
+    });
+
+    it("a scrub-freshness refusal is not a dead end: scrubWarning, then an explicit override reaches confirm", async () => {
+        // Cockpit had no equivalent of `--skip-scrub-check`, so this refusal
+        // (which EVERY expand of a freshly created group hits -- `create()`
+        // leaves `last_scrub: None`) landed on the error panel with no way
+        // forward, forcing the operator to the CLI.
+        const spawn = new RecordingSpawn([
+            ok(okPreflightJson),
+            fail(scrubStaleMessage),
+            ok(expandPreviewJson),
+            ok(expandedJson),
+        ]);
+        const controller = new ExpandController(spawn.fn, expandInput());
+
+        await controller.runPreflight();
+        const warned = await controller.runPreview();
+        assert.equal(warned.step, "scrubWarning");
+        assert.equal(warned.scrubCheckWarning, scrubStaleMessage);
+        assert.equal(warned.errorMessage, null, "a recoverable warning is not an error");
+        assert.equal(controller.canExecute(), false);
+        assert.equal(controller.scrubCheckSkipped, false);
+        assert.ok(!spawn.calls[1].argv.includes("--skip-scrub-check"), "the first dry run never waives the check");
+
+        controller.acceptScrubCheckRisk();
+        assert.equal(controller.scrubCheckSkipped, true);
+        const confirmed = await controller.runPreview();
+        assert.equal(confirmed.step, "confirm");
+        assert.equal(confirmed.scrubCheckWarning, null, "the warning is cleared once the preview goes through");
+        assert.ok(spawn.calls[2].argv.includes("--skip-scrub-check"));
+
+        controller.setConfirmationText("shr1");
+        const final = await controller.execute();
+        assert.equal(final.step, "done");
+        assert.ok(spawn.calls[3].argv.includes("--skip-scrub-check"), "the executed call carries what the preview did");
+    });
+
+    it("the override cannot be armed before the engine has actually refused", async () => {
+        const spawn = new RecordingSpawn([ok(okPreflightJson), ok(expandPreviewJson)]);
+        const controller = new ExpandController(spawn.fn, expandInput());
+
+        assert.throws(() => controller.acceptScrubCheckRisk(), /caller bug/);
+        await controller.runPreflight();
+        assert.throws(() => controller.acceptScrubCheckRisk(), /caller bug/);
+        await controller.runPreview();
+        assert.throws(() => controller.acceptScrubCheckRisk(), /caller bug/, "not from confirm either");
+        assert.equal(controller.scrubCheckSkipped, false);
+    });
+
+    it("a refusal the override would not fix stays an error, and is never offered one", async () => {
+        const degraded = "Validation error: band 0 (md0) is degraded; expand is blocked until it is rebuilt";
+        const spawn = new RecordingSpawn([ok(okPreflightJson), fail(degraded)]);
+        const controller = new ExpandController(spawn.fn, expandInput());
+
+        await controller.runPreflight();
+        const state = await controller.runPreview();
+        assert.equal(state.step, "error");
+        assert.equal(state.errorMessage, degraded);
+        assert.equal(state.scrubCheckWarning, null);
+    });
+
+    it("with the override already on, a refusal still naming the flag is an error -- never a second identical prompt", async () => {
+        const spawn = new RecordingSpawn([ok(okPreflightJson), fail(scrubStaleMessage)]);
+        const controller = new ExpandController(spawn.fn, expandInput({ skipScrubCheck: true }));
+
+        await controller.runPreflight();
+        const state = await controller.runPreview();
+        assert.equal(state.step, "error", "offering the same override again would just loop");
+        assert.equal(state.errorMessage, scrubStaleMessage);
     });
 
     it("a rejected real expand spawn surfaces the engine's stderr verbatim and lands on error, not done", async () => {
