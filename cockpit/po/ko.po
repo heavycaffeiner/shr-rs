@@ -1476,6 +1476,26 @@ msgid "dialogs.scrub.cancel"
 msgstr "스크럽 취소"
 
 #: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priorityLabel"
+msgstr "검사 속도"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priority.unset"
+msgstr "현재 시스템 설정 그대로 (기본값)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priority.balanced"
+msgstr "균형: 평소 디스크 사용과 검사 속도를 절충"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priority.background"
+msgstr "백그라운드: 평소 디스크 사용을 우선, 검사는 느려짐"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priority.max"
+msgstr "최대 속도: 검사를 최대한 빨리, 평소 디스크 사용이 느려짐"
+
+#: src/actionsDialogs.tsx
 msgid "dialogs.expand.title"
 msgstr "그룹 \"$0\" 확장"
 

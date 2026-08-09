@@ -276,8 +276,7 @@ impl<'a> ThrottleController<'a> {
         priority: ReshapePriority,
     ) -> Self {
         let md_name = md_name.into();
-        let current_speed_kb =
-            read_current_speed_limit_max(runner).unwrap_or_else(|| priority.initial_speed_kb());
+        let current_speed_kb = read_speed_limit_max(runner).unwrap_or_else(|| priority.initial_speed_kb());
         Self {
             runner,
             md_name,
@@ -351,12 +350,39 @@ impl<'a> ThrottleController<'a> {
 /// `None` under dry-run (nothing real to read) or any read/parse failure --
 /// `ThrottleController::resume`'s caller falls back to the priority's
 /// initial speed in that case.
-fn read_current_speed_limit_max(runner: &dyn CommandRunner) -> Option<u64> {
+///
+/// Public because that parameter is HOST-WIDE and this crate is not the only
+/// layer that has to care about it: `shr-orchestrate` reads it once, before
+/// the first write of an operation, so the operator's own prior value can be
+/// put back afterward (see `StateFile::saved_speed_limit_max_kb`). The
+/// `None`-on-failure contract is what makes that safe -- a caller can never
+/// mistake "could not read it" for a real number worth saving.
+pub fn read_speed_limit_max(runner: &dyn CommandRunner) -> Option<u64> {
     if runner.is_dry_run() {
         return None;
     }
     let output = runner.run("cat", &["/proc/sys/dev/raid/speed_limit_max"]).ok()?;
     output.stdout.trim().parse().ok()
+}
+
+/// Write `/proc/sys/dev/raid/speed_limit_max` directly, with none of
+/// `ThrottleController`'s clamping or change-tracking.
+///
+/// The two callers that want exactly this and nothing else are both in
+/// `shr-orchestrate`: putting the operator's saved value back once no md
+/// array is running anything, and setting a scrub's speed ceiling. Neither
+/// is a throttle decision -- there is no floor, ceiling or profile to
+/// enforce, just one number to put in one file -- so neither should have to
+/// construct a `ThrottleController` bound to some particular band's
+/// `md_name` to reach it.
+///
+/// Deliberately does NOT touch `speed_limit_min` or `stripe_cache_size`
+/// alongside, unlike `ThrottleController::apply_initial`: those two are
+/// reshape write-path tuning, and quietly resetting `stripe_cache_size` to
+/// this crate's default would clobber a value an operator had raised by
+/// hand.
+pub fn write_speed_limit_max(runner: &dyn CommandRunner, kb: u64) -> Result<(), ExecError> {
+    write_sysfs(runner, "/proc/sys/dev/raid/speed_limit_max", &kb.to_string())
 }
 
 fn scale(kb: u64, factor: f64) -> u64 {

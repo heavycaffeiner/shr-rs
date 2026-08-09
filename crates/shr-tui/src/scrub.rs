@@ -168,7 +168,12 @@ impl ScrubController {
             return false;
         }
         let engine = OrchestrationEngine::new(runner, self.store.clone());
-        match engine.scrub_start(self.group_name.as_deref()) {
+        // `None`: the TUI has no speed-profile control of its own, so a scrub
+        // started here runs under whatever limit the system already has --
+        // the same thing this call did before `scrub_start` grew the
+        // parameter. `shr-rs fs scrub start --priority` is the way to ask for
+        // a different one.
+        match engine.scrub_start(self.group_name.as_deref(), None) {
             Ok(()) => self.state.step = Some(Step::Done),
             Err(e) => {
                 self.state.step = Some(Step::Error);

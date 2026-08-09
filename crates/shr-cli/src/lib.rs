@@ -127,6 +127,39 @@ fn attach_state_path(mut report: shr_command::StatusReport) -> shr_command::Stat
     report
 }
 
+/// What a periodic timer prints when `state.toml`'s lock is already held, in
+/// place of the work it skipped.
+///
+/// The interactive commands turn lock contention into an ERROR, which is
+/// right for an operator who typed a command and needs to know it did not
+/// run. A timer is the opposite case: `shr-rs-throttle-tick.timer` fires
+/// every two minutes, so a multi-hour `expand` would leave a trail of failed
+/// units for a condition that is entirely normal and resolves itself. This
+/// exits 0 and says what happened; the next firing picks the work up.
+///
+/// `base` is the arm's own success payload, so `--json` consumers keep every
+/// key they already parse (`bands_ticked`, `ok`, `snapshots`) rather than
+/// getting a differently-shaped object on a skipped run. `skipped` is what
+/// tells them the zeroes mean "not attempted", not "nothing to do".
+fn report_tick_skipped(json: bool, base: serde_json::Value) {
+    if json {
+        println!("{}", tick_skipped_report_json(base));
+    } else {
+        println!(
+            "another shr-rs command is working on the state file right now; \
+             skipping this run (lock: {STATE_LOCK_PATH})"
+        );
+    }
+}
+
+/// `report_tick_skipped`'s `--json` shape, split out so the "every existing
+/// key survives, `skipped` is added alongside" contract is testable without
+/// capturing stdout.
+fn tick_skipped_report_json(mut base: serde_json::Value) -> serde_json::Value {
+    base["skipped"] = serde_json::json!(true);
+    base
+}
+
 fn acquire_state_lock() -> Result<fd_lock::RwLock<std::fs::File>> {
     let lock_path = PathBuf::from(STATE_LOCK_PATH);
     if let Some(parent) = lock_path.parent() {
@@ -437,6 +470,15 @@ enum ScrubCmd {
         /// group.
         #[arg(long)]
         name: Option<String>,
+        // Deliberately no default, unlike `expand --priority`: leaving it
+        // out has to keep meaning "change no kernel parameter", which is
+        // what every `fs scrub start` did before this flag existed and what
+        // the scheduled-scrub timer still relies on.
+        /// How much of the disks' speed the check may take from everyday
+        /// file access. Left out, whatever speed limit the system already
+        /// has is used unchanged.
+        #[arg(long, value_enum)]
+        priority: Option<PriorityArg>,
     },
     /// Show how far the check has got, and record the result once it ends.
     Status {
@@ -1167,17 +1209,28 @@ fn dispatch(cli: Cli) -> Result<()> {
                 .with_confirm_sink(&AlwaysConfirmSink)
                 .with_notify_policy(load_notify_policy());
             match action {
-                ScrubCmd::Start { name } => {
+                ScrubCmd::Start { name, priority } => {
                     let mut lock = acquire_state_lock()?;
                     let _guard = lock.try_write().map_err(|_| {
                         anyhow!("another shr-rs create/expand/reconcile is already running (lock: {STATE_LOCK_PATH})")
                     })?;
                     let group = resolve_group_name_for_report(&state_store, name.as_deref());
-                    engine.scrub_start(name.as_deref())?;
+                    let speed = priority.map(shr_exec::ReshapePriority::from);
+                    engine.scrub_start(name.as_deref(), speed)?;
+                    // Reported because it is a real, host-wide kernel change
+                    // this command made -- an operator who passed
+                    // `--priority` and saw only "scrub started" would have no
+                    // way to tell it took effect. `speed_limit_kb` is absent
+                    // from the JSON (rather than null) when no profile was
+                    // given, matching "no parameter was touched".
+                    let speed_kb = speed.map(|p| p.initial_speed_kb());
                     if cli.json {
-                        println!("{}", scrub_action_report_json(&group, "started"));
+                        println!("{}", scrub_start_report_json(&group, speed_kb));
                     } else {
-                        println!("scrub started");
+                        match speed_kb {
+                            Some(kb) => println!("scrub started (speed limit {kb} KB/s)"),
+                            None => println!("scrub started"),
+                        }
                     }
                 }
                 ScrubCmd::Status { name } => {
@@ -1490,6 +1543,17 @@ fn dispatch(cli: Cli) -> Result<()> {
         Command::Internal {
             command: InternalCmd::ReshapeThrottleTick,
         } => {
+            // Held for the same reason `create`/`expand`/`scrub start` hold
+            // it: this tick is a read-modify-write of `state.toml` (the
+            // per-band SMART baseline, and the saved host-wide speed limit),
+            // so without the lock a command running concurrently can load an
+            // older copy and write it back over this one -- silently losing
+            // the saved speed limit, which nothing would then ever restore.
+            let mut lock = acquire_state_lock()?;
+            let Ok(_guard) = lock.try_write() else {
+                report_tick_skipped(cli.json, serde_json::json!({ "bands_ticked": 0 }));
+                return Ok(());
+            };
             let state_store = Arc::new(StateStore::new(STATE_PATH));
             let sys_runner = SystemRunner::new();
             let engine =
@@ -1507,6 +1571,15 @@ fn dispatch(cli: Cli) -> Result<()> {
             // Production wiring: this is the periodic entrypoint
             // `shr-rs-health-check.timer` (installed by `schedule install`,
             // every 15 minutes) actually invokes.
+            //
+            // Locked for the same reason as the throttle tick above:
+            // `check_health` self-heals `scrub_in_progress` and records SMART
+            // baselines, both of which write `state.toml`.
+            let mut lock = acquire_state_lock()?;
+            let Ok(_guard) = lock.try_write() else {
+                report_tick_skipped(cli.json, serde_json::json!({ "ok": true }));
+                return Ok(());
+            };
             let state_store = Arc::new(StateStore::new(STATE_PATH));
             let sys_runner = SystemRunner::new();
             let engine = OrchestrationEngine::new(&sys_runner, state_store)
@@ -1749,6 +1822,12 @@ fn describe_reconcile_action(action: &ReconcileAction) -> String {
             "Group `{group}` band {band_index} ({md_name}): a scheduled error check had \
              finished on its own; recorded the result ({error_count} error(s))."
         ),
+        // No group or band: the parameter is one host-wide kernel setting,
+        // and saying otherwise would suggest it can be tuned per array.
+        ReconcileAction::SpeedLimitRestored { speed_kb } => format!(
+            "Restored the system's RAID speed limit to {speed_kb} KB/s -- the rebuild or error \
+             check that had lowered it has finished."
+        ),
     }
 }
 
@@ -1798,6 +1877,10 @@ fn reconcile_report_json(outcome: &ReconcileOutcome) -> serde_json::Value {
                 "md_name": md_name,
                 "error_count": error_count,
             }),
+            ReconcileAction::SpeedLimitRestored { speed_kb } => serde_json::json!({
+                "kind": "speed_limit_restored",
+                "speed_kb": speed_kb,
+            }),
         })
         .collect();
     serde_json::json!({
@@ -1841,6 +1924,21 @@ fn resolve_group_name_for_report(state_store: &StateStore, name: Option<&str>) -
 /// true, .. })`.
 fn scrub_action_report_json(group: &str, status: &str) -> serde_json::Value {
     serde_json::json!({ "group": group, "status": status })
+}
+
+/// `scrub start`'s `--json` shape: `scrub_action_report_json`'s object plus
+/// the speed ceiling, when `--priority` asked for one.
+///
+/// The key is OMITTED rather than set to null when no profile was given, so
+/// a caller can tell "the scrub runs under whatever limit was already in
+/// place" apart from any particular number -- the same distinction
+/// `OrchestrationEngine::scrub_start`'s `Option<ReshapePriority>` draws.
+fn scrub_start_report_json(group: &str, speed_kb: Option<u64>) -> serde_json::Value {
+    let mut value = scrub_action_report_json(group, "started");
+    if let Some(kb) = speed_kb {
+        value["speed_limit_kb"] = serde_json::json!(kb);
+    }
+    value
 }
 
 /// The `--json` shape for `fs recompress`. Includes the group and the
@@ -2511,7 +2609,7 @@ mod tests {
             .expect("source before the test module");
         // Hand-rolled slicing here originally, predating `find_handler`;
         // switched over when adopting rustfmt broke the literal marker (the
-        // arm's pattern is several lines now). See `squeeze`.
+        // arm's pattern is four lines now). See `squeeze`.
         let handler = find_handler(dispatch, "Command::Fs { command: FsCmd::Recompress");
 
         let confirm_pos = handler.position("require_typed_confirmation(").expect(
@@ -2647,6 +2745,81 @@ mod tests {
     }
 
     #[test]
+    fn tick_skipped_report_json_adds_skipped_without_dropping_the_arms_own_keys() {
+        // A skipped run must stay parseable by whatever already reads the
+        // successful shape -- a consumer watching `bands_ticked` should see
+        // 0 with a reason, not a missing key it has to special-case.
+        let value = tick_skipped_report_json(serde_json::json!({ "bands_ticked": 0 }));
+        assert_eq!(value["bands_ticked"], 0);
+        assert_eq!(value["skipped"], true);
+
+        let value = tick_skipped_report_json(serde_json::json!({ "ok": true }));
+        assert_eq!(value["ok"], true);
+        assert_eq!(value["skipped"], true);
+    }
+
+    /// The periodic timers used to read and write `state.toml` with no lock
+    /// at all, while every interactive command took one. A tick landing in
+    /// the middle of a `create`/`expand`/`scrub start` could therefore load
+    /// an older copy and write it back over that command's -- losing, among
+    /// other things, the saved host-wide speed limit, which nothing would
+    /// then ever put back.
+    ///
+    /// Source-scanned within each arm's own bounded text, the same way this
+    /// module's other handler tests work (the real handlers need a live
+    /// system this dev host does not have). Asserts on the non-blocking
+    /// `try_write` + skip specifically: a timer that BLOCKED on the lock, or
+    /// that turned contention into an error, would be a different and worse
+    /// behavior that a bare "mentions the lock" check would happily accept.
+    #[test]
+    fn the_periodic_tick_handlers_take_the_state_lock_and_skip_rather_than_fail() {
+        let src = include_str!("lib.rs");
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
+
+        for arm in ["InternalCmd::ReshapeThrottleTick", "InternalCmd::HealthCheckTick"] {
+            let handler = find_handler(dispatch, &format!("Command::Internal {{ command: {arm} }}"));
+            assert!(
+                handler.contains("acquire_state_lock()"),
+                "{arm} writes state.toml without taking the lock"
+            );
+            assert!(
+                handler.contains("lock.try_write()"),
+                "{arm} must not BLOCK on the lock -- a timer that waits pins a process for the \
+                 whole of a multi-hour expand"
+            );
+            assert!(
+                handler.contains("report_tick_skipped(cli.json"),
+                "{arm} must skip cleanly on contention, not fail the systemd unit every firing"
+            );
+        }
+    }
+
+    /// The counterpart: `snapshot-auto` only READS `state.toml`
+    /// (`snapshot_auto_run` never calls `store.save`), so it is not part of
+    /// the lost-update race and must NOT take the write lock -- doing so
+    /// would skip scheduled snapshots for the whole duration of an expand
+    /// for no reason at all.
+    #[test]
+    fn the_snapshot_tick_does_not_take_a_write_lock_it_does_not_need() {
+        let src = include_str!("lib.rs");
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
+        let handler = find_handler(
+            dispatch,
+            "Command::Internal { command: InternalCmd::SnapshotAutoRun }",
+        );
+        assert!(
+            !handler.contains("acquire_state_lock()"),
+            "snapshot-auto is a reader; locking it would block scheduled snapshots behind expand"
+        );
+    }
+
+    #[test]
     fn recompress_report_json_parses_back_with_group_and_compression() {
         let value = recompress_report_json("mygroup", "zstd:5");
         let parsed: serde_json::Value = serde_json::from_str(&value.to_string()).unwrap();
@@ -2719,30 +2892,12 @@ mod tests {
         assert_eq!(resolve_group_name_for_report(&store, None), "");
     }
 
-    /// Locate ONE handler arm bounded by a unique starting marker and the
-    /// next top-level `Command::` arm -- same technique the pre-existing
-    /// `recompress_handler_is_gated_by_require_typed_confirmation_before_
-    /// the_real_engine_call`/WRITERS/STREAMING tests above already use, so
-    /// this doesn't invent a second convention.
-    fn find_handler(dispatch: &str, start_marker: &str) -> Handler {
-        let squeezed = squeeze(dispatch);
-        let marker = squeeze(start_marker);
-        let start = squeezed
-            .find(&marker)
-            .unwrap_or_else(|| panic!("{start_marker} not found in dispatch"));
-        let end = squeezed[start..]
-            .find("}Command::")
-            .map(|offset| start + offset)
-            .unwrap_or(squeezed.len());
-        Handler(squeezed[start..end].to_string())
-    }
-
     /// Reduce a source fragment to a form that survives being re-wrapped:
     /// every whitespace character removed, and the trailing comma rustfmt
     /// adds before a closing delimiter when it explodes an argument list
     /// dropped.
     ///
-    /// Adopting rustfmt broke all five source-scanning tests at once, and
+    /// Adopting rustfmt broke all seven source-scanning tests at once, and
     /// none of them because the code they check had changed. `Command::Fs {
     /// command: FsCmd::Scrub { action } }` became four lines, and
     /// `f(&a, &b)` became `f(\n    &a,\n    &b,\n)`, so every literal marker
@@ -2763,6 +2918,36 @@ mod tests {
             .replace(",)", ")")
             .replace(",]", "]")
             .replace(",}", "}")
+    }
+
+    /// Locate ONE handler arm bounded by a unique starting marker and the
+    /// next top-level `Command::` arm -- same technique the pre-existing
+    /// `recompress_handler_is_gated_by_require_typed_confirmation_before_
+    /// the_real_engine_call`/WRITERS/STREAMING tests above already use, so
+    /// this doesn't invent a second convention.
+    ///
+    /// Returns SQUEEZED text (see `squeeze`), so every caller has to squeeze
+    /// what it looks for too. That is deliberate: an assertion written
+    /// against the raw source would pass today and break the next time
+    /// rustfmt decides a line is one character too long.
+    ///
+    /// The arm boundary is `}Command::` rather than a line-anchored form for
+    /// the same reason -- after squeezing there are no lines left to anchor
+    /// to, only the closing brace of the previous arm followed by the next
+    /// one. That also makes it CRLF-agnostic for free, which the raw-text
+    /// version had to handle explicitly (this Windows host has seen both
+    /// line endings for this file).
+    fn find_handler(dispatch: &str, start_marker: &str) -> Handler {
+        let squeezed = squeeze(dispatch);
+        let marker = squeeze(start_marker);
+        let start = squeezed
+            .find(&marker)
+            .unwrap_or_else(|| panic!("{start_marker} not found in dispatch"));
+        let end = squeezed[start..]
+            .find("}Command::")
+            .map(|offset| start + offset)
+            .unwrap_or(squeezed.len());
+        Handler(squeezed[start..end].to_string())
     }
 
     /// One handler arm's source, already squeezed.
@@ -2821,7 +3006,7 @@ mod tests {
         }
     }
 
-    /// The source-scanning tests are only as good as this helper. If
+    /// The seven source-scanning tests are only as good as this helper. If
     /// `find_handler` ever failed to find its arm's END, every one of them
     /// would keep passing while actually asserting against the rest of the
     /// file -- "the JSON branch exists SOMEWHERE below here", which is
@@ -2894,18 +3079,30 @@ mod tests {
             .expect("source before the test module");
         let block = find_handler(dispatch, "Command::Fs { command: FsCmd::Scrub { action } }");
 
-        let start_arm = block.arm("ScrubCmd::Start { name } =>", Some("ScrubCmd::Status"));
+        let start_arm = block.arm("ScrubCmd::Start { name, priority } =>", Some("ScrubCmd::Status"));
         assert!(
             start_arm.contains("if cli.json"),
             "ScrubCmd::Start never branches on cli.json"
         );
         assert!(
-            start_arm.contains("scrub_action_report_json(&group, \"started\")"),
+            start_arm.contains("scrub_start_report_json(&group, speed_kb)"),
             "ScrubCmd::Start doesn't emit the JSON report"
         );
+        // The no-`--priority` wording, unchanged: the flag is opt-in, so the
+        // sentence an operator has always seen must still be what they get.
         assert!(
             start_arm.contains("println!(\"scrub started\")"),
             "ScrubCmd::Start dropped its human text"
+        );
+        // And the `--priority` half, which would otherwise be free to reach
+        // only one of the two output surfaces.
+        assert!(
+            start_arm.contains("engine.scrub_start(name.as_deref(), speed)"),
+            "ScrubCmd::Start doesn't forward --priority to the engine"
+        );
+        assert!(
+            start_arm.contains("println!(\"scrub started (speed limit {kb} KB/s)\")"),
+            "ScrubCmd::Start's human text never reports the speed it just set"
         );
 
         let cancel_arm = block.arm("ScrubCmd::Cancel { name } =>", None);

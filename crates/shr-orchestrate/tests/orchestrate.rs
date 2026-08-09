@@ -2,7 +2,8 @@ use shr_command::{AlwaysConfirmSink, AlwaysRejectConfirmSink, RecordingConfirmSi
 use shr_core::{DiskId, ExpansionStep, RaidLevel, RedundancyMode, RedundantBand};
 use shr_exec::{
     CommandOutput, CommandRunner, DryRunRunner, ExecError, MetricsSampler, ReshapePriority, ReshapeThrottle,
-    ThrottleDecision, ThrottleMetrics, RESHAPE_SPEED_FLOOR_KB, RESHAPE_SPEED_INITIAL_KB,
+    ThrottleDecision, ThrottleMetrics, RESHAPE_SPEED_CEILING_KB, RESHAPE_SPEED_FLOOR_KB,
+    RESHAPE_SPEED_INITIAL_KB,
 };
 use shr_inspect::{resolve_disk_ref, ByIdIndex, DiskRef, ResolvedDisk};
 use shr_orchestrate::{
@@ -65,6 +66,13 @@ struct FailingRunner {
     /// error shape, not any failure. `None` (default): no md's degraded
     /// read fails this way.
     degraded_array_missing_for: Option<String>,
+    /// What `cat /proc/sys/dev/raid/speed_limit_max` reports. Empty (the
+    /// default) is UNPARSEABLE on purpose -- it is what every throttle test
+    /// written before the save/restore mechanism existed already assumed, and
+    /// it keeps `read_speed_limit_max` answering `None` ("nothing worth
+    /// saving") for them. A test that cares about the operator's prior value
+    /// surviving a reshape or scrub sets a real number here.
+    speed_limit_max_response: String,
     /// Pre-grow `MD_LEVEL`/`MD_DEVICES` to report from `mdadm --detail
     /// --export` -- used by execute_grow's F4 post-failure verification.
     /// Defaults to three_disks()'s band0 shape (raid5, 3 members).
@@ -232,6 +240,7 @@ impl FailingRunner {
             degraded_only_for: None,
             degraded_unparseable_for: None,
             degraded_array_missing_for: None,
+            speed_limit_max_response: String::new(),
             pre_grow_level: "raid5".to_string(),
             pre_grow_devices: 3,
             pv_vg_name_response: String::new(),
@@ -426,6 +435,24 @@ impl FailingRunner {
         Self {
             sync_action_response: "reshape".to_string(),
             ..Self::healthy()
+        }
+    }
+
+    /// A host whose `/proc/sys/dev/raid/speed_limit_max` actually reads back
+    /// `kb` -- the operator's own setting, which every write this project
+    /// makes has to be able to give back afterwards.
+    fn with_speed_limit(kb: u64) -> Self {
+        Self {
+            speed_limit_max_response: format!("{kb}\n"),
+            ..Self::healthy()
+        }
+    }
+
+    /// `with_speed_limit`, on an array that is mid-reshape.
+    fn reshaping_with_speed_limit(kb: u64) -> Self {
+        Self {
+            sync_action_response: "reshape".to_string(),
+            ..Self::with_speed_limit(kb)
         }
     }
 
@@ -839,7 +866,9 @@ impl CommandRunner for FailingRunner {
             }
         }
 
-        let stdout = if program == "cat" && args.contains(&"/proc/filesystems") {
+        let stdout = if program == "cat" && args.contains(&"/proc/sys/dev/raid/speed_limit_max") {
+            self.speed_limit_max_response.clone()
+        } else if program == "cat" && args.contains(&"/proc/filesystems") {
             self.filesystems_content.clone()
         } else if program == "cat" && args.contains(&"/proc/mdstat") {
             self.rendered_mdstat()
@@ -1750,9 +1779,14 @@ fn expand_reshape_throttle_emergency_brakes_the_moment_smart_reallocated_rises()
         .iter()
         .position(|c| c.starts_with("mdadm --grow"))
         .expect("no grow command");
+    // `starts_with("sh -c")` is what makes this WRITES only: `write_sysfs`
+    // shells out to `sh -c echo ... > path`, while the same path is also
+    // READ (`cat /proc/sys/dev/raid/speed_limit_max`) now that the engine
+    // saves the operator's prior value before overwriting it. Filtering on
+    // the path alone counted that read as a write.
     let speed_writes: Vec<&String> = cmds[grow_pos..]
         .iter()
-        .filter(|c| c.contains("speed_limit_max"))
+        .filter(|c| c.starts_with("sh -c") && c.contains("speed_limit_max"))
         .collect();
     // Two writes are expected: `apply_initial`'s own profile-based write
     // (Balanced's 100_000 KB/s), immediately followed by the one-shot
@@ -1820,9 +1854,14 @@ fn expand_reshape_throttle_with_no_sampler_override_uses_a_real_live_sampler_by_
         "no live SMART read: {cmds:?}"
     );
 
+    // `sh -c` (a `write_sysfs` call), not merely the path: the engine also
+    // `cat`s this file before overwriting it. See the same filter's note in
+    // `expand_reshape_throttle_emergency_brakes_the_moment_smart_reallocated_rises`.
     let speed_max_writes: Vec<&String> = cmds
         .iter()
-        .filter(|c| c.contains("speed_limit_max") && c.contains("/proc/sys/dev/raid"))
+        .filter(|c| {
+            c.starts_with("sh -c") && c.contains("speed_limit_max") && c.contains("/proc/sys/dev/raid")
+        })
         .collect();
     assert_eq!(
         speed_max_writes.len(),
@@ -1869,7 +1908,9 @@ fn expand_reshape_throttle_holds_when_the_live_sampler_reads_a_healthy_system_wi
     let cmds = runner.get_recorded();
     let speed_max_writes: Vec<&String> = cmds
         .iter()
-        .filter(|c| c.contains("speed_limit_max") && c.contains("/proc/sys/dev/raid"))
+        .filter(|c| {
+            c.starts_with("sh -c") && c.contains("speed_limit_max") && c.contains("/proc/sys/dev/raid")
+        })
         .collect();
     assert_eq!(
         speed_max_writes.len(),
@@ -1918,6 +1959,159 @@ fn tick_active_reshapes_seeds_from_the_kernels_real_current_speed_and_applies_a_
             .any(|c| c.starts_with("sh -c") && c.contains("speed_limit_max")),
         "a fresh decision must actually be applied to the kernel parameter: {cmds:?}"
     );
+}
+
+/// The leak this whole mechanism exists to close: `expand` lowers the
+/// host-wide `speed_limit_max` and, before this, nothing ever put it back --
+/// so the cap outlived its reshape and silently throttled whatever read it
+/// next (most visibly a scrub) until the host was rebooted.
+#[test]
+fn expand_saves_the_operators_speed_limit_before_the_throttle_overwrites_it() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::reshaping_with_speed_limit(250_000);
+    let engine =
+        seeded_engine(&runner, state_store.clone(), three_disks()).with_priority(ReshapePriority::Background);
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    engine.expand(expand_req(vec![new_disk])).unwrap();
+
+    let cmds = runner.get_recorded();
+    let read_pos = cmds
+        .iter()
+        .position(|c| c == "cat /proc/sys/dev/raid/speed_limit_max")
+        .expect("must read the current value at all");
+    let write_pos = cmds
+        .iter()
+        .position(|c| c.starts_with("sh -c") && c.contains("speed_limit_max"))
+        .expect("the throttle must still write its own value");
+    assert!(
+        read_pos < write_pos,
+        "the save must happen BEFORE the overwrite destroys it: {cmds:?}"
+    );
+    assert_eq!(
+        state_store.load().unwrap().unwrap().saved_speed_limit_max_kb,
+        Some(250_000),
+        "the operator's own limit must round-trip through state.toml -- the process that puts it \
+         back is a different one entirely"
+    );
+}
+
+/// The restore itself, driven by the periodic timer. This is the only path
+/// that runs unprompted, so it is what makes the restore automatic rather
+/// than something an operator has to know to ask for.
+#[test]
+fn tick_active_reshapes_restores_the_saved_speed_limit_once_every_band_is_idle() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::reshaping_with_speed_limit(250_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    engine.expand(expand_req(vec![new_disk])).unwrap();
+
+    // The kernel finishes the reshape on its own, exactly as it would
+    // between two timer fires.
+    runner.finish_reshape();
+    let mark = runner.get_recorded().len();
+
+    let ticked = engine.tick_active_reshapes().unwrap();
+    assert_eq!(ticked, 0, "nothing is reshaping anymore, so no band is throttled");
+
+    let cmds = &runner.get_recorded()[mark..];
+    assert!(
+        cmds.iter()
+            .any(|c| c == "sh -c echo 250000 > /proc/sys/dev/raid/speed_limit_max"),
+        "the operator's own limit must actually be written back to the kernel: {cmds:?}"
+    );
+    assert_eq!(
+        state_store.load().unwrap().unwrap().saved_speed_limit_max_kb,
+        None,
+        "the slot must be cleared, or every later tick would rewrite the same value forever"
+    );
+}
+
+/// The restore is gated on the work actually being over. Putting the limit
+/// back mid-reshape would undo the throttle that a safety signal may have
+/// just applied.
+#[test]
+fn tick_active_reshapes_leaves_the_saved_speed_limit_alone_while_a_band_is_still_busy() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::reshaping_with_speed_limit(250_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    engine.expand(expand_req(vec![new_disk])).unwrap();
+    let mark = runner.get_recorded().len();
+
+    engine.tick_active_reshapes().unwrap();
+
+    let cmds = &runner.get_recorded()[mark..];
+    assert!(
+        !cmds.iter().any(|c| c.contains("250000")),
+        "the reshape is still running -- restoring now would undo the live throttle: {cmds:?}"
+    );
+    assert_eq!(
+        state_store.load().unwrap().unwrap().saved_speed_limit_max_kb,
+        Some(250_000),
+        "the saved value must still be waiting for the reshape to end"
+    );
+}
+
+/// `reconcile` restores too, and REPORTS it. The timer is what makes this
+/// automatic, but a host where the timer was never installed still has an
+/// operator-driven way out -- and a silent kernel change would be exactly the
+/// "state.toml was rewritten but nothing says what happened" blind spot
+/// `ReconcileAction` exists to close.
+#[test]
+fn reconcile_restores_the_saved_speed_limit_and_reports_having_done_it() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::reshaping_with_speed_limit(250_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    engine.expand(expand_req(vec![new_disk])).unwrap();
+    runner.finish_reshape();
+
+    let outcome = engine.reconcile().unwrap().expect("state.toml exists");
+
+    assert!(
+        outcome
+            .performed
+            .contains(&ReconcileAction::SpeedLimitRestored { speed_kb: 250_000 }),
+        "a host-wide kernel change must be reported, not folded into 'nothing to do': {:?}",
+        outcome.performed
+    );
+    assert_eq!(outcome.state.saved_speed_limit_max_kb, None);
+    assert!(
+        runner
+            .get_recorded()
+            .iter()
+            .any(|c| c == "sh -c echo 250000 > /proc/sys/dev/raid/speed_limit_max"),
+        "reported, but never actually written, would be the worse bug"
+    );
+}
+
+/// A host this project has never throttled must stay a true no-op: no read,
+/// no write, nothing reported. `reconcile` runs opportunistically inside
+/// every `expand()`, so a cost here is a cost on every operation.
+#[test]
+fn reconcile_never_touches_the_speed_limit_when_nothing_was_ever_borrowed() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::with_speed_limit(200_000);
+    let engine = seeded_engine(&runner, state_store, three_disks());
+    let mark = runner.get_recorded().len();
+
+    let outcome = engine.reconcile().unwrap().expect("state.toml exists");
+
+    let cmds = &runner.get_recorded()[mark..];
+    assert!(
+        !cmds.iter().any(|c| c.contains("speed_limit_max")),
+        "nothing was borrowed, so nothing may be read or written: {cmds:?}"
+    );
+    assert!(!outcome
+        .performed
+        .iter()
+        .any(|a| matches!(a, ReconcileAction::SpeedLimitRestored { .. })));
 }
 
 #[test]
@@ -4175,7 +4369,7 @@ fn scrub_start_writes_check_to_every_band_and_starts_btrfs_scrub() {
     let runner = FailingRunner::healthy();
     let engine = seeded_engine(&runner, state_store.clone(), three_disks());
 
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
     let cmds = runner.get_recorded();
     assert!(
@@ -4195,6 +4389,105 @@ fn scrub_start_writes_check_to_every_band_and_starts_btrfs_scrub() {
     );
 }
 
+/// `--priority` is opt-in, and leaving it out has to keep meaning "change no
+/// kernel parameter at all" -- the scheduled-scrub systemd timer calls `fs
+/// scrub start` with no flags, and it must not start silently rewriting a
+/// host-wide setting. Asserts on the PATH, not on writes only: a scrub with
+/// no profile has no reason to even read it.
+#[test]
+fn scrub_start_without_a_priority_touches_no_kernel_speed_limit() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::with_speed_limit(200_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+
+    engine.scrub_start(None, None).unwrap();
+
+    let cmds = runner.get_recorded();
+    assert!(
+        !cmds.iter().any(|c| c.contains("speed_limit_max")),
+        "a scrub started without --priority must leave the kernel speed limit entirely alone: {cmds:?}"
+    );
+    assert_eq!(
+        state_store.load().unwrap().unwrap().saved_speed_limit_max_kb,
+        None,
+        "nothing was overwritten, so there is nothing to remember putting back"
+    );
+}
+
+/// The point of the flag: a scrub that would otherwise inherit whatever cap
+/// is in place (including one an earlier `expand --priority background` left
+/// behind) can be told to run at a profile's speed. The write has to land
+/// BEFORE the `check` write, or the first stripes are read under the old cap.
+#[test]
+fn scrub_start_with_a_priority_writes_that_ceiling_before_starting_the_check() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::with_speed_limit(200_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+
+    engine.scrub_start(None, Some(ReshapePriority::Max)).unwrap();
+
+    let cmds = runner.get_recorded();
+    let speed_pos = cmds
+        .iter()
+        .position(|c| c.starts_with("sh -c") && c.contains("speed_limit_max"))
+        .expect("--priority must actually write the kernel speed limit");
+    let check_pos = cmds
+        .iter()
+        .position(|c| c == "sh -c echo check > /sys/block/md0/md/sync_action")
+        .expect("the scrub itself must still be started");
+    assert!(
+        cmds[speed_pos].contains(&RESHAPE_SPEED_CEILING_KB.to_string()),
+        "must write MAX's own ceiling: {:?}",
+        cmds[speed_pos]
+    );
+    assert!(
+        speed_pos < check_pos,
+        "the ceiling must be in place before the check starts: {cmds:?}"
+    );
+    // Only `speed_limit_max`. Raising `speed_limit_min` would take bandwidth
+    // from everyday file access under contention rather than merely
+    // permitting the scrub to use more when the disks are free.
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("sh -c") && c.contains("speed_limit_min")),
+        "a scrub priority must not raise the floor, only the ceiling: {cmds:?}"
+    );
+    assert_eq!(
+        state_store.load().unwrap().unwrap().saved_speed_limit_max_kb,
+        Some(200_000),
+        "the operator's own limit must be recorded before being overwritten, or it is lost"
+    );
+}
+
+/// The save slot holds the value from BEFORE this project's first write.
+/// Filling it again from a later operation would overwrite it with one of
+/// shr-rs's own numbers, making the real prior value unrecoverable -- the
+/// exact failure the mechanism exists to prevent.
+#[test]
+fn a_later_operation_never_overwrites_an_already_saved_speed_limit() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    // The kernel currently reads 20000 (an earlier `expand --priority
+    // background`'s own write, still in place); 250000 is what was there
+    // before that, already recorded.
+    let runner = FailingRunner::with_speed_limit(20_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    let mut state = state_store.load().unwrap().unwrap();
+    state.saved_speed_limit_max_kb = Some(250_000);
+    state_store.save(&state).unwrap();
+
+    engine.scrub_start(None, Some(ReshapePriority::Max)).unwrap();
+
+    assert_eq!(
+        state_store.load().unwrap().unwrap().saved_speed_limit_max_kb,
+        Some(250_000),
+        "the ORIGINAL prior value must survive; 20000 is shr-rs's own leftover, not the operator's"
+    );
+}
+
 #[test]
 fn scrub_start_is_blocked_when_a_band_is_degraded() {
     let dir = tempdir().unwrap();
@@ -4202,7 +4495,7 @@ fn scrub_start_is_blocked_when_a_band_is_degraded() {
     let runner = FailingRunner::degraded_band("md0");
     let engine = seeded_engine(&runner, state_store, three_disks());
 
-    let err = engine.scrub_start(None).unwrap_err();
+    let err = engine.scrub_start(None, None).unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("degraded"), "{err}");
     assert!(
@@ -4225,7 +4518,7 @@ fn scrub_start_is_blocked_while_an_expansion_is_in_progress() {
     state.groups[0].expansion.in_progress = true;
     state_store.save(&state).unwrap();
 
-    let err = engine.scrub_start(None).unwrap_err();
+    let err = engine.scrub_start(None, None).unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("expansion"), "{err}");
 }
@@ -4239,9 +4532,9 @@ fn scrub_start_is_blocked_when_a_scrub_is_already_running() {
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
     let engine = seeded_engine(&runner, state_store, three_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
-    let err = engine.scrub_start(None).unwrap_err();
+    let err = engine.scrub_start(None, None).unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("sync_action"), "{err}");
 }
@@ -4256,7 +4549,7 @@ fn expand_is_blocked_while_a_scrub_is_running() {
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
     let engine = seeded_engine(&runner, state_store, three_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     let err = engine.expand(expand_req(vec![new_disk])).unwrap_err();
@@ -4304,7 +4597,7 @@ fn scrub_cancel_writes_idle_and_clears_scrub_in_progress_even_when_degraded() {
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let healthy_runner = FailingRunner::healthy();
     let engine = seeded_engine(&healthy_runner, state_store.clone(), three_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
     let degraded_runner = FailingRunner::degraded_band("md0");
     let engine2 =
@@ -4340,7 +4633,7 @@ fn scrub_cancel_treats_an_already_finished_btrfs_scrub_as_success_and_still_pers
         ..FailingRunner::healthy()
     };
     let engine = seeded_engine(&runner, state_store.clone(), three_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
     engine.scrub_cancel(None).unwrap();
 
@@ -4363,7 +4656,7 @@ fn scrub_cancel_tolerates_an_mdadm_write_that_reports_failure_but_sync_action_al
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let healthy_runner = FailingRunner::healthy();
     let engine = seeded_engine(&healthy_runner, state_store.clone(), three_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
     // A fresh runner whose own `sync_action` was never put into "check" (it
     // never saw `scrub_start`'s write), so it already answers "idle" the
@@ -4396,7 +4689,7 @@ fn scrub_cancel_surfaces_a_genuine_btrfs_failure_and_leaves_scrub_in_progress_tr
         ..FailingRunner::healthy()
     };
     let engine = seeded_engine(&runner, state_store.clone(), three_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
     let err = engine.scrub_cancel(None).unwrap_err();
     assert!(
@@ -4430,7 +4723,7 @@ fn scrub_cancel_persists_state_and_reports_a_read_back_failure_on_one_band() {
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let healthy_runner = FailingRunner::healthy();
     let engine = seeded_engine(&healthy_runner, state_store.clone(), hetero_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
     // A fresh runner for the cancel call: its own `scrubbing_mds` is empty,
     // so both bands' `echo idle` writes succeed and (once reached) their
@@ -4477,7 +4770,7 @@ fn scrub_status_persists_the_result_once_every_band_and_btrfs_finish() {
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
     let engine = seeded_engine(&runner, state_store.clone(), three_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
     // Still running: sync_action reports "check" until finish_scrub().
     let mid = engine.scrub_status(None).unwrap();
@@ -4517,7 +4810,7 @@ fn reconcile_self_heals_a_stale_scrub_in_progress_flag_left_by_a_scheduled_scrub
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
     let engine = seeded_engine(&runner, state_store.clone(), three_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
     assert!(state_store.load().unwrap().unwrap().groups[0].bands[0].scrub_in_progress);
 
     // The scrub finishes on its own (real `sync_action` back to `idle`),
@@ -4592,7 +4885,7 @@ fn scrub_status_reports_the_real_error_count_from_mismatch_cnt() {
         ..FailingRunner::healthy()
     };
     let engine = seeded_engine(&runner, state_store.clone(), three_disks());
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
     runner.finish_scrub();
 
     let report = engine.scrub_status(None).unwrap();
@@ -4630,7 +4923,7 @@ fn scrub_status_reports_success_and_persists_the_result_even_when_webhook_delive
             webhook_url: Some("https://dead.example.com".to_string()),
             systemd_notify: false,
         });
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
     runner.finish_scrub();
 
     let report = engine
@@ -4664,7 +4957,7 @@ fn scrub_status_posts_a_webhook_when_errors_are_found() {
         webhook_url: Some("https://hooks.example.com/x".to_string()),
         systemd_notify: false,
     });
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
     runner.finish_scrub();
 
     engine.scrub_status(None).unwrap();
@@ -4688,7 +4981,7 @@ fn scrub_status_does_not_notify_when_no_errors_were_found() {
         webhook_url: Some("https://hooks.example.com/x".to_string()),
         systemd_notify: true,
     });
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
     runner.finish_scrub();
 
     engine.scrub_status(None).unwrap();
@@ -6869,7 +7162,7 @@ fn destroy_is_blocked_while_a_band_has_background_activity() {
     // A running scrub reports `sync_action == "check"` -- the same
     // non-idle signal a reshape would -- and is far simpler to simulate
     // through the shared `FailingRunner` than a real reshape.
-    engine.scrub_start(None).unwrap();
+    engine.scrub_start(None, None).unwrap();
 
     let err = engine.destroy(None, false).unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
@@ -7389,7 +7682,7 @@ fn scrub_start_degraded_read_enoent_names_array_not_assembled() {
     let runner = AbsentArrayRunner::enoent("md0", "degraded");
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
-    let err = engine.scrub_start(None).unwrap_err();
+    let err = engine.scrub_start(None, None).unwrap_err();
     let msg = format!("{err}");
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(
@@ -7426,7 +7719,7 @@ fn scrub_start_sync_action_read_enoent_names_array_not_assembled() {
     let runner = AbsentArrayRunner::enoent("md0", "sync_action");
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
-    let err = engine.scrub_start(None).unwrap_err();
+    let err = engine.scrub_start(None, None).unwrap_err();
     let msg = format!("{err}");
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(
@@ -7465,7 +7758,7 @@ fn scrub_start_absent_array_never_issues_scrub_write_or_saves_state() {
     let runner = AbsentArrayRunner::enoent("md0", "degraded");
     let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
 
-    engine.scrub_start(None).unwrap_err();
+    engine.scrub_start(None, None).unwrap_err();
 
     let cmds = runner.get_recorded();
     assert!(
@@ -7510,7 +7803,7 @@ fn degraded_unparseable_is_not_reported_as_array_not_assembled() {
     let runner = AbsentArrayRunner::degraded_unparseable("md0");
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
-    let err = engine.scrub_start(None).unwrap_err();
+    let err = engine.scrub_start(None, None).unwrap_err();
     let msg = format!("{err}");
     assert!(
         !msg.contains("not assembled"),
@@ -7542,7 +7835,7 @@ fn sync_action_permission_denied_is_not_reported_as_array_not_assembled() {
     let runner = AbsentArrayRunner::sync_action_permission_denied("md0");
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
-    let err = engine.scrub_start(None).unwrap_err();
+    let err = engine.scrub_start(None, None).unwrap_err();
     let msg = format!("{err}");
     assert!(
         !msg.contains("not assembled"),

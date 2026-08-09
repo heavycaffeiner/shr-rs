@@ -589,6 +589,10 @@ fn describe_reconcile_action(action: &ReconcileAction) -> String {
             "Group `{group}` band {band_index} ({md_name}): a scheduled error check had \
              finished on its own; recorded the result ({error_count} error(s))."
         ),
+        ReconcileAction::SpeedLimitRestored { speed_kb } => format!(
+            "Restored the system's RAID speed limit to {speed_kb} KB/s -- the rebuild or error \
+             check that had lowered it has finished."
+        ),
     }
 }
 
@@ -1540,8 +1544,9 @@ mod tests {
         fn seeded_state_with_resize_pending(resize_pending: bool) -> StateFile {
             // `StateFile::new`, not a struct literal: this fixture only
             // cares about the one group below, and every field the wrapper
-            // grows afterwards has a correct empty default that a literal
-            // would have to keep restating.
+            // grows afterwards (`retired_arrays`,
+            // `saved_speed_limit_max_kb`) has a correct empty default that a
+            // literal would have to keep restating.
             StateFile::new(vec![ArrayState {
                 name: "shr1".to_string(),
                 mode: "shr".to_string(),

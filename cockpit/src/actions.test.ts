@@ -229,6 +229,35 @@ describe("expand reshape priority (--priority pass-through)", () => {
     });
 });
 
+// `fs scrub start --priority` sets the host-wide kernel read ceiling the
+// mdadm `check` runs under. Cockpit had no way to ask for it, so a scrub
+// started from the dashboard always inherited whatever cap was in place --
+// including one an earlier `expand --priority background` had left behind.
+describe("scrub speed (--priority pass-through)", () => {
+    it("no profile produces byte-for-byte the argv from before the flag existed", () => {
+        // This is the case the scheduled-scrub timer and every pre-existing
+        // caller take, and it must keep meaning "change no kernel parameter".
+        assert.deepEqual(scrubStartArgs("shr1").argv, [
+            "shr-rs", "fs", "scrub", "start", "--name", "shr1",
+        ]);
+        assert.deepEqual(scrubStartArgs("shr1", undefined).argv, [
+            "shr-rs", "fs", "scrub", "start", "--name", "shr1",
+        ]);
+    });
+
+    it("every profile is passed through, including balanced", () => {
+        // Unlike expand, "balanced" is NOT the CLI's default here (the
+        // default is no flag at all), so omitting it would silently turn an
+        // explicit choice into "leave the system setting alone".
+        for (const p of ["background", "balanced", "max"] as const)
+            assert.deepEqual(scrubStartArgs("shr1", p).argv.slice(-2), ["--priority", p]);
+    });
+
+    it("still refuses an empty group name, profile or not", () => {
+        assert.throws(() => scrubStartArgs("", "max"));
+    });
+});
+
 describe("ExpandController (no execution without preview + matching confirmation)", () => {
     it("execute() throws and never spawns before any preflight ran", async () => {
         const spawn = new RecordingSpawn([]);

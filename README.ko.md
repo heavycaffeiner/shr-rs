@@ -202,7 +202,8 @@ sudo shr-rs expand --name tank --add sdf
 
 ```bash
 sudo shr-rs schedule install --name tank   # 오류 점검과 상태 점검 타이머
-sudo shr-rs scrub start --name tank        # mdadm check와 Btrfs scrub
+sudo shr-rs fs scrub start --name tank     # mdadm check와 Btrfs scrub
+sudo shr-rs fs scrub start --priority max  # 디스크가 허용하는 최대 속도로
 sudo shr-rs disk list                      # SMART 상태가 포함된 목록
 sudo shr-rs fs df                          # 실제 Btrfs 사용량과 여유 공간
 sudo shr-rs snapshot create --name tank

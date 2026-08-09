@@ -116,6 +116,13 @@ pub enum ReconcileAction {
         md_name: String,
         member_path: String,
     },
+    /// The host-wide `/proc/sys/dev/raid/speed_limit_max` this project had
+    /// overwritten (for a reshape's throttle, or for `fs scrub start
+    /// --priority`) was put back to `speed_kb`, the value observed before
+    /// the first of those writes, because no md array on the host is running
+    /// anything anymore. Host-wide, so deliberately NOT reported per group
+    /// or per band -- see `StateFile::saved_speed_limit_max_kb`.
+    SpeedLimitRestored { speed_kb: u64 },
 }
 
 /// `reconcile()`'s result: the array's state AFTER reconciling, plus
@@ -1532,6 +1539,16 @@ impl<'a> OrchestrationEngine<'a> {
             }
         }
 
+        // Last, deliberately: the self-heals above are what clear the flags
+        // for a scrub or reshape that has actually finished, and this reads
+        // the same live `sync_action` they just acted on. A true no-op (zero
+        // commands) whenever this project has not borrowed the host-wide
+        // speed limit, which is the normal case.
+        if let Some(speed_kb) = self.restore_speed_limit_if_idle(&mut state)? {
+            changed = true;
+            performed.push(ReconcileAction::SpeedLimitRestored { speed_kb });
+        }
+
         if changed && !self.runner.is_dry_run() {
             self.store.save(&state)?;
         }
@@ -1971,7 +1988,29 @@ impl<'a> OrchestrationEngine<'a> {
     /// scrub start` commands have been issued. `scrub_status`/`scrub_cancel`
     /// likewise only need the lock for their own brief read/write, never for
     /// "as long as the scrub is running".
-    pub fn scrub_start(&self, name: Option<&str>) -> Result<(), OrchestrateError> {
+    ///
+    /// `speed` sets the host-wide `/proc/sys/dev/raid/speed_limit_max` ceiling
+    /// the kernel's `check` threads run under, from the same three profiles
+    /// `expand --priority` uses (`ReshapePriority` is reused rather than
+    /// cloned into a near-identical `ScrubPriority`: the profiles, and their
+    /// KB/s numbers, are exactly the same question asked about a different
+    /// kernel sync activity).
+    ///
+    /// `None` means "touch no kernel parameter at all", which is the default
+    /// and the behavior every caller had before this existed -- whatever cap
+    /// is already in place governs the scrub. Note that the cap is genuinely
+    /// host-wide: this is not a per-group setting, and a second group's scrub
+    /// started with a different `speed` simply overwrites it.
+    ///
+    /// Only the ceiling is written, never `speed_limit_min`: raising the
+    /// floor would take bandwidth from everyday file access under contention
+    /// rather than merely permitting the scrub to use more when it is free,
+    /// which is the opposite of what a priority profile is for here.
+    pub fn scrub_start(
+        &self,
+        name: Option<&str>,
+        speed: Option<ReshapePriority>,
+    ) -> Result<(), OrchestrateError> {
         let mut state = self.store.load()?.ok_or(OrchestrateError::NoActiveArray)?;
         let group_idx = Self::resolve_group_index(&state, name)?;
         let group_name = state.groups[group_idx].name.clone();
@@ -2037,6 +2076,16 @@ impl<'a> OrchestrationEngine<'a> {
                     band.index, band.md_name
                 )));
             }
+        }
+
+        // Before the `check` threads start, so they run under the requested
+        // ceiling from their first stripe rather than being re-capped a
+        // moment later. `remember_speed_limit_max` first, for the same reason
+        // `start_reshape_throttle` calls it first: the write below is what
+        // destroys the value being saved.
+        if let Some(priority) = speed {
+            self.remember_speed_limit_max(&mut state);
+            shr_exec::write_speed_limit_max(self.runner, priority.initial_speed_kb())?;
         }
 
         for md_name in &md_names {
@@ -3936,11 +3985,106 @@ impl<'a> OrchestrationEngine<'a> {
         band_pos: usize,
     ) -> Result<(), OrchestrateError> {
         let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
+        // BEFORE the first write, never after -- `apply_initial` overwrites
+        // the very value being saved here.
+        self.remember_speed_limit_max(state);
         let mut ctrl = ThrottleController::new(self.runner, &md_name, self.priority);
         ctrl.apply_initial()?;
         let decision = self.tick_throttle_decision(state, group_idx, band_pos, self.priority);
         ctrl.apply(decision)?;
         Ok(())
+    }
+
+    /// Record what `/proc/sys/dev/raid/speed_limit_max` read BEFORE this
+    /// project overwrites it, so `restore_speed_limit_if_idle` can put the
+    /// operator's own value back afterward. Call this immediately before the
+    /// first write of an operation, never after.
+    ///
+    /// Only ever fills an EMPTY slot. A second operation starting while an
+    /// shr-rs-written value is still in place (a scrub right after a
+    /// reshape whose restore has not run yet, or a crash between the two)
+    /// must not overwrite the saved value with one of this project's own --
+    /// that would make the real prior value unrecoverable, which is the bug
+    /// this whole mechanism exists to fix, one level up.
+    ///
+    /// Saves nothing when the value cannot be read: under a `DryRunRunner`
+    /// (which wrote nothing either, so there is nothing to put back) and on
+    /// a genuine read failure, where inventing a number to "restore" later
+    /// would be strictly worse than leaving the kernel alone.
+    fn remember_speed_limit_max(&self, state: &mut StateFile) {
+        if state.saved_speed_limit_max_kb.is_some() {
+            return;
+        }
+        state.saved_speed_limit_max_kb = shr_exec::read_speed_limit_max(self.runner);
+    }
+
+    /// Put the saved host-wide `speed_limit_max` back once no md array on
+    /// this host is running anything, and clear the slot. Returns the value
+    /// restored, or `None` when it did nothing.
+    ///
+    /// The condition is every band of every group reading `sync_action ==
+    /// "idle"`, which covers a reshape and a scrub (`check`) alike -- and a
+    /// group whose array is not assembled at all counts as idle, since a
+    /// device that does not exist cannot be consuming a speed limit.
+    ///
+    /// A running Btrfs scrub deliberately does NOT hold the restore off:
+    /// `speed_limit_max` governs md's own sync threads and nothing else, so
+    /// a Btrfs scrub still running long after every band went idle has no
+    /// stake in this value.
+    ///
+    /// Reads go through `status_runner()` for the usual reason (a preview
+    /// must see the REAL kernel state), but the whole call is skipped under
+    /// a dry run: `preview_expand` replays a mutating path against a
+    /// `DryRunRunner`, and a preview that listed a `speed_limit_max` write
+    /// nobody is going to perform would be exactly the "don't show a command
+    /// that isn't really going to execute" problem this codebase has already
+    /// had to fix once.
+    fn restore_speed_limit_if_idle(&self, state: &mut StateFile) -> Result<Option<u64>, OrchestrateError> {
+        let Some(saved_kb) = state.saved_speed_limit_max_kb else {
+            return Ok(None);
+        };
+        if self.runner.is_dry_run() {
+            return Ok(None);
+        }
+        for group in &state.groups {
+            for band in &group.bands {
+                if let Some(action) = Self::live_sync_action(self.status_runner(), &band.md_name)? {
+                    if action != "idle" {
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+        shr_exec::write_speed_limit_max(self.runner, saved_kb)?;
+        state.saved_speed_limit_max_kb = None;
+        Ok(Some(saved_kb))
+    }
+
+    /// One band's live `sync_action`, or `None` when its array is not
+    /// assembled at all.
+    ///
+    /// Real-guest repro (recorded on `tick_active_reshapes`, which this was
+    /// factored out of): `state.toml` outlived the array after an unplanned
+    /// power cycle, so `cat /sys/block/<md>/md/sync_action` had no file to
+    /// read and failed with `No such file or directory`. Every sweep across
+    /// every band has to survive that rather than abort. Matched on BOTH
+    /// `program == "cat"` AND the ENOENT text, so that if `sync_action`'s
+    /// read path ever grows a second command, a failure from THAT command is
+    /// never swallowed here just because its message happens to say the same
+    /// thing.
+    fn live_sync_action(
+        runner: &dyn CommandRunner,
+        md_name: &str,
+    ) -> Result<Option<String>, OrchestrateError> {
+        match MdadmExecutor::new(runner).sync_action(md_name) {
+            Ok(action) => Ok(Some(action)),
+            Err(ExecError::NonZeroExit {
+                ref program,
+                ref stderr,
+                ..
+            }) if program == "cat" && stderr.contains("No such file or directory") => Ok(None),
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Apply one throttle tick to every band, across every group,
@@ -3979,38 +4123,18 @@ impl<'a> OrchestrationEngine<'a> {
         let Some(mut state) = self.store.load()? else {
             return Ok(0);
         };
-        let mdadm = MdadmExecutor::new(self.runner);
         let mut ticked = 0usize;
 
         for group_idx in 0..state.groups.len() {
             for band_pos in 0..state.groups[group_idx].bands.len() {
                 let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
-                let action = match mdadm.sync_action(&md_name) {
-                    Ok(action) => action,
-                    // Real-guest repro -- `state.toml` outlived the
-                    // array (unplanned power-cycle, array not yet
-                    // reassembled), so `cat /sys/block/<md>/md/sync_action`
-                    // has no file to read: `cat: ...: No such file or
-                    // directory`, exit 1. There is no reshape to throttle on
-                    // a band with no live array, same as any other band
-                    // whose `sync_action` isn't `"reshape"` below -- skip
-                    // it, don't abort the whole sweep. Matched on BOTH
-                    // `program == "cat"` AND the ENOENT stderr text (same
-                    // precision as the `is_missing_array_device`) -- the
-                    // `program` gate exists so that if `sync_action`'s read
-                    // path ever grows a second command, a failure from THAT
-                    // command is never swallowed here just because its
-                    // message happens to also say "No such file or
-                    // directory"; only `cat`, the one command this path
-                    // actually runs today, is trusted for this signature.
-                    Err(ExecError::NonZeroExit {
-                        ref program,
-                        ref stderr,
-                        ..
-                    }) if program == "cat" && stderr.contains("No such file or directory") => {
-                        continue;
-                    }
-                    Err(err) => return Err(err.into()),
+                // A band with no live array has no reshape to throttle --
+                // skip it, don't abort the whole sweep. See
+                // `live_sync_action`, which this ENOENT handling was factored
+                // out into once `restore_speed_limit_if_idle` needed the same
+                // rule.
+                let Some(action) = Self::live_sync_action(self.runner, &md_name)? else {
+                    continue;
                 };
                 if action != "reshape" {
                     continue;
@@ -4027,7 +4151,14 @@ impl<'a> OrchestrationEngine<'a> {
             }
         }
 
-        if ticked > 0 && !self.runner.is_dry_run() {
+        // The other half of this timer's job, and the only one that runs
+        // when nothing is reshaping: hand the host-wide speed limit back once
+        // the operation that borrowed it has finished. `reconcile()` does
+        // this too, but nothing guarantees an operator ever runs it -- this
+        // timer is what makes the restore automatic.
+        let restored = self.restore_speed_limit_if_idle(&mut state)?.is_some();
+
+        if (ticked > 0 || restored) && !self.runner.is_dry_run() {
             self.store.save(&state)?;
         }
         Ok(ticked)

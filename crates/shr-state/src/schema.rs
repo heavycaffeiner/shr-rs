@@ -226,6 +226,33 @@ pub struct ArrayState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StateFile {
     pub schema_version: u32,
+    /// `/proc/sys/dev/raid/speed_limit_max` as it read BEFORE this project
+    /// first overwrote it, in KB/s -- `Some` exactly while an shr-rs-written
+    /// value is still in place, `None` once it has been put back.
+    ///
+    /// That kernel parameter is HOST-WIDE, not per-array, which is why this
+    /// lives on the file rather than on a band: one knob, one saved slot. It
+    /// is also why the value has to be persisted at all -- the reshape
+    /// throttle writes it from `expand`, but whatever eventually puts it back
+    /// runs much later in a completely different process (the
+    /// `shr-rs-throttle-tick` timer, or `reconcile`) with no memory of what
+    /// was there beforehand.
+    ///
+    /// Without this every write was permanent: an `expand --priority
+    /// background` left the cap at 20000 KB/s (lower still once the adaptive
+    /// throttle had decayed it) for every md array on the host until someone
+    /// rebooted, which then throttled whatever read it next -- most visibly a
+    /// scrub, for a reason nothing in shr-rs ever reported.
+    ///
+    /// Deliberately the OBSERVED prior value, never a hardcoded "kernel
+    /// default": an operator who had tuned this themselves gets their own
+    /// number back, not 200000.
+    ///
+    /// Declared before `groups` because TOML cannot express a plain value
+    /// after an array of tables, and `#[serde(default)]` so a `state.toml`
+    /// written before this field existed still loads.
+    #[serde(default)]
+    pub saved_speed_limit_max_kb: Option<u64>,
     pub groups: Vec<ArrayState>,
     /// Arrays this host has destroyed but whose member superblocks are
     /// still on the disks, because the operator chose not to erase them.
@@ -252,7 +279,9 @@ pub struct StateFile {
 ///
 /// Recording the array's UUID here lets `write_mdadm_conf` emit an
 /// `ARRAY <ignore> UUID=...` line for it, which mdadm.conf(5) defines as
-/// "any array which matches the rest of the line will never be assembled".
+/// "any array which matches the rest of the line will never be
+/// automatically assembled" -- the metadata stays on the disks for manual
+/// recovery, and nothing assembles it behind the operator's back.
 ///
 /// `disk_ids` is what makes the list self-limiting: once those same disks
 /// are handed to a new `create`/`expand`, the old array is gone for good
@@ -286,6 +315,7 @@ impl StateFile {
     pub fn new(groups: Vec<ArrayState>) -> Self {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
+            saved_speed_limit_max_kb: None,
             groups,
             retired_arrays: Vec::new(),
         }

@@ -96,6 +96,20 @@ export const isConfirmationValid = (typed: string, expected: string): boolean =>
  * validate beyond trimming. */
 export const parseTextResult = (raw: string): string => raw.trim();
 
+/**
+ * Mirrors `shr-cli`'s `PriorityArg` (`crates/shr-cli/src/lib.rs`) -- the
+ * kernel speed profile shared by `expand --priority` (reshape) and `fs scrub
+ * start --priority` (the mdadm `check`), which is why it is declared here,
+ * above both users, rather than in the expand section it started in.
+ *
+ * What omitting the flag MEANS differs between the two, and neither default
+ * is expressible in this union. `expand` defaults to `"balanced"`, so Cockpit
+ * says nothing for that value; `fs scrub start` defaults to touching no
+ * kernel parameter at all, so Cockpit passes every value it is given. See
+ * each builder.
+ */
+export type ReshapePriority = "background" | "balanced" | "max";
+
 // --- Scrub (fs scrub start/status/cancel) --------------------------
 
 export interface ScrubStatusReport {
@@ -104,8 +118,23 @@ export interface ScrubStatusReport {
     error_count: number;
 }
 
-export const scrubStartArgs = (groupName: string): SpawnCall => ({
-    argv: ["shr-rs", "fs", "scrub", "start", "--name", requireNonEmptyName(groupName, _("actions.error.scrubStartNoName"))],
+/** `shr-rs fs scrub start`, optionally under one of the speed profiles
+ * `--priority` accepts.
+ *
+ * Unlike `expandDryRunArgs`, where "balanced" is the CLI's own default and so
+ * is omitted, EVERY profile is passed through here and omitting the flag means
+ * something different: `fs scrub start` with no `--priority` deliberately
+ * changes no kernel parameter at all, so the scrub inherits whatever
+ * host-wide `speed_limit_max` is currently set. That is a real, separate
+ * choice the dialog offers ("leave it alone"), not a default worth folding
+ * into one of the three profiles -- which is why this takes
+ * `ReshapePriority | undefined` rather than defaulting the parameter. */
+export const scrubStartArgs = (groupName: string, priority?: ReshapePriority): SpawnCall => ({
+    argv: [
+        "shr-rs", "fs", "scrub", "start",
+        "--name", requireNonEmptyName(groupName, _("actions.error.scrubStartNoName")),
+        ...(priority ? ["--priority", priority] : []),
+    ],
     options: SPAWN_OPTIONS,
 });
 
@@ -160,15 +189,6 @@ export const parseScrubStatus = (raw: string): ScrubStatusReport => {
 export const filterExpandCandidates = (disks: DiskStatus[]): DiskStatus[] => (
     disks.filter(disk => disk.arrays.length === 0)
 );
-
-/**
- * Mirrors `shr-cli`'s `PriorityArg` (`crates/shr-cli/src/lib.rs`) --
- * the reshape speed profile for `mdadm --grow`. `"balanced"` is the CLI's
- * own `default_value`, so it is treated as "say nothing" below: emitting it
- * explicitly would change argv for every operator who never touches this
- * control, which is exactly the regression this defect fix must not cause.
- */
-export type ReshapePriority = "background" | "balanced" | "max";
 
 export interface ExpandInput {
     groupName: string;

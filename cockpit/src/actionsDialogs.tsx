@@ -327,6 +327,23 @@ const describePreflightBlocker = (b: WritePreflight["blockers"][number]): string
 
 // --- scrub -------------------------------------------------------------------
 
+/** What the scrub dialog's speed control offers. `""` is the pre-selected
+ * first entry and is NOT a fourth profile: it means "pass no `--priority` at
+ * all", which leaves the host-wide kernel speed limit exactly as it is. It is
+ * first, and the default, because changing a system-wide setting should be
+ * something the operator asks for rather than something a dialog does on
+ * their behalf.
+ *
+ * A function, not a module-scope array, for the same reason as
+ * `priorityOptions`: the labels have to be read at render time to follow the
+ * session language. */
+const scrubSpeedOptions = (): { value: ReshapePriority | ""; label: string }[] => [
+    { value: "", label: _("dialogs.scrub.priority.unset") },
+    { value: "balanced", label: _("dialogs.scrub.priority.balanced") },
+    { value: "background", label: _("dialogs.scrub.priority.background") },
+    { value: "max", label: _("dialogs.scrub.priority.max") },
+];
+
 const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClose: () => void; onChanged: () => void }) => {
     const [status, setStatus] = useState<ScrubStatusReport | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -334,6 +351,7 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
     const [action, setAction] = useState<SimpleActionController<string, string> | null>(null);
     const [actionState, setActionState] = useState<SimpleActionState<string> | null>(null);
     const [busy, setBusy] = useState(false);
+    const [speed, setSpeed] = useState<ReshapePriority | "">("");
     // `onChanged` is app.tsx's `refresh`, which synchronously sets
     // `state.kind = "loading"` -- that unmounts this whole dialog (via
     // `Dashboard`) in the same React batch as any setState this dialog's own
@@ -426,6 +444,26 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
                     </StackItem>
                 )}
 
+                {/* Shown under exactly the condition that makes the Start
+                    button available, so the control is never offered for a
+                    run it cannot affect (a scrub already under way reads its
+                    ceiling from the kernel, not from this dialog). */}
+                {!loading && status && !status.running && !action && (
+                    <StackItem>
+                        <FormGroup label={_("dialogs.scrub.priorityLabel")} fieldId="scrub-priority">
+                            <span className="pf-v6-c-form-control">
+                                <select
+                                    id="scrub-priority"
+                                    value={speed}
+                                    onChange={e => setSpeed(e.target.value as ReshapePriority | "")}
+                                >
+                                    {scrubSpeedOptions().map(o => <option value={o.value} key={o.value || "unset"}>{o.label}</option>)}
+                                </select>
+                            </span>
+                        </FormGroup>
+                    </StackItem>
+                )}
+
                 {action && actionState && actionState.step !== "done" && (
                     <StackItem>
                         <Alert
@@ -454,7 +492,10 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
                         </ActionListItem>
                         {!loading && status && !status.running && !action && (
                             <ActionListItem>
-                                <button className="pf-v6-c-button pf-m-primary" type="button" onClick={() => begin(scrubStartArgs)}>
+                                <button
+                                    className="pf-v6-c-button pf-m-primary" type="button"
+                                    onClick={() => begin(name => scrubStartArgs(name, speed || undefined))}
+                                >
                                     {_("dialogs.scrub.start")}
                                 </button>
                             </ActionListItem>

@@ -1476,6 +1476,26 @@ msgid "dialogs.scrub.cancel"
 msgstr "Cancel scrub"
 
 #: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priorityLabel"
+msgstr "Check speed"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priority.unset"
+msgstr "Leave the system setting as it is (default)"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priority.balanced"
+msgstr "Balanced: trades everyday disk use against check speed"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priority.background"
+msgstr "Background: everyday disk use comes first, the check runs slower"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.priority.max"
+msgstr "Maximum speed: check as fast as possible, everyday disk use gets slower"
+
+#: src/actionsDialogs.tsx
 msgid "dialogs.expand.title"
 msgstr "Expand group \"$0\""
 
