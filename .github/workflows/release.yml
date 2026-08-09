@@ -196,8 +196,21 @@ jobs:
           npm test
           npm run typecheck
           npm run eslint
-          npm run build
-          npm run layout
+
+      # VERSION is overridden because the Makefile derives it from
+      # `git describe`, which would yield the tag verbatim ("v0.1.0").
+      - name: Build the dist tarball
+        working-directory: cockpit
+        run: make dist VERSION="${VERSION}"
+
+      # After the tarball, not before: `make dist` exports NODE_ENV=production
+      # to the build it depends on, so building any earlier would leave an
+      # unminified bundle in place that `make dist` then considers up to date
+      # and ships. Running here also means the audit measures the exact bundle
+      # inside the artifact.
+      - name: Audit the layout
+        working-directory: cockpit
+        run: npm run layout
 
       - name: Upload the layout report
         if: failure()
@@ -208,12 +221,6 @@ jobs:
             cockpit/test/layout/report/
             cockpit/test-results/
           if-no-files-found: ignore
-
-      # VERSION is overridden because the Makefile derives it from
-      # `git describe`, which would yield the tag verbatim ("v0.1.0").
-      - name: Build the dist tarball
-        working-directory: cockpit
-        run: make dist VERSION="${VERSION}"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -68,13 +68,17 @@ jobs:
           npx playwright install --with-deps chromium
           sudo apt-get install -y --no-install-recommends fonts-noto-cjk
 
+      # `make`, not `npm run build`: build.js imports pkg/lib/cockpit-po-plugin.js,
+      # which is checked out of the Cockpit repository by a Makefile rule and
+      # is not in this tree. Calling npm directly skips that and the build
+      # fails on a module it cannot resolve.
       - name: Check
         run: |
           set -eux
           npm test
           npm run typecheck
           npm run eslint
-          npm run build
+          make
           npm run layout
 
       # The console summary names every violation, but the trace and the
