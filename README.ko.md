@@ -131,7 +131,7 @@ mdadm 어레이 둘, 각각의 슬라이스 크기와 멤버와 재구성 상태
 | 그 밖 | `shr-rs-*-x86_64.tar.gz` | `cockpit-shr-rs-*.tar.xz` |
 
 ```bash
-gh release download v0.3.0 -R heavycaffeiner/shr-rs
+gh release download v0.4.0 -R heavycaffeiner/shr-rs
 sha256sum -c SHA256SUMS
 
 sudo dnf install ./shr-rs-*.rpm ./cockpit-shr-rs-*.rpm              # EL9 / EL10
