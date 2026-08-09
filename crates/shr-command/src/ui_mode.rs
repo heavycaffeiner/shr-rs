@@ -11,7 +11,12 @@ use std::io::IsTerminal;
 /// Pure predicate, decoupled from real stdio so tests can drive every
 /// branch without a real terminal (the un-refactored version was
 /// entirely untestable at this layer, which is exactly how an earlier fix shipped).
-fn is_interactive_terminal_from(no_tui_set: bool, stdout_is_tty: bool, term_is_dumb: bool, size: Option<(u16, u16)>) -> bool {
+fn is_interactive_terminal_from(
+    no_tui_set: bool,
+    stdout_is_tty: bool,
+    term_is_dumb: bool,
+    size: Option<(u16, u16)>,
+) -> bool {
     if no_tui_set {
         return false;
     }
@@ -127,7 +132,11 @@ mod tests {
         // runners are never a real interactive terminal), the no-args case
         // must match `is_interactive_terminal()` exactly, not hardcode a
         // guess either way.
-        let expected = if is_interactive_terminal() { UiMode::Tui } else { UiMode::Cli };
+        let expected = if is_interactive_terminal() {
+            UiMode::Tui
+        } else {
+            UiMode::Cli
+        };
         assert_eq!(detect_ui_mode(&[]), expected);
     }
 
@@ -165,7 +174,12 @@ mod tests {
         assert!(!is_interactive_terminal_from(false, true, false, Some((0, 0))));
         assert!(!is_interactive_terminal_from(false, true, false, None));
         // Not a TTY at all, or NO_TUI set: not interactive regardless of size.
-        assert!(!is_interactive_terminal_from(false, false, false, Some((120, 40))));
+        assert!(!is_interactive_terminal_from(
+            false,
+            false,
+            false,
+            Some((120, 40))
+        ));
         assert!(!is_interactive_terminal_from(true, true, false, Some((120, 40))));
     }
 

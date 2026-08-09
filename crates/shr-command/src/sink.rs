@@ -72,7 +72,9 @@ pub struct TextProgressSink<W> {
 
 impl<W: Write> TextProgressSink<W> {
     pub fn new(writer: W) -> Self {
-        Self { writer: Mutex::new(writer) }
+        Self {
+            writer: Mutex::new(writer),
+        }
     }
 }
 
@@ -210,11 +212,17 @@ pub struct RecordingConfirmSink {
 
 impl RecordingConfirmSink {
     pub fn proceeding() -> Self {
-        Self { answer: Confirmation::Proceed, requests: Mutex::new(Vec::new()) }
+        Self {
+            answer: Confirmation::Proceed,
+            requests: Mutex::new(Vec::new()),
+        }
     }
 
     pub fn rejecting() -> Self {
-        Self { answer: Confirmation::Reject, requests: Mutex::new(Vec::new()) }
+        Self {
+            answer: Confirmation::Reject,
+            requests: Mutex::new(Vec::new()),
+        }
     }
 
     pub fn requests(&self) -> Vec<ConfirmRequest> {

@@ -93,7 +93,11 @@ pub struct ScrubController {
 
 impl ScrubController {
     pub fn new(store: Arc<StateStore>, group_name: Option<String>) -> Self {
-        Self { store, group_name, state: ScrubState::default() }
+        Self {
+            store,
+            group_name,
+            state: ScrubState::default(),
+        }
     }
 
     pub fn group_name(&self) -> Option<&str> {
@@ -147,7 +151,9 @@ impl ScrubController {
     /// AND with a typed confirmation matching the target group's exact
     /// name -- mirrors `AddDiskController::can_execute` exactly.
     pub fn can_confirm_cancel(&self) -> bool {
-        let Some(name) = &self.group_name else { return false };
+        let Some(name) = &self.group_name else {
+            return false;
+        };
         self.state.step() == Step::ConfirmCancel
             && !self.state.confirmation_text.is_empty()
             && self.state.confirmation_text == *name

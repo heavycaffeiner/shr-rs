@@ -50,7 +50,9 @@ pub fn write_mdadm_conf(path: &Path, state: &StateFile) -> Result<(), StateError
         .iter()
         .flat_map(|group| group.bands.iter())
         .filter_map(|band| {
-            band.md_uuid.as_ref().map(|uuid| format!("ARRAY /dev/{} UUID={}", band.md_name, uuid))
+            band.md_uuid
+                .as_ref()
+                .map(|uuid| format!("ARRAY /dev/{} UUID={}", band.md_name, uuid))
         })
         .collect();
     write_managed_block(path, &lines.join("\n"))
@@ -220,7 +222,10 @@ fn scrub_unit_stem(group_name: &str) -> String {
 /// `dir` -- regardless of whether either file currently exists.
 pub fn scrub_unit_paths(dir: &Path, group_name: &str) -> (PathBuf, PathBuf) {
     let stem = scrub_unit_stem(group_name);
-    (dir.join(format!("{stem}.service")), dir.join(format!("{stem}.timer")))
+    (
+        dir.join(format!("{stem}.service")),
+        dir.join(format!("{stem}.timer")),
+    )
 }
 
 /// Whether `path` is a unit file THIS PROJECT generated -- i.e. safe
@@ -276,8 +281,13 @@ pub fn find_orphaned_scrub_units(dir: &Path, state: &StateFile) -> Result<Orphan
     };
     for entry in entries {
         let path = entry?.path();
-        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else { continue };
-        let Some(stem) = file_name.strip_suffix(".service").or_else(|| file_name.strip_suffix(".timer")) else {
+        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let Some(stem) = file_name
+            .strip_suffix(".service")
+            .or_else(|| file_name.strip_suffix(".timer"))
+        else {
             continue;
         };
         if !stem.starts_with("shr-rs-scrub-") || live_stems.contains(stem) {
@@ -348,7 +358,10 @@ pub fn write_throttle_timer_unit(dir: &Path, exe_path: &Path) -> Result<Vec<std:
 /// UNCONDITIONALLY, reshape or not.
 /// `exe_path`: see `write_scrub_timer_units`'s doc comment -- same
 /// "no hardcoded install path" fix, same reason.
-pub fn write_health_check_timer_unit(dir: &Path, exe_path: &Path) -> Result<Vec<std::path::PathBuf>, StateError> {
+pub fn write_health_check_timer_unit(
+    dir: &Path,
+    exe_path: &Path,
+) -> Result<Vec<std::path::PathBuf>, StateError> {
     let service_path = dir.join("shr-rs-health-check.service");
     let timer_path = dir.join("shr-rs-health-check.timer");
 
@@ -444,7 +457,13 @@ pub fn write_snapshot_timer_unit(
 /// charset).
 fn sanitize_unit_name(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 

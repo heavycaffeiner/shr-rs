@@ -1,27 +1,24 @@
 use crate::error::OrchestrateError;
+use crate::metrics::LiveMetricsSampler;
+use crate::notify::NotifyEvent;
 use chrono::Utc;
 use shr_command::{
-    AlwaysRejectConfirmSink, ConfirmRequest, ConfirmSink, Confirmation, NullProgressSink,
-    ProgressSink, ProgressUpdate,
+    AlwaysRejectConfirmSink, ConfirmRequest, ConfirmSink, Confirmation, NullProgressSink, ProgressSink,
+    ProgressUpdate,
 };
 use shr_core::{
     plan_expansion, plan_initial, DiskId, ExpansionStep, LayoutSnapshot, PlannerInput, RaidLevel,
     RedundancyMode, RedundantBand,
 };
-use crate::metrics::LiveMetricsSampler;
-use crate::notify::NotifyEvent;
 use shr_exec::{
-    BtrfsExecutor, CommandRunner, ExecError, LvmExecutor, MdadmExecutor, MetricsSampler,
-    NotifyExecutor, PartedExecutor, ReshapePriority, ReshapeThrottle, SafetyGuard,
-    ThrottleController,
+    BtrfsExecutor, CommandRunner, ExecError, LvmExecutor, MdadmExecutor, MetricsSampler, NotifyExecutor,
+    PartedExecutor, ReshapePriority, ReshapeThrottle, SafetyGuard, ThrottleController,
 };
-use shr_inspect::{
-    is_system_mountpoint, parse_mdstat, resolve_disk_path, DiskRef, MdArray, ResolvedDisk,
-};
+use shr_inspect::{is_system_mountpoint, parse_mdstat, resolve_disk_path, DiskRef, MdArray, ResolvedDisk};
 use shr_state::{
     conf::{is_shr_rs_owned_unit, remove_owned_unit_file, scrub_unit_paths, write_fstab, write_mdadm_conf},
-    ArrayState, NotifyPolicy, ScrubOutcome, StateBand, StateCheckpoint, StateDisk, StateExpansion,
-    StateFile, StateFilesystem, StatePartition, StatePendingDisk, StateScrubResult, StateStore,
+    ArrayState, NotifyPolicy, ScrubOutcome, StateBand, StateCheckpoint, StateDisk, StateExpansion, StateFile,
+    StateFilesystem, StatePartition, StatePendingDisk, StateScrubResult, StateStore,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -95,16 +92,30 @@ pub enum ReconcileAction {
     /// actually finished -- the scheduled-scrub systemd timer only ever
     /// calls `fs scrub start`, never `fs scrub status`, so nothing else
     /// observes this on its own.
-    ScrubSelfHealed { group: String, band_index: u8, md_name: String, error_count: u64 },
+    ScrubSelfHealed {
+        group: String,
+        band_index: u8,
+        md_name: String,
+        error_count: u64,
+    },
     /// An earlier review: a deferred `pvresize`/`lvextend`/`btrfs resize max`
     /// left behind by `execute_grow` was just run to completion because the
     /// reshape it was waiting on has gone back to `idle`.
-    ResizeCompleted { group: String, band_index: u8, md_name: String },
+    ResizeCompleted {
+        group: String,
+        band_index: u8,
+        md_name: String,
+    },
     /// Self-heal: an old `disk replace`d member's deferred
     /// `mdadm --remove` was just issued and re-verified against
     /// `/proc/mdstat` (membership, not `readlink`) because its copy has
     /// finished and the kernel confirmed it as attached-but-faulty.
-    MemberRemoved { group: String, band_index: u8, md_name: String, member_path: String },
+    MemberRemoved {
+        group: String,
+        band_index: u8,
+        md_name: String,
+        member_path: String,
+    },
 }
 
 /// `reconcile()`'s result: the array's state AFTER reconciling, plus
@@ -121,21 +132,38 @@ pub struct ReconcileOutcome {
 /// One destructive step's undo, recorded as it succeeds so a later failure
 /// can unwind everything already done, in reverse order (D10).
 enum UndoAction {
-    RemovePartition { disk_path: String, part_num: u32 },
+    RemovePartition {
+        disk_path: String,
+        part_num: u32,
+    },
     /// Stopping the array and zeroing its members' superblocks are always
     /// done together, in that order (a member can't be zeroed while still
     /// an active array component) -- bundled into one action so the
     /// journal's push/reverse order doesn't have to encode that ordering
     /// constraint between two separate entries.
-    TeardownArray { md_name: String, member_paths: Vec<String> },
+    TeardownArray {
+        md_name: String,
+        member_paths: Vec<String>,
+    },
     /// Detach a spare added via `mdadm --add` before a `--grow` consumed it
     /// (D1/D10 expansion). Never valid once the corresponding `grow`
     /// succeeds -- see `MdadmExecutor::remove_member`'s doc comment.
-    RemoveSpareMember { md_name: String, member_path: String },
-    RemovePv { dev_path: String },
-    RemoveVg { vg_name: String },
-    RemoveLv { lv_path: String },
-    Unmount { mount_point: String },
+    RemoveSpareMember {
+        md_name: String,
+        member_path: String,
+    },
+    RemovePv {
+        dev_path: String,
+    },
+    RemoveVg {
+        vg_name: String,
+    },
+    RemoveLv {
+        lv_path: String,
+    },
+    Unmount {
+        mount_point: String,
+    },
 }
 
 /// The engine's default when a caller doesn't wire up a real progress sink
@@ -468,7 +496,13 @@ impl<'a> OrchestrationEngine<'a> {
             if !d.has_content {
                 let probe = runner.run(
                     "lsblk",
-                    &["--noheadings", "-b", "-o", "PTTYPE,FSTYPE", &format!("/dev/{}", d.kernel_name)],
+                    &[
+                        "--noheadings",
+                        "-b",
+                        "-o",
+                        "PTTYPE,FSTYPE",
+                        &format!("/dev/{}", d.kernel_name),
+                    ],
                 )?;
                 if probe.stdout.split_whitespace().next().is_some() {
                     return Err(OrchestrateError::Validation(format!(
@@ -571,8 +605,12 @@ impl<'a> OrchestrationEngine<'a> {
                 req.name
             )));
         }
-        let disks_in_other_groups: HashSet<&str> =
-            full_state.groups.iter().flat_map(|g| g.disks.iter()).map(|d| d.id.as_str()).collect();
+        let disks_in_other_groups: HashSet<&str> = full_state
+            .groups
+            .iter()
+            .flat_map(|g| g.disks.iter())
+            .map(|d| d.id.as_str())
+            .collect();
         for d in &req.disks {
             if disks_in_other_groups.contains(d.id.as_str()) {
                 return Err(OrchestrateError::Validation(format!(
@@ -659,13 +697,11 @@ impl<'a> OrchestrationEngine<'a> {
         // 4. Prepare domain inputs for shr-core planner using real identity
         // (by-id, real size/serial/model) resolved by shr-inspect -- never
         // engine-invented placeholders.
-        let core_disks: Vec<shr_core::Disk> =
-            req.disks.iter().map(ResolvedDisk::to_planner_disk).collect();
+        let core_disks: Vec<shr_core::Disk> = req.disks.iter().map(ResolvedDisk::to_planner_disk).collect();
 
         let plan_input = PlannerInput::new(core_disks, req.mode);
         let reserved_head = plan_input.reserved_head;
-        let initial_plan = plan_initial(&plan_input)
-            .map_err(|e| OrchestrateError::Planner(e.to_string()))?;
+        let initial_plan = plan_initial(&plan_input).map_err(|e| OrchestrateError::Planner(e.to_string()))?;
 
         // An earlier review finding: a disk small enough that reserved_head +
         // reserved_tail + band_alignment rounding leaves it with 0 usable
@@ -677,8 +713,7 @@ impl<'a> OrchestrationEngine<'a> {
         // benefit, and state.toml would silently misrepresent it as part of
         // the array. Fail before touching anything.
         for d in &req.disks {
-            let is_member_of_any_band =
-                initial_plan.bands.iter().any(|b| b.members().contains(&d.id));
+            let is_member_of_any_band = initial_plan.bands.iter().any(|b| b.members().contains(&d.id));
             if !is_member_of_any_band {
                 return Err(OrchestrateError::Validation(format!(
                     "disk `{}` has no usable capacity in this layout (too small \
@@ -875,9 +910,7 @@ impl<'a> OrchestrationEngine<'a> {
                 let mut member_specs: Vec<(String, u32)> = Vec::new();
 
                 for disk in &state_disks {
-                    if let Some(part) =
-                        disk.partitions.iter().find(|p| p.band_index == band.band_index())
-                    {
+                    if let Some(part) = disk.partitions.iter().find(|p| p.band_index == band.band_index()) {
                         member_part_uuids.push(part.part_uuid.clone());
                         member_part_paths.push(format!("/dev/disk/by-partuuid/{}", part.part_uuid));
                         if let Some(disk_path) = disk_paths.get(&disk.id) {
@@ -943,7 +976,7 @@ impl<'a> OrchestrationEngine<'a> {
                     resize_pending: false,
                     last_smart_reallocated: None,
                     last_scrub: None,
-            scrub_in_progress: false,
+                    scrub_in_progress: false,
                     pending_member_removal: None,
                     reshape_priority: None,
                 });
@@ -959,15 +992,21 @@ impl<'a> OrchestrationEngine<'a> {
             // Setup LVM
             for md_dev in &created_md_devices {
                 lvm.pvcreate(md_dev)?;
-                journal.push(UndoAction::RemovePv { dev_path: md_dev.clone() });
+                journal.push(UndoAction::RemovePv {
+                    dev_path: md_dev.clone(),
+                });
             }
 
             let pv_refs: Vec<&str> = created_md_devices.iter().map(AsRef::as_ref).collect();
             lvm.vgcreate(&req.vg_name, &pv_refs)?;
-            journal.push(UndoAction::RemoveVg { vg_name: req.vg_name.clone() });
+            journal.push(UndoAction::RemoveVg {
+                vg_name: req.vg_name.clone(),
+            });
             lvm.lvcreate_max(&req.vg_name, &req.lv_name)?;
             let lv_path = format!("/dev/{}/{}", req.vg_name, req.lv_name);
-            journal.push(UndoAction::RemoveLv { lv_path: lv_path.clone() });
+            journal.push(UndoAction::RemoveLv {
+                lv_path: lv_path.clone(),
+            });
 
             self.progress.report(ProgressUpdate {
                 operation: "create".to_string(),
@@ -994,7 +1033,9 @@ impl<'a> OrchestrationEngine<'a> {
             // a brand-new filesystem `create()` just formatted, never an
             // existing one being adopted -- no migration path needed.
             btrfs.mount(&lv_path, &req.mount_point, Some(&req.compression), None)?;
-            journal.push(UndoAction::Unmount { mount_point: req.mount_point.clone() });
+            journal.push(UndoAction::Unmount {
+                mount_point: req.mount_point.clone(),
+            });
             btrfs.create_subvolume(&req.mount_point, "@")?;
             btrfs.create_subvolume(&req.mount_point, "@snapshots")?;
             // Swap to the real, ongoing mount (`subvol=@`) by unmounting
@@ -1032,9 +1073,7 @@ impl<'a> OrchestrationEngine<'a> {
 
         let state = match outcome {
             Ok(state) => state,
-            Err(e) => {
-                return Err(self.wrap_with_rollback(&journal, e, Some(&target_kernel_names)))
-            }
+            Err(e) => return Err(self.wrap_with_rollback(&journal, e, Some(&target_kernel_names))),
         };
 
         // A dry-run is an inspection operation: it must not create or replace
@@ -1128,7 +1167,10 @@ impl<'a> OrchestrationEngine<'a> {
                         failures.push(format!("pvremove {dev_path}: {e}"));
                     }
                 }
-                UndoAction::TeardownArray { md_name, member_paths } => {
+                UndoAction::TeardownArray {
+                    md_name,
+                    member_paths,
+                } => {
                     if let Err(e) = mdadm.stop_array(md_name) {
                         failures.push(format!("stop {md_name}: {e}"));
                     }
@@ -1206,9 +1248,7 @@ impl<'a> OrchestrationEngine<'a> {
                         )),
                     }
                     if let Err(e) = parted.remove_partition(disk_path, *part_num) {
-                        failures.push(format!(
-                            "remove partition {part_num} on {disk_path}: {e}"
-                        ));
+                        failures.push(format!("remove partition {part_num} on {disk_path}: {e}"));
                     }
                 }
             }
@@ -1245,7 +1285,10 @@ impl<'a> OrchestrationEngine<'a> {
         let kernel_name = kernel_path.rsplit('/').next().unwrap_or(&kernel_path);
         let mdstat_output = self.runner.run("cat", &["/proc/mdstat"])?;
         let mdstat = parse_mdstat(&mdstat_output.stdout);
-        Ok(mdstat.arrays.into_iter().find(|a| a.members.iter().any(|m| m.name == kernel_name)))
+        Ok(mdstat
+            .arrays
+            .into_iter()
+            .find(|a| a.members.iter().any(|m| m.name == kernel_name)))
     }
 
     /// Corrected: the first version of this fix zeroed each new
@@ -1349,7 +1392,10 @@ impl<'a> OrchestrationEngine<'a> {
         if failures.is_empty() {
             e
         } else {
-            OrchestrateError::Rollback { source: Box::new(e), failures }
+            OrchestrateError::Rollback {
+                source: Box::new(e),
+                failures,
+            }
         }
     }
 
@@ -1430,7 +1476,11 @@ impl<'a> OrchestrationEngine<'a> {
             performed.append(&mut removal_actions);
         }
 
-        if state.groups.iter().any(|g| g.bands.iter().any(|b| b.resize_pending)) {
+        if state
+            .groups
+            .iter()
+            .any(|g| g.bands.iter().any(|b| b.resize_pending))
+        {
             let mdadm = MdadmExecutor::new(self.runner);
             let lvm = LvmExecutor::new(self.runner);
             let btrfs = BtrfsExecutor::new(self.runner);
@@ -1641,7 +1691,11 @@ impl<'a> OrchestrationEngine<'a> {
         state: &mut StateFile,
         group_idx: usize,
     ) -> Result<(bool, Vec<ReconcileAction>), OrchestrateError> {
-        if !state.groups[group_idx].bands.iter().any(|b| b.pending_member_removal.is_some()) {
+        if !state.groups[group_idx]
+            .bands
+            .iter()
+            .any(|b| b.pending_member_removal.is_some())
+        {
             return Ok((false, Vec::new()));
         }
         let mdadm = MdadmExecutor::new(self.runner);
@@ -1831,7 +1885,10 @@ impl<'a> OrchestrationEngine<'a> {
                 match mdadm.degraded_count(&md_name) {
                     Ok(count) => {
                         if count > 0 {
-                            self.notify(&NotifyEvent::Degraded { group: group_name.clone(), band_index });
+                            self.notify(&NotifyEvent::Degraded {
+                                group: group_name.clone(),
+                                band_index,
+                            });
                         }
                     }
                     // Real guest: `cat` on a not-assembled array's sysfs
@@ -1842,7 +1899,10 @@ impl<'a> OrchestrationEngine<'a> {
                     Err(ExecError::NonZeroExit { ref stderr, .. })
                         if stderr.contains("No such file or directory") =>
                     {
-                        self.notify(&NotifyEvent::ArrayMissing { group: group_name.clone(), band_index });
+                        self.notify(&NotifyEvent::ArrayMissing {
+                            group: group_name.clone(),
+                            band_index,
+                        });
                     }
                     // Any OTHER failure -- `degraded_count`'s own
                     // `Prerequisite` when `cat` succeeds but its stdout
@@ -1916,7 +1976,11 @@ impl<'a> OrchestrationEngine<'a> {
         let group_idx = Self::resolve_group_index(&state, name)?;
         let group_name = state.groups[group_idx].name.clone();
         let mount_point = state.groups[group_idx].filesystem.mount_point.clone();
-        let md_names: Vec<String> = state.groups[group_idx].bands.iter().map(|b| b.md_name.clone()).collect();
+        let md_names: Vec<String> = state.groups[group_idx]
+            .bands
+            .iter()
+            .map(|b| b.md_name.clone())
+            .collect();
         let mdadm = MdadmExecutor::new(self.runner);
 
         // Degraded defense completion -- a scrub verifies parity
@@ -2015,7 +2079,12 @@ impl<'a> OrchestrationEngine<'a> {
     /// same precision as `is_missing_array_device`'s `mount`/"special
     /// device" pairing -- not exit code alone (`cat` reuses exit 1 for
     /// other read failures too, e.g. permission denied).
-    fn absent_array_error(err: &ExecError, group_name: &str, band_index: u8, md_name: &str) -> Option<OrchestrateError> {
+    fn absent_array_error(
+        err: &ExecError,
+        group_name: &str,
+        band_index: u8,
+        md_name: &str,
+    ) -> Option<OrchestrateError> {
         match err {
             ExecError::NonZeroExit { program, stderr, .. }
                 if program == "cat" && stderr.contains("No such file or directory") =>
@@ -2060,7 +2129,10 @@ impl<'a> OrchestrationEngine<'a> {
                 // back `idle` reached the desired end state regardless.
                 match mdadm.sync_action(&band.md_name) {
                     Ok(action) if action == "idle" => {}
-                    _ => failures.push(format!("band {} ({}) mdadm cancel: {e}", band.index, band.md_name)),
+                    _ => failures.push(format!(
+                        "band {} ({}) mdadm cancel: {e}",
+                        band.index, band.md_name
+                    )),
                 }
             }
         }
@@ -2101,7 +2173,10 @@ impl<'a> OrchestrationEngine<'a> {
             let mdadm_running = match mdadm.sync_action(&band.md_name) {
                 Ok(action) => action != "idle",
                 Err(e) => {
-                    failures.push(format!("band {} ({}) sync_action read-back: {e}", band.index, band.md_name));
+                    failures.push(format!(
+                        "band {} ({}) sync_action read-back: {e}",
+                        band.index, band.md_name
+                    ));
                     true
                 }
             };
@@ -2136,7 +2211,11 @@ impl<'a> OrchestrationEngine<'a> {
         if !actions.is_empty() && !self.runner.is_dry_run() {
             self.store.save(&state)?;
         }
-        Ok(ScrubReport { group_name: state.groups[group_idx].name.clone(), running, error_count })
+        Ok(ScrubReport {
+            group_name: state.groups[group_idx].name.clone(),
+            running,
+            error_count,
+        })
     }
 
     /// Recompress every file under a group's Btrfs filesystem via
@@ -2294,7 +2373,10 @@ impl<'a> OrchestrationEngine<'a> {
             // a sibling of `@` and is unreachable from the group's own
             // `subvol=@` mount.
             let existing = btrfs.list_snapshot_names(&format!("{scratch}/@snapshots"))?;
-            if existing.iter().any(|existing_name| existing_name == snapshot_name) {
+            if existing
+                .iter()
+                .any(|existing_name| existing_name == snapshot_name)
+            {
                 return Err(OrchestrateError::Validation(format!(
                     "snapshot `{snapshot_name}` already exists in group `{group_name}` -- choose a \
                      different name, or delete the existing one first"
@@ -2365,7 +2447,9 @@ impl<'a> OrchestrationEngine<'a> {
                 if !Self::is_missing_array_device(&err) {
                     return Err(err);
                 }
-                summary.push(format!("group `{group_name}`: SKIPPED (array/LV not present -- {err})"));
+                summary.push(format!(
+                    "group `{group_name}`: SKIPPED (array/LV not present -- {err})"
+                ));
                 continue;
             }
 
@@ -2442,8 +2526,10 @@ impl<'a> OrchestrationEngine<'a> {
         let snapshots_dir = format!("{scratch}/@snapshots");
 
         let prune_result = btrfs.list_snapshot_names(&snapshots_dir).and_then(|names| {
-            let mut ours: Vec<String> =
-                names.into_iter().filter(|n| n.starts_with(AUTO_SNAPSHOT_PREFIX)).collect();
+            let mut ours: Vec<String> = names
+                .into_iter()
+                .filter(|n| n.starts_with(AUTO_SNAPSHOT_PREFIX))
+                .collect();
             ours.sort(); // oldest first -- see this method's doc comment
             let excess = ours.len().saturating_sub(keep as usize);
             let mut deleted = 0usize;
@@ -2520,8 +2606,12 @@ impl<'a> OrchestrationEngine<'a> {
                 "replacement disk must be different from the disk being replaced".to_string(),
             ));
         }
-        let disks_in_any_group: HashSet<&str> =
-            state.groups.iter().flat_map(|g| g.disks.iter()).map(|d| d.id.as_str()).collect();
+        let disks_in_any_group: HashSet<&str> = state
+            .groups
+            .iter()
+            .flat_map(|g| g.disks.iter())
+            .map(|d| d.id.as_str())
+            .collect();
         if disks_in_any_group.contains(new_disk.id.as_str()) {
             return Err(OrchestrateError::Validation(format!(
                 "disk `{}` already belongs to an existing group; a disk can only be a member of \
@@ -2595,7 +2685,11 @@ impl<'a> OrchestrationEngine<'a> {
                     }
                 }
             };
-            let other_failures = if old_is_healthy { degraded } else { degraded.saturating_sub(1) };
+            let other_failures = if old_is_healthy {
+                degraded
+            } else {
+                degraded.saturating_sub(1)
+            };
             if other_failures > 0 {
                 return Err(OrchestrateError::Validation(format!(
                     "band {} ({}) has a failed member OTHER than `{old_disk_id}`; replace is \
@@ -2671,7 +2765,9 @@ impl<'a> OrchestrationEngine<'a> {
             let old_member_path = format!("/dev/disk/by-partuuid/{}", partition.part_uuid);
             let new_member_path = format!("/dev/disk/by-partuuid/{new_part_uuid}");
             // Point of no return: mdadm now owns the copy/rebuild from old to new.
-            let old_is_healthy = *old_member_healthy_by_band.get(&partition.band_index).unwrap_or(&true);
+            let old_is_healthy = *old_member_healthy_by_band
+                .get(&partition.band_index)
+                .unwrap_or(&true);
             if old_is_healthy {
                 // Mdadm's `--replace old --with new`
                 // requires `new` to ALREADY be a member (spare) of the
@@ -2803,8 +2899,11 @@ impl<'a> OrchestrationEngine<'a> {
         // Match on `old_disk.id` (the resolved by-id, always a real
         // `StateDisk.id`), not the raw `old_disk_id` reference -- a
         // serial/kernel-name alias would never be found here.
-        let disk_pos =
-            state.groups[group_idx].disks.iter().position(|d| d.id == old_disk.id).expect("checked above");
+        let disk_pos = state.groups[group_idx]
+            .disks
+            .iter()
+            .position(|d| d.id == old_disk.id)
+            .expect("checked above");
         state.groups[group_idx].disks[disk_pos] = StateDisk {
             id: new_disk.id.as_str().to_string(),
             size_bytes: new_disk.size_bytes,
@@ -2944,10 +3043,16 @@ impl<'a> OrchestrationEngine<'a> {
             operation: "destroy".to_string(),
             stage: "unmount".to_string(),
             percent: Some(0.0),
-            message: format!("unmounting `{}`", full_state.groups[group_idx].filesystem.mount_point),
+            message: format!(
+                "unmounting `{}`",
+                full_state.groups[group_idx].filesystem.mount_point
+            ),
         });
         if let Err(e) = btrfs.unmount(&full_state.groups[group_idx].filesystem.mount_point) {
-            failures.push(format!("unmount {}: {e}", full_state.groups[group_idx].filesystem.mount_point));
+            failures.push(format!(
+                "unmount {}: {e}",
+                full_state.groups[group_idx].filesystem.mount_point
+            ));
         }
 
         let vg_name = full_state.groups[group_idx].filesystem.vg_name.clone();
@@ -2964,7 +3069,10 @@ impl<'a> OrchestrationEngine<'a> {
             operation: "destroy".to_string(),
             stage: "arrays".to_string(),
             percent: Some(50.0),
-            message: format!("stopping {} RAID array(s)", full_state.groups[group_idx].bands.len()),
+            message: format!(
+                "stopping {} RAID array(s)",
+                full_state.groups[group_idx].bands.len()
+            ),
         });
         for band in &full_state.groups[group_idx].bands {
             let md_dev_path = format!("/dev/{}", band.md_name);
@@ -3092,15 +3200,16 @@ impl<'a> OrchestrationEngine<'a> {
     /// is a far worse failure mode than requiring them to be explicit.
     fn resolve_group_index(state: &StateFile, name: Option<&str>) -> Result<usize, OrchestrateError> {
         match name {
-            Some(n) => state.groups.iter().position(|g| g.name == n).ok_or_else(|| {
-                OrchestrateError::Validation(format!("no group named `{n}` exists"))
-            }),
+            Some(n) => state
+                .groups
+                .iter()
+                .position(|g| g.name == n)
+                .ok_or_else(|| OrchestrateError::Validation(format!("no group named `{n}` exists"))),
             None => match state.groups.len() {
                 0 => Err(OrchestrateError::NoActiveArray),
                 1 => Ok(0),
                 _ => Err(OrchestrateError::Validation(
-                    "multiple groups exist; --name is required to select which one to expand"
-                        .to_string(),
+                    "multiple groups exist; --name is required to select which one to expand".to_string(),
                 )),
             },
         }
@@ -3116,9 +3225,11 @@ impl<'a> OrchestrationEngine<'a> {
             return Some(d);
         }
         let wanted = reference.to_lowercase();
-        let mut hits = disks
-            .iter()
-            .filter(|d| d.serial.as_deref().is_some_and(|s| s.to_lowercase().contains(&wanted)));
+        let mut hits = disks.iter().filter(|d| {
+            d.serial
+                .as_deref()
+                .is_some_and(|s| s.to_lowercase().contains(&wanted))
+        });
         let first = hits.next()?;
         if hits.next().is_some() {
             return None;
@@ -3150,8 +3261,8 @@ impl<'a> OrchestrationEngine<'a> {
             // entirely on this path -- the persisted plan is authoritative,
             // not whatever the caller happened to pass this time.
             let expansion = full_state.groups[group_idx].expansion.clone();
-            let resumable = expansion.checkpoint.as_ref().is_some_and(|c| c.resumable)
-                && !expansion.plan.is_empty();
+            let resumable =
+                expansion.checkpoint.as_ref().is_some_and(|c| c.resumable) && !expansion.plan.is_empty();
             if resumable {
                 return self.resume_expand(full_state, group_idx);
             }
@@ -3196,8 +3307,12 @@ impl<'a> OrchestrationEngine<'a> {
         // other than the group being expanded) -- same reasoning as
         // create()'s equivalent check: a disk can only ever be a member of
         // one group.
-        let disks_in_any_group: HashSet<&str> =
-            full_state.groups.iter().flat_map(|g| g.disks.iter()).map(|d| d.id.as_str()).collect();
+        let disks_in_any_group: HashSet<&str> = full_state
+            .groups
+            .iter()
+            .flat_map(|g| g.disks.iter())
+            .map(|d| d.id.as_str())
+            .collect();
         for d in &req.new_disks {
             if disks_in_any_group.contains(d.id.as_str()) {
                 return Err(OrchestrateError::Validation(format!(
@@ -3375,8 +3490,11 @@ impl<'a> OrchestrationEngine<'a> {
         // first time in this expand() call (always one from req.new_disks,
         // possibly across more than one step -- see execute_grow/
         // execute_create_band) needs one.
-        let mut gpt_initialized: HashSet<String> =
-            full_state.groups[group_idx].disks.iter().map(|d| d.id.clone()).collect();
+        let mut gpt_initialized: HashSet<String> = full_state.groups[group_idx]
+            .disks
+            .iter()
+            .map(|d| d.id.clone())
+            .collect();
         // Seeded from every band in every group -- see `create()`'s
         // identical use of `used_md_numbers` for why this must be
         // host-wide, not scoped to the group being expanded: a brand new
@@ -3486,12 +3604,17 @@ impl<'a> OrchestrationEngine<'a> {
         // execute_create_band) keys off `id` alone, so a `kernel_name` that
         // drifted across a reboot doesn't affect where commands actually
         // target.
-        let pending: Vec<ResolvedDisk> =
-            expansion.new_disks.iter().map(resolved_disk_from_pending).collect();
-        let disks_by_id: HashMap<&str, &ResolvedDisk> =
-            pending.iter().map(|d| (d.id.as_str(), d)).collect();
-        let mut gpt_initialized: HashSet<String> =
-            full_state.groups[group_idx].disks.iter().map(|d| d.id.clone()).collect();
+        let pending: Vec<ResolvedDisk> = expansion
+            .new_disks
+            .iter()
+            .map(resolved_disk_from_pending)
+            .collect();
+        let disks_by_id: HashMap<&str, &ResolvedDisk> = pending.iter().map(|d| (d.id.as_str(), d)).collect();
+        let mut gpt_initialized: HashSet<String> = full_state.groups[group_idx]
+            .disks
+            .iter()
+            .map(|d| d.id.clone())
+            .collect();
         let mut used_md = used_md_numbers(&full_state);
         used_md.extend(host_md_numbers(self.runner)?);
 
@@ -3581,7 +3704,10 @@ impl<'a> OrchestrationEngine<'a> {
                     // gap) -- purely informational.
                     Ok(())
                 }
-                ExpansionStep::GrowBand { band_index, add_members } => self.execute_grow(
+                ExpansionStep::GrowBand {
+                    band_index,
+                    add_members,
+                } => self.execute_grow(
                     &parted,
                     &mdadm,
                     &lvm,
@@ -3595,7 +3721,12 @@ impl<'a> OrchestrationEngine<'a> {
                     add_members,
                     &mut crossed_ponr,
                 ),
-                ExpansionStep::LevelUp { band_index, to, add_members, .. } => self.execute_grow(
+                ExpansionStep::LevelUp {
+                    band_index,
+                    to,
+                    add_members,
+                    ..
+                } => self.execute_grow(
                     &parted,
                     &mdadm,
                     &lvm,
@@ -3701,7 +3832,11 @@ impl<'a> OrchestrationEngine<'a> {
             .disks
             .iter()
             .filter(|d| d.partitions.iter().any(|p| p.band_index == band_index))
-            .map(|d| resolve_disk_path(&DiskId::from(d.id.clone())).display().to_string())
+            .map(|d| {
+                resolve_disk_path(&DiskId::from(d.id.clone()))
+                    .display()
+                    .to_string()
+            })
             .collect()
     }
 
@@ -3835,9 +3970,11 @@ impl<'a> OrchestrationEngine<'a> {
                     // message happens to also say "No such file or
                     // directory"; only `cat`, the one command this path
                     // actually runs today, is trusted for this signature.
-                    Err(ExecError::NonZeroExit { ref program, ref stderr, .. })
-                        if program == "cat" && stderr.contains("No such file or directory") =>
-                    {
+                    Err(ExecError::NonZeroExit {
+                        ref program,
+                        ref stderr,
+                        ..
+                    }) if program == "cat" && stderr.contains("No such file or directory") => {
                         continue;
                     }
                     Err(err) => return Err(err.into()),
@@ -3851,8 +3988,7 @@ impl<'a> OrchestrationEngine<'a> {
                     .and_then(parse_reshape_priority)
                     .unwrap_or(self.priority);
                 let mut ctrl = ThrottleController::resume(self.runner, &md_name, band_priority);
-                let decision =
-                    self.tick_throttle_decision(&mut state, group_idx, band_pos, band_priority);
+                let decision = self.tick_throttle_decision(&mut state, group_idx, band_pos, band_priority);
                 ctrl.apply(decision)?;
                 ticked += 1;
             }
@@ -3897,9 +4033,7 @@ impl<'a> OrchestrationEngine<'a> {
             .bands
             .iter()
             .position(|b| b.index == band_index)
-            .ok_or_else(|| {
-                OrchestrateError::Validation(format!("band {band_index} not found in state"))
-            })?;
+            .ok_or_else(|| OrchestrateError::Validation(format!("band {band_index} not found in state")))?;
         let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
 
         // This band's geometry is fixed -- plan_expansion never re-slices
@@ -3949,12 +4083,14 @@ impl<'a> OrchestrationEngine<'a> {
                     parted.create_gpt(&disk_path)?;
                 }
                 parted.add_partition(&disk_path, offset, offset + size - 1)?;
-                journal.push(UndoAction::RemovePartition { disk_path: disk_path.clone(), part_num });
+                journal.push(UndoAction::RemovePartition {
+                    disk_path: disk_path.clone(),
+                    part_num,
+                });
                 parted.set_raid_flag(&disk_path, part_num)?;
 
                 let part_path = parted.partition_path_for_read(&disk_path, part_num);
-                target_kernel_names
-                    .insert(part_path.rsplit('/').next().unwrap_or(&part_path).to_string());
+                target_kernel_names.insert(part_path.rsplit('/').next().unwrap_or(&part_path).to_string());
                 let part_uuid = parted.read_partuuid(&part_path)?;
                 parted.settle_udev()?;
 
@@ -3964,7 +4100,12 @@ impl<'a> OrchestrationEngine<'a> {
 
                 new_members.push((
                     resolved.id.as_str().to_string(),
-                    StatePartition { part_uuid, offset_bytes: offset, size_bytes: size, band_index },
+                    StatePartition {
+                        part_uuid,
+                        offset_bytes: offset,
+                        size_bytes: size,
+                        band_index,
+                    },
                 ));
             }
 
@@ -3975,12 +4116,7 @@ impl<'a> OrchestrationEngine<'a> {
             // `stop_any_foreign_holder_before_create`'s doc comment), so the
             // same stop-then-zero-then-use order applies before `mdadm
             // --add`, not just before `mdadm --create`.
-            self.stop_any_foreign_holder_before_create(
-                parted,
-                mdadm,
-                &member_specs,
-                &target_kernel_names,
-            )?;
+            self.stop_any_foreign_holder_before_create(parted, mdadm, &member_specs, &target_kernel_names)?;
             for member_dev_path in &member_dev_paths {
                 mdadm.zero_superblock(member_dev_path)?;
             }
@@ -4042,7 +4178,9 @@ impl<'a> OrchestrationEngine<'a> {
             let group = &mut state.groups[group_idx];
             match group.disks.iter().position(|d| d.id == disk_id) {
                 Some(i) => group.disks[i].partitions.push(partition),
-                None => group.disks.push(new_state_disk(disks_by_id[disk_id.as_str()], vec![partition])),
+                None => group
+                    .disks
+                    .push(new_state_disk(disks_by_id[disk_id.as_str()], vec![partition])),
             }
         }
         if let Some(l) = new_level {
@@ -4180,12 +4318,14 @@ impl<'a> OrchestrationEngine<'a> {
                     parted.create_gpt(&disk_path)?;
                 }
                 parted.add_partition(&disk_path, start_offset, end_offset - 1)?;
-                journal.push(UndoAction::RemovePartition { disk_path: disk_path.clone(), part_num });
+                journal.push(UndoAction::RemovePartition {
+                    disk_path: disk_path.clone(),
+                    part_num,
+                });
                 parted.set_raid_flag(&disk_path, part_num)?;
 
                 let part_path = parted.partition_path_for_read(&disk_path, part_num);
-                target_kernel_names
-                    .insert(part_path.rsplit('/').next().unwrap_or(&part_path).to_string());
+                target_kernel_names.insert(part_path.rsplit('/').next().unwrap_or(&part_path).to_string());
                 member_specs.push((disk_path, part_num));
                 let part_uuid = parted.read_partuuid(&part_path)?;
                 member_part_uuids.push(part_uuid.clone());
@@ -4210,12 +4350,7 @@ impl<'a> OrchestrationEngine<'a> {
             // stop any self-contained holder and zero before `mdadm
             // --create`, refuse (never proceed, never stop) if the holder
             // also spans a disk outside this request.
-            self.stop_any_foreign_holder_before_create(
-                parted,
-                mdadm,
-                &member_specs,
-                &target_kernel_names,
-            )?;
+            self.stop_any_foreign_holder_before_create(parted, mdadm, &member_specs, &target_kernel_names)?;
             for member in &member_part_paths {
                 mdadm.zero_superblock(member)?;
             }
@@ -4235,7 +4370,9 @@ impl<'a> OrchestrationEngine<'a> {
 
             let md_dev_path = format!("/dev/{md_name}");
             lvm.pvcreate(&md_dev_path)?;
-            journal.push(UndoAction::RemovePv { dev_path: md_dev_path.clone() });
+            journal.push(UndoAction::RemovePv {
+                dev_path: md_dev_path.clone(),
+            });
 
             Ok((md_name, md_dev_path))
         })();
@@ -4284,7 +4421,9 @@ impl<'a> OrchestrationEngine<'a> {
             let group = &mut state.groups[group_idx];
             match group.disks.iter().position(|d| d.id == disk_id) {
                 Some(i) => group.disks[i].partitions.push(partition),
-                None => group.disks.push(new_state_disk(disks_by_id[disk_id.as_str()], vec![partition])),
+                None => group
+                    .disks
+                    .push(new_state_disk(disks_by_id[disk_id.as_str()], vec![partition])),
             }
         }
         state.groups[group_idx].bands.push(StateBand {
@@ -4566,11 +4705,19 @@ fn step_band_index(step: &ExpansionStep) -> Option<u8> {
 
 fn describe_step(step: &ExpansionStep) -> String {
     match step {
-        ExpansionStep::LevelUp { band_index, from, to, add_members } => format!(
+        ExpansionStep::LevelUp {
+            band_index,
+            from,
+            to,
+            add_members,
+        } => format!(
             "band {band_index}: level up {from:?} -> {to:?}, adding {} member(s)",
             add_members.len()
         ),
-        ExpansionStep::GrowBand { band_index, add_members } => {
+        ExpansionStep::GrowBand {
+            band_index,
+            add_members,
+        } => {
             format!("band {band_index}: growing by {} member(s)", add_members.len())
         }
         ExpansionStep::CreateBand { band } => format!(
@@ -4599,7 +4746,9 @@ fn snapshot_from_state(state: &ArrayState) -> Result<LayoutSnapshot, Orchestrate
         "shr" => RedundancyMode::Shr,
         "shr2" => RedundancyMode::Shr2,
         other => {
-            return Err(OrchestrateError::Validation(format!("unknown mode `{other}` in the shr-rs configuration")))
+            return Err(OrchestrateError::Validation(format!(
+                "unknown mode `{other}` in the shr-rs configuration"
+            )))
         }
     };
 

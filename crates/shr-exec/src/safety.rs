@@ -22,10 +22,7 @@ impl SafetyGuard {
     ///
     /// An empty `system_disks` list is rejected as an error: the absence of
     /// a confirmed exclusion list must never be silently treated as "safe".
-    pub fn validate_disk_target(
-        disk_path: &str,
-        system_disks: &[String],
-    ) -> Result<(), ExecError> {
+    pub fn validate_disk_target(disk_path: &str, system_disks: &[String]) -> Result<(), ExecError> {
         if system_disks.is_empty() {
             return Err(ExecError::SafetyViolation(
                 "system-disk exclusion list is empty; refusing to treat an unconfirmed \
@@ -88,8 +85,7 @@ fn looks_like_kernel_name(s: &str) -> bool {
     let bytes = s.as_bytes();
     if bytes.len() >= 3 {
         let prefix = &s[..2];
-        if matches!(prefix, "sd" | "hd" | "vd") && s[2..].chars().all(|c| c.is_ascii_alphanumeric())
-        {
+        if matches!(prefix, "sd" | "hd" | "vd") && s[2..].chars().all(|c| c.is_ascii_alphanumeric()) {
             return true;
         }
     }
@@ -121,10 +117,7 @@ fn strip_partition_suffix(name: &str) -> String {
             // happens to occur in the device-family word itself (`loop1`
             // contains a `p` in "loop", but has no partition suffix).
             let base_ends_in_digit = base.chars().last().is_some_and(|c| c.is_ascii_digit());
-            if base_ends_in_digit
-                && !digits.is_empty()
-                && digits.chars().all(|c| c.is_ascii_digit())
-            {
+            if base_ends_in_digit && !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
                 return base.to_string();
             }
         }

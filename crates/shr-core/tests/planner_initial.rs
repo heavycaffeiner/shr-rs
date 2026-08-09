@@ -85,10 +85,7 @@ fn shr2_4disk_equal_is_raid6() {
 fn shr2_5disk_strict_strands_upper_slice() {
     // [4,4,4,4,6]: band0 = 4 TB x5 RAID6; the top 2 TB on the 6 TB disk has
     // only one member, which strict SHR-2 cannot make redundant.
-    let out = plan(
-        &[4 * TB, 4 * TB, 4 * TB, 4 * TB, 6 * TB],
-        RedundancyMode::Shr2,
-    );
+    let out = plan(&[4 * TB, 4 * TB, 4 * TB, 4 * TB, 6 * TB], RedundancyMode::Shr2);
     assert_eq!(out.bands.len(), 1);
     assert_eq!(out.bands[0].level(), RaidLevel::Raid6);
     assert_eq!(out.bands[0].members().len(), 5);
@@ -109,19 +106,14 @@ fn shr2_three_disks_is_too_few() {
 
 #[test]
 fn shr_one_disk_is_too_few() {
-    let err =
-        plan_initial(&PlannerInput::exact(disks(&[4 * TB]), RedundancyMode::Shr)).unwrap_err();
+    let err = plan_initial(&PlannerInput::exact(disks(&[4 * TB]), RedundancyMode::Shr)).unwrap_err();
     assert!(matches!(err, PlanError::TooFewDisks { got: 1, min: 2 }));
 }
 
 #[test]
 fn reserves_and_alignment_shrink_usable() {
     // With production defaults, usable size is below raw and 4 GiB-aligned.
-    let out = plan_initial(&PlannerInput::new(
-        disks(&[4 * TB, 4 * TB]),
-        RedundancyMode::Shr,
-    ))
-    .unwrap();
+    let out = plan_initial(&PlannerInput::new(disks(&[4 * TB, 4 * TB]), RedundancyMode::Shr)).unwrap();
     assert_eq!(out.bands.len(), 1);
     let band = &out.bands[0];
     assert!(band.size() < 4 * TB);
@@ -168,8 +160,5 @@ fn more_than_256_bands_is_rejected_not_wrapped() {
     // into the real limit.
     let sizes: Vec<u64> = (1..=258).collect();
     let err = plan_initial(&PlannerInput::exact(disks(&sizes), RedundancyMode::Shr)).unwrap_err();
-    assert!(
-        matches!(err, PlanError::TooManyBands { .. }),
-        "got {err:?}"
-    );
+    assert!(matches!(err, PlanError::TooManyBands { .. }), "got {err:?}");
 }

@@ -27,7 +27,7 @@ pub use inspector::{InspectError, Inspector, StaticInspector, SystemInspector};
 pub use lsblk::{parse_lsblk, BlockDevice, LsblkOutput};
 pub use mdstat::{parse_mdstat, MdArray, MdMember, MdStat, SyncStatus};
 pub use safety::{
-    is_system_disk, is_system_mountpoint, preflight_write_targets, system_mounts_on,
-    PreflightTarget, WriteBlocker, WritePreflight, SYSTEM_MOUNTPOINTS,
+    is_system_disk, is_system_mountpoint, preflight_write_targets, system_mounts_on, PreflightTarget,
+    WriteBlocker, WritePreflight, SYSTEM_MOUNTPOINTS,
 };
 pub use smart::{parse_smartctl, SmartInfo};

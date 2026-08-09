@@ -65,7 +65,10 @@ pub struct NotifyPolicy {
 
 impl Default for NotifyPolicy {
     fn default() -> Self {
-        Self { webhook_url: None, systemd_notify: true }
+        Self {
+            webhook_url: None,
+            systemd_notify: true,
+        }
     }
 }
 
@@ -108,7 +111,11 @@ pub struct SnapshotPolicy {
 
 impl Default for SnapshotPolicy {
     fn default() -> Self {
-        Self { enabled: false, schedule: default_snapshot_schedule(), keep: default_snapshot_keep() }
+        Self {
+            enabled: false,
+            schedule: default_snapshot_schedule(),
+            keep: default_snapshot_keep(),
+        }
     }
 }
 
@@ -162,19 +169,29 @@ mod tests {
         let policy = store.load().unwrap();
 
         assert_eq!(policy.notify.webhook_url, None);
-        assert!(policy.notify.systemd_notify, "the free, local channel must default ON (earlier lesson)");
+        assert!(
+            policy.notify.systemd_notify,
+            "the free, local channel must default ON (earlier lesson)"
+        );
     }
 
     #[test]
     fn loads_a_configured_webhook_url() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("policy.toml");
-        std::fs::write(&path, "[notify]\nwebhook_url = \"https://hooks.example.com/abc?token=secret\"\n").unwrap();
+        std::fs::write(
+            &path,
+            "[notify]\nwebhook_url = \"https://hooks.example.com/abc?token=secret\"\n",
+        )
+        .unwrap();
         let store = PolicyStore::new(&path);
 
         let policy = store.load().unwrap();
 
-        assert_eq!(policy.notify.webhook_url.as_deref(), Some("https://hooks.example.com/abc?token=secret"));
+        assert_eq!(
+            policy.notify.webhook_url.as_deref(),
+            Some("https://hooks.example.com/abc?token=secret")
+        );
     }
 
     #[test]
@@ -194,7 +211,10 @@ mod tests {
         std::fs::write(&path, "not valid toml [[[").unwrap();
         let store = PolicyStore::new(&path);
 
-        assert!(store.load().is_err(), "a malformed file must not silently fall back to defaults");
+        assert!(
+            store.load().is_err(),
+            "a malformed file must not silently fall back to defaults"
+        );
     }
 
     #[test]
@@ -213,7 +233,10 @@ mod tests {
         let store = PolicyStore::new(&path);
 
         let policy = store.load().unwrap();
-        assert_eq!(policy.notify.webhook_url.as_deref(), Some("https://hooks.example.com/x"));
+        assert_eq!(
+            policy.notify.webhook_url.as_deref(),
+            Some("https://hooks.example.com/x")
+        );
         assert!(policy.snapshot.enabled);
         assert_eq!(policy.snapshot.schedule, "daily");
         assert_eq!(policy.snapshot.keep, 7);
@@ -227,7 +250,10 @@ mod tests {
         let store = PolicyStore::new(&path);
 
         let policy = store.load().unwrap();
-        assert!(!policy.snapshot.enabled, "snapshot automation must stay opt-in, unlike systemd_notify");
+        assert!(
+            !policy.snapshot.enabled,
+            "snapshot automation must stay opt-in, unlike systemd_notify"
+        );
         assert_eq!(policy.snapshot.schedule, "daily");
         assert_eq!(policy.snapshot.keep, 7);
     }

@@ -63,16 +63,10 @@ pub fn array_needs_attention(array: &ArrayStatus) -> bool {
 fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     let (health, color) = health_label(&app.report().health);
     let title = Line::from(vec![
-        Span::styled(
-            " SHR-RS ",
-            Style::default().fg(Color::Black).bg(ACCENT).bold(),
-        ),
+        Span::styled(" SHR-RS ", Style::default().fg(Color::Black).bg(ACCENT).bold()),
         Span::raw("  storage dashboard"),
         Span::raw("  ·  "),
-        Span::styled(
-            health,
-            Style::default().fg(color).add_modifier(Modifier::BOLD),
-        ),
+        Span::styled(health, Style::default().fg(color).add_modifier(Modifier::BOLD)),
     ]);
     frame.render_widget(
         Paragraph::new(title)
@@ -83,10 +77,18 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_tabs(frame: &mut Frame, app: &App, area: Rect) {
-    let labels = ["1 Dashboard", "2 Disks", "3 Arrays", "4 Groups", "5 Bands", "6 FS", "7 Logs"]
-        .into_iter()
-        .map(Line::from)
-        .collect::<Vec<_>>();
+    let labels = [
+        "1 Dashboard",
+        "2 Disks",
+        "3 Arrays",
+        "4 Groups",
+        "5 Bands",
+        "6 FS",
+        "7 Logs",
+    ]
+    .into_iter()
+    .map(Line::from)
+    .collect::<Vec<_>>();
     frame.render_widget(
         Tabs::new(labels)
             .select(app.tab().index())
@@ -99,17 +101,13 @@ fn render_tabs(frame: &mut Frame, app: &App, area: Rect) {
 
 fn render_body(frame: &mut Frame, app: &App, area: Rect) {
     let content = if app.error().is_some() {
-        let [error, content] =
-            Layout::vertical([Constraint::Length(3), Constraint::Min(5)]).areas(area);
+        let [error, content] = Layout::vertical([Constraint::Length(3), Constraint::Min(5)]).areas(area);
         let message = app.error().unwrap_or_default();
         frame.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(" refresh failed: ", Style::default().fg(WARNING).bold()),
                 Span::raw(message),
-                Span::styled(
-                    "  (showing last known-good state)",
-                    Style::default().fg(MUTED),
-                ),
+                Span::styled("  (showing last known-good state)", Style::default().fg(MUTED)),
             ]))
             .block(
                 Block::default()
@@ -135,12 +133,12 @@ fn render_body(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_dashboard(frame: &mut Frame, app: &App, area: Rect) {
-    let [summary, arrays] =
-        Layout::vertical([Constraint::Length(7), Constraint::Min(5)]).areas(area);
+    let [summary, arrays] = Layout::vertical([Constraint::Length(7), Constraint::Min(5)]).areas(area);
     let report = app.report();
-    let raw = report.disks.iter().try_fold(0u64, |sum, disk| {
-        disk.size.map(|size| sum.saturating_add(size))
-    });
+    let raw = report
+        .disks
+        .iter()
+        .try_fold(0u64, |sum, disk| disk.size.map(|size| sum.saturating_add(size)));
     let smart_warnings = report
         .disks
         .iter()
@@ -294,9 +292,18 @@ fn smart_detail(smart: &shr_command::SmartSummary) -> Option<String> {
             let noun = if v == 1 { "sector" } else { "sectors" };
             format!("{v} pending {noun}")
         }),
-        smart.reallocated_sectors.filter(|&v| v != 0).map(|v| format!("{v} reallocated")),
-        smart.uncorrectable_sectors.filter(|&v| v != 0).map(|v| format!("{v} uncorrectable")),
-        smart.nvme_critical_warning.filter(|&v| v != 0).map(|v| format!("NVMe warning 0x{v:x}")),
+        smart
+            .reallocated_sectors
+            .filter(|&v| v != 0)
+            .map(|v| format!("{v} reallocated")),
+        smart
+            .uncorrectable_sectors
+            .filter(|&v| v != 0)
+            .map(|v| format!("{v} uncorrectable")),
+        smart
+            .nvme_critical_warning
+            .filter(|&v| v != 0)
+            .map(|v| format!("NVMe warning 0x{v:x}")),
     ]
     .into_iter()
     .flatten()
@@ -329,13 +336,21 @@ fn render_groups(frame: &mut Frame, app: &App, area: Rect) {
         let tolerance_col = tolerance_color(&tolerance);
         Row::new([
             Cell::from(group.name.clone()),
-            Cell::from(format!("{}\n{}", group.mode.to_ascii_uppercase(), tolerance_label(&tolerance)))
-                .style(Style::default().fg(tolerance_col)),
+            Cell::from(format!(
+                "{}\n{}",
+                group.mode.to_ascii_uppercase(),
+                tolerance_label(&tolerance)
+            ))
+            .style(Style::default().fg(tolerance_col)),
             Cell::from(group.mount_point.clone()),
             Cell::from(group.disks.len().to_string()),
             Cell::from(group.bands.len().to_string()),
-            Cell::from(if group.resize_pending { "expansion unfinished" } else { "ok" })
-                .style(Style::default().fg(status_color)),
+            Cell::from(if group.resize_pending {
+                "expansion unfinished"
+            } else {
+                "ok"
+            })
+            .style(Style::default().fg(status_color)),
         ])
         .height(2)
     });
@@ -358,7 +373,11 @@ fn render_groups(frame: &mut Frame, app: &App, area: Rect) {
     )
     .header(header)
     .column_spacing(1)
-    .block(Block::default().borders(Borders::ALL).title(format!("SHR groups ({})", groups.len())));
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(format!("SHR groups ({})", groups.len())),
+    );
     frame.render_widget(table, area);
 }
 
@@ -396,17 +415,26 @@ struct GroupToleranceStatus {
 fn group_tolerance_status(mode: &str, bands: &[GroupBandStatus]) -> GroupToleranceStatus {
     let nominal = group_fault_tolerance(mode);
     let Some(nominal_value) = nominal else {
-        return GroupToleranceStatus { nominal, remaining: None };
+        return GroupToleranceStatus {
+            nominal,
+            remaining: None,
+        };
     };
     if bands.is_empty() || bands.iter().any(|band| band.member_states.is_empty()) {
-        return GroupToleranceStatus { nominal, remaining: None };
+        return GroupToleranceStatus {
+            nominal,
+            remaining: None,
+        };
     }
     let worst_faulty = bands
         .iter()
         .map(|band| band.member_states.iter().filter(|m| m.faulty).count() as i64)
         .max()
         .unwrap_or(0);
-    GroupToleranceStatus { nominal, remaining: Some(nominal_value - worst_faulty) }
+    GroupToleranceStatus {
+        nominal,
+        remaining: Some(nominal_value - worst_faulty),
+    }
 }
 
 /// Wording ported verbatim from Cockpit's `toleranceLabel`
@@ -448,9 +476,8 @@ fn tolerance_color(status: &GroupToleranceStatus) -> Color {
 /// persisted `resize_pending` flag.
 fn render_bands(frame: &mut Frame, app: &App, area: Rect) {
     let report = app.report();
-    let sync_for = |md_name: &str| -> Option<&ArrayStatus> {
-        report.arrays.iter().find(|a| a.name == md_name)
-    };
+    let sync_for =
+        |md_name: &str| -> Option<&ArrayStatus> { report.arrays.iter().find(|a| a.name == md_name) };
 
     let header = Row::new(["Group", "Band", "Level", "Device", "Usable", "Sync", "Resize"])
         .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
@@ -509,7 +536,11 @@ fn render_bands(frame: &mut Frame, app: &App, area: Rect) {
     )
     .header(header)
     .column_spacing(1)
-    .block(Block::default().borders(Borders::ALL).title(format!("Bands ({row_count})")));
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(format!("Bands ({row_count})")),
+    );
     frame.render_widget(table, area);
 }
 
@@ -553,7 +584,11 @@ fn render_fs(frame: &mut Frame, app: &App, area: Rect) {
     )
     .header(header)
     .column_spacing(1)
-    .block(Block::default().borders(Borders::ALL).title(format!("Filesystems ({})", groups.len())));
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(format!("Filesystems ({})", groups.len())),
+    );
     frame.render_widget(table, area);
 }
 
@@ -570,14 +605,20 @@ fn render_fs_row(group: &GroupStatus, fs_df: &FsDfReport) -> Row<'static> {
     // `compression` is a required String (never fabricated -- see
     // GroupStatus's doc comment), so empty is shown as "-" like `fs_uuid`'s
     // `None` case, not guessed.
-    let compression = if group.compression.is_empty() { "-".to_string() } else { group.compression.clone() };
+    let compression = if group.compression.is_empty() {
+        "-".to_string()
+    } else {
+        group.compression.clone()
+    };
 
     let df_row = fs_df.groups.iter().find(|g| g.name == group.name);
     let used = df_row.and_then(|g| match (g.data_used_bytes, g.metadata_used_bytes) {
         (Some(data), Some(meta)) => Some(shr_command::render::human_bytes(data.saturating_add(meta))),
         _ => None,
     });
-    let free = df_row.and_then(|g| g.unallocated_bytes).map(shr_command::render::human_bytes);
+    let free = df_row
+        .and_then(|g| g.unallocated_bytes)
+        .map(shr_command::render::human_bytes);
 
     Row::new([
         Cell::from(group.name.clone()),
@@ -600,12 +641,18 @@ fn render_logs(frame: &mut Frame, app: &App, area: Rect) {
     let text = if logs.is_empty() {
         Text::from("(no recent kernel log lines)")
     } else {
-        Text::from(logs.iter().map(|line| Line::from(line.as_str())).collect::<Vec<_>>())
+        Text::from(
+            logs.iter()
+                .map(|line| Line::from(line.as_str()))
+                .collect::<Vec<_>>(),
+        )
     };
     frame.render_widget(
-        Paragraph::new(text)
-            .wrap(Wrap { trim: false })
-            .block(Block::default().borders(Borders::ALL).title(format!("Kernel log (last {})", logs.len()))),
+        Paragraph::new(text).wrap(Wrap { trim: false }).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!("Kernel log (last {})", logs.len())),
+        ),
         area,
     );
 }
@@ -648,8 +695,7 @@ fn render_array_table<'a>(
                     // marks `(F)`/`(S)`, and after that fix `(W)`/`(R)` too).
                     // Shares the CLI's own helper rather than re-implementing
                     // the same mapping a second time.
-                    shr_command::render::annotated_members(&array.members, &array.member_states)
-                        .join(", ")
+                    shr_command::render::annotated_members(&array.members, &array.member_states).join(", ")
                 }
             )),
             Cell::from(sync),
@@ -715,7 +761,10 @@ fn render_wizard_overlay(frame: &mut Frame, wizard: &WizardView, area: Rect) {
         Step::ScrubCheckWarning => wizard_scrub_check_warning_text(wizard),
         Step::Confirm => wizard_confirm_text(wizard),
         Step::Executing => Text::from(vec![
-            Line::from(Span::styled("Running -- do not force-quit the TUI.", Style::default().fg(WARNING).bold())),
+            Line::from(Span::styled(
+                "Running -- do not force-quit the TUI.",
+                Style::default().fg(WARNING).bold(),
+            )),
             Line::from("The expansion is running in the background. Rebuilding a real array can take hours."),
         ]),
         Step::Done => wizard_done_text(wizard),
@@ -744,7 +793,10 @@ fn wizard_select_disks_text(wizard: &WizardView) -> Text<'static> {
         Line::from(""),
     ];
     if wizard.candidate_disks.is_empty() {
-        lines.push(Line::from(Span::styled("(no disks detected)", Style::default().fg(MUTED))));
+        lines.push(Line::from(Span::styled(
+            "(no disks detected)",
+            Style::default().fg(MUTED),
+        )));
     }
     for (i, disk) in wizard.candidate_disks.iter().enumerate() {
         let cursor = if i == wizard.cursor { ">" } else { " " };
@@ -752,7 +804,11 @@ fn wizard_select_disks_text(wizard: &WizardView) -> Text<'static> {
         // even if somehow present in `selected` -- the mark reflects reality
         // (`app.rs::handle_wizard_key` already refuses to put it there),
         // this just keeps the row itself from implying otherwise.
-        let mark = if !disk.system_disk && wizard.selected.contains(&disk.name) { "[x]" } else { "[ ]" };
+        let mark = if !disk.system_disk && wizard.selected.contains(&disk.name) {
+            "[x]"
+        } else {
+            "[ ]"
+        };
         let style = if i == wizard.cursor {
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
         } else {
@@ -764,13 +820,19 @@ fn wizard_select_disks_text(wizard: &WizardView) -> Text<'static> {
             // "chip chip--system" so the two frontends warn about the
             // same thing, even though an earlier fix put them in different languages
             // (Cockpit Korean, TUI English) rather than sharing literal text.
-            spans.push(Span::styled(" (system disk -- not selectable)", Style::default().fg(DANGER)));
+            spans.push(Span::styled(
+                " (system disk -- not selectable)",
+                Style::default().fg(DANGER),
+            ));
         }
         lines.push(Line::from(spans));
     }
     if let Some(reason) = &wizard.selection_blocked_reason {
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(reason.clone(), Style::default().fg(DANGER))));
+        lines.push(Line::from(Span::styled(
+            reason.clone(),
+            Style::default().fg(DANGER),
+        )));
     }
     Text::from(lines)
 }
@@ -818,7 +880,10 @@ fn wizard_preflight_text(wizard: &WizardView) -> Text<'static> {
 /// `--skip-scrub-check` flag not being on by default.
 fn wizard_scrub_check_warning_text(wizard: &WizardView) -> Text<'static> {
     let mut lines = vec![
-        Line::from(Span::styled("Scrub check blocked this expansion", Style::default().fg(WARNING).bold())),
+        Line::from(Span::styled(
+            "Scrub check blocked this expansion",
+            Style::default().fg(WARNING).bold(),
+        )),
         Line::from(""),
     ];
     if let Some(warning) = &wizard.controller_state.scrub_check_warning {
@@ -843,17 +908,29 @@ fn wizard_confirm_text(wizard: &WizardView) -> Text<'static> {
     if let Some(commands) = Some(&wizard.controller_state.preview_commands).filter(|c| !c.is_empty()) {
         lines.push(Line::from(format!("Planned commands ({}):", commands.len())));
         for cmd in commands {
-            lines.push(Line::from(Span::styled(format!("  {cmd}"), Style::default().fg(MUTED))));
+            lines.push(Line::from(Span::styled(
+                format!("  {cmd}"),
+                Style::default().fg(MUTED),
+            )));
         }
         lines.push(Line::from(""));
     }
-    lines.push(Line::from(format!("Type the group name `{}` to confirm, then press Enter:", wizard.group_name)));
-    lines.push(Line::from(Span::styled(format!("> {}", wizard.confirmation_input), Style::default().fg(ACCENT))));
+    lines.push(Line::from(format!(
+        "Type the group name `{}` to confirm, then press Enter:",
+        wizard.group_name
+    )));
+    lines.push(Line::from(Span::styled(
+        format!("> {}", wizard.confirmation_input),
+        Style::default().fg(ACCENT),
+    )));
     Text::from(lines)
 }
 
 fn wizard_done_text(wizard: &WizardView) -> Text<'static> {
-    let mut lines = vec![Line::from(Span::styled("Done.", Style::default().fg(GOOD).bold()))];
+    let mut lines = vec![Line::from(Span::styled(
+        "Done.",
+        Style::default().fg(GOOD).bold(),
+    ))];
     if let Some(state) = &wizard.controller_state.result {
         lines.push(Line::from(format!(
             "Group `{}` now spans {} band(s).",
@@ -862,7 +939,10 @@ fn wizard_done_text(wizard: &WizardView) -> Text<'static> {
         )));
     }
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled("[Esc] close", Style::default().fg(MUTED))));
+    lines.push(Line::from(Span::styled(
+        "[Esc] close",
+        Style::default().fg(MUTED),
+    )));
     Text::from(lines)
 }
 
@@ -915,7 +995,10 @@ fn replace_pick_old_text(replace: &ReplaceView) -> Text<'static> {
         Line::from(""),
     ];
     if replace.old_candidates.is_empty() {
-        lines.push(Line::from(Span::styled("(no member disks in this group)", Style::default().fg(MUTED))));
+        lines.push(Line::from(Span::styled(
+            "(no member disks in this group)",
+            Style::default().fg(MUTED),
+        )));
     }
     for (i, candidate) in replace.old_candidates.iter().enumerate() {
         let cursor = if i == replace.old_cursor { ">" } else { " " };
@@ -924,7 +1007,10 @@ fn replace_pick_old_text(replace: &ReplaceView) -> Text<'static> {
         } else {
             Style::default()
         };
-        lines.push(Line::from(Span::styled(format!("{cursor} {}", candidate.display), style)));
+        lines.push(Line::from(Span::styled(
+            format!("{cursor} {}", candidate.display),
+            style,
+        )));
     }
     Text::from(lines)
 }
@@ -935,11 +1021,16 @@ fn replace_pick_old_text(replace: &ReplaceView) -> Text<'static> {
 /// it).
 fn replace_pick_new_text(replace: &ReplaceView) -> Text<'static> {
     let mut lines = vec![
-        Line::from("Select the replacement disk ([Up/Down] move, [Enter] pick, [Backspace] back, [Esc] cancel):"),
+        Line::from(
+            "Select the replacement disk ([Up/Down] move, [Enter] pick, [Backspace] back, [Esc] cancel):",
+        ),
         Line::from(""),
     ];
     if replace.new_candidates.is_empty() {
-        lines.push(Line::from(Span::styled("(no free disks detected)", Style::default().fg(MUTED))));
+        lines.push(Line::from(Span::styled(
+            "(no free disks detected)",
+            Style::default().fg(MUTED),
+        )));
     }
     for (i, candidate) in replace.new_candidates.iter().enumerate() {
         let cursor = if i == replace.new_cursor { ">" } else { " " };
@@ -950,13 +1041,19 @@ fn replace_pick_new_text(replace: &ReplaceView) -> Text<'static> {
         };
         let mut spans = vec![Span::styled(format!("{cursor} /dev/{}", candidate.name), style)];
         if candidate.system_disk {
-            spans.push(Span::styled(" (system disk -- not selectable)", Style::default().fg(DANGER)));
+            spans.push(Span::styled(
+                " (system disk -- not selectable)",
+                Style::default().fg(DANGER),
+            ));
         }
         lines.push(Line::from(spans));
     }
     if let Some(reason) = &replace.selection_blocked_reason {
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(reason.clone(), Style::default().fg(DANGER))));
+        lines.push(Line::from(Span::styled(
+            reason.clone(),
+            Style::default().fg(DANGER),
+        )));
     }
     Text::from(lines)
 }
@@ -972,7 +1069,10 @@ fn replace_confirm_text(replace: &ReplaceView) -> Text<'static> {
     if let Some(commands) = Some(&replace.controller_state.preview_commands).filter(|c| !c.is_empty()) {
         lines.push(Line::from(format!("Planned commands ({}):", commands.len())));
         for cmd in commands {
-            lines.push(Line::from(Span::styled(format!("  {cmd}"), Style::default().fg(MUTED))));
+            lines.push(Line::from(Span::styled(
+                format!("  {cmd}"),
+                Style::default().fg(MUTED),
+            )));
         }
         lines.push(Line::from(""));
     }
@@ -980,12 +1080,18 @@ fn replace_confirm_text(replace: &ReplaceView) -> Text<'static> {
         "Type the group name `{}` to confirm, then press Enter:",
         replace.group_name
     )));
-    lines.push(Line::from(Span::styled(format!("> {}", replace.confirmation_input), Style::default().fg(ACCENT))));
+    lines.push(Line::from(Span::styled(
+        format!("> {}", replace.confirmation_input),
+        Style::default().fg(ACCENT),
+    )));
     Text::from(lines)
 }
 
 fn replace_done_text(replace: &ReplaceView) -> Text<'static> {
-    let mut lines = vec![Line::from(Span::styled("Done.", Style::default().fg(GOOD).bold()))];
+    let mut lines = vec![Line::from(Span::styled(
+        "Done.",
+        Style::default().fg(GOOD).bold(),
+    ))];
     if let Some(state) = &replace.controller_state.result {
         lines.push(Line::from(format!(
             "Group `{}` now spans {} band(s).",
@@ -994,7 +1100,10 @@ fn replace_done_text(replace: &ReplaceView) -> Text<'static> {
         )));
     }
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled("[Esc] close", Style::default().fg(MUTED))));
+    lines.push(Line::from(Span::styled(
+        "[Esc] close",
+        Style::default().fg(MUTED),
+    )));
     Text::from(lines)
 }
 
@@ -1011,7 +1120,10 @@ fn render_scrub_overlay(frame: &mut Frame, scrub: &ScrubView, area: Rect) {
         ScrubStep::ConfirmStart => Text::from(vec![
             Line::from(format!("Start a scrub on group `{}`?", scrub.group_name)),
             Line::from(""),
-            Line::from(Span::styled("[Enter] start   [Esc] cancel", Style::default().fg(MUTED))),
+            Line::from(Span::styled(
+                "[Enter] start   [Esc] cancel",
+                Style::default().fg(MUTED),
+            )),
         ]),
         // Requires the typed group name, same that distinct-confirmation
         // discipline as `AddDiskController::can_execute`/
@@ -1027,7 +1139,10 @@ fn render_scrub_overlay(frame: &mut Frame, scrub: &ScrubView, area: Rect) {
                 "Type the group name `{}` to confirm, then press Enter:",
                 scrub.group_name
             )),
-            Line::from(Span::styled(format!("> {}", scrub.confirmation_input), Style::default().fg(ACCENT))),
+            Line::from(Span::styled(
+                format!("> {}", scrub.confirmation_input),
+                Style::default().fg(ACCENT),
+            )),
             Line::from(""),
             Line::from(Span::styled("[Esc] cancel", Style::default().fg(MUTED))),
         ]),
@@ -1084,14 +1199,23 @@ fn render_reconcile_overlay(frame: &mut Frame, reconcile: &ReconcileView, area: 
             Line::from("Finish the space-expansion step a previous expand left unfinished,"),
             Line::from("on every group. Safe to run even when nothing is pending."),
             Line::from(""),
-            Line::from(Span::styled("[Enter] finish expansion   [Esc] cancel", Style::default().fg(MUTED))),
+            Line::from(Span::styled(
+                "[Enter] finish expansion   [Esc] cancel",
+                Style::default().fg(MUTED),
+            )),
         ]),
         ReconcileStep::Executing => Text::from(vec![
-            Line::from(Span::styled("Running -- do not force-quit the TUI.", Style::default().fg(WARNING).bold())),
+            Line::from(Span::styled(
+                "Running -- do not force-quit the TUI.",
+                Style::default().fg(WARNING).bold(),
+            )),
             Line::from("Growing the filesystem onto the new space can take a while."),
         ]),
         ReconcileStep::Done => {
-            let mut lines = vec![Line::from(Span::styled("Done.", Style::default().fg(GOOD).bold())), Line::from("")];
+            let mut lines = vec![
+                Line::from(Span::styled("Done.", Style::default().fg(GOOD).bold())),
+                Line::from(""),
+            ];
             if reconcile.controller_state.performed.is_empty() {
                 lines.push(Line::from("Nothing was pending."));
             } else {
@@ -1101,15 +1225,27 @@ fn render_reconcile_overlay(frame: &mut Frame, reconcile: &ReconcileView, area: 
             }
             if let Some(pending) = &reconcile.controller_state.still_pending {
                 lines.push(Line::from(""));
-                lines.push(Line::from(Span::styled(pending.clone(), Style::default().fg(WARNING))));
+                lines.push(Line::from(Span::styled(
+                    pending.clone(),
+                    Style::default().fg(WARNING),
+                )));
             }
             lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled("[Esc] close", Style::default().fg(MUTED))));
+            lines.push(Line::from(Span::styled(
+                "[Esc] close",
+                Style::default().fg(MUTED),
+            )));
             Text::from(lines)
         }
         ReconcileStep::Error => Text::from(vec![
             Line::from(Span::styled("Failed", Style::default().fg(DANGER).bold())),
-            Line::from(reconcile.controller_state.error_message.clone().unwrap_or_default()),
+            Line::from(
+                reconcile
+                    .controller_state
+                    .error_message
+                    .clone()
+                    .unwrap_or_default(),
+            ),
             Line::from(""),
             Line::from(Span::styled("[Esc] close", Style::default().fg(MUTED))),
         ]),
@@ -1127,8 +1263,12 @@ fn render_reconcile_overlay(frame: &mut Frame, reconcile: &ReconcileView, area: 
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
-    let [area] = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center).areas(area);
-    let [area] = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center).areas(area);
+    let [area] = Layout::vertical([Constraint::Percentage(percent_y)])
+        .flex(Flex::Center)
+        .areas(area);
+    let [area] = Layout::horizontal([Constraint::Percentage(percent_x)])
+        .flex(Flex::Center)
+        .areas(area);
     area
 }
 
@@ -1140,7 +1280,11 @@ mod tests {
     use shr_command::{FsDfReport, GroupDfStatus, StatusReport};
 
     fn flatten(text: &Text) -> String {
-        text.lines.iter().flat_map(|l| l.spans.iter()).map(|s| s.content.as_ref()).collect()
+        text.lines
+            .iter()
+            .flat_map(|l| l.spans.iter())
+            .map(|s| s.content.as_ref())
+            .collect()
     }
 
     /// A single-group report with a known compression setting -- enough to
@@ -1186,8 +1330,13 @@ mod tests {
                 render_fs(frame, &app, area);
             })
             .unwrap();
-        let text: String =
-            terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect();
+        let text: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
         assert!(text.contains("zstd:3"), "{text}");
     }
 
@@ -1233,8 +1382,13 @@ mod tests {
                 render_fs(frame, &app, area);
             })
             .unwrap();
-        let text: String =
-            terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect();
+        let text: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
         assert!(text.contains("3.0 TB"), "Used column missing: {text}");
         assert!(text.contains("5.0 TB"), "Free column missing: {text}");
     }
@@ -1254,8 +1408,13 @@ mod tests {
                 render_fs(frame, &app, area);
             })
             .unwrap();
-        let text: String =
-            terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect();
+        let text: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
         assert!(text.contains('?'), "{text}");
     }
 
@@ -1273,19 +1432,31 @@ mod tests {
     fn system_disk_row_is_marked_and_a_normal_disk_row_is_not() {
         let wizard = WizardView {
             candidate_disks: vec![
-                DiskCandidate { name: "vda".into(), system_disk: true },
-                DiskCandidate { name: "vdb".into(), system_disk: false },
+                DiskCandidate {
+                    name: "vda".into(),
+                    system_disk: true,
+                },
+                DiskCandidate {
+                    name: "vdb".into(),
+                    system_disk: false,
+                },
             ],
             ..Default::default()
         };
         let text = wizard_select_disks_text(&wizard);
         let flat = flatten(&text);
         assert!(flat.contains("vda"), "{flat}");
-        assert!(flat.contains("system disk"), "system disk row must carry a visible marker: {flat}");
+        assert!(
+            flat.contains("system disk"),
+            "system disk row must carry a visible marker: {flat}"
+        );
 
         let vdb_line = line_containing(&text, "vdb");
         let vdb_flat: String = vdb_line.spans.iter().map(|s| s.content.as_ref()).collect();
-        assert!(!vdb_flat.contains("system disk"), "a non-system disk must not carry the system marker: {vdb_flat}");
+        assert!(
+            !vdb_flat.contains("system disk"),
+            "a non-system disk must not carry the system marker: {vdb_flat}"
+        );
     }
 
     /// When the operator tries to select the system disk, the wizard
@@ -1294,7 +1465,10 @@ mod tests {
     #[test]
     fn selection_blocked_reason_is_rendered_near_the_list() {
         let wizard = WizardView {
-            candidate_disks: vec![DiskCandidate { name: "vda".into(), system_disk: true }],
+            candidate_disks: vec![DiskCandidate {
+                name: "vda".into(),
+                system_disk: true,
+            }],
             selection_blocked_reason: Some(
                 "The system disk cannot be selected: /dev/vda -- the OS is running on this disk.".into(),
             ),
@@ -1328,7 +1502,10 @@ mod tests {
             ..Default::default()
         };
         let flat = flatten(&wizard_preflight_text(&wizard_blocked_by_content));
-        assert!(flat.contains("[o]"), "a HasContent blocker must offer the override: {flat}");
+        assert!(
+            flat.contains("[o]"),
+            "a HasContent blocker must offer the override: {flat}"
+        );
         assert!(
             !flat.contains("from the CLI"),
             "the stale CLI-redirect hint must be gone now that the TUI has its own override: {flat}"
@@ -1417,7 +1594,9 @@ mod tests {
         let app = App::new(report);
         let backend = TestBackend::new(width, 10);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render_disks(frame, &app, frame.area())).unwrap();
+        terminal
+            .draw(|frame| render_disks(frame, &app, frame.area()))
+            .unwrap();
         buffer_text(terminal.backend().buffer())
     }
 
@@ -1445,10 +1624,19 @@ mod tests {
             )]),
             150,
         );
-        assert!(text.contains("3 pending sectors"), "known pending-sector count must render: {text}");
+        assert!(
+            text.contains("3 pending sectors"),
+            "known pending-sector count must render: {text}"
+        );
         assert!(text.contains("1200h"), "known power-on-hours must render: {text}");
-        assert!(!text.contains("reallocated"), "a genuine zero reallocated-sector count must not print: {text}");
-        assert!(!text.contains("uncorrectable"), "uncorrectable is None here, must not appear: {text}");
+        assert!(
+            !text.contains("reallocated"),
+            "a genuine zero reallocated-sector count must not print: {text}"
+        );
+        assert!(
+            !text.contains("uncorrectable"),
+            "uncorrectable is None here, must not appear: {text}"
+        );
     }
 
     /// Honesty requirement: with every detail field `None`, nothing
@@ -1485,7 +1673,10 @@ mod tests {
             !contains_digit_then_h(&text),
             "power-on hours must not appear when unknown: {text}"
         );
-        assert!(text.contains("unknown"), "the SMART state label itself must still render: {text}");
+        assert!(
+            text.contains("unknown"),
+            "the SMART state label itself must still render: {text}"
+        );
     }
 
     fn contains_digit_then_h(s: &str) -> bool {
@@ -1502,8 +1693,15 @@ mod tests {
     /// it.
     #[test]
     fn disks_tab_marks_the_system_disk_and_its_mounts_without_a_wizard() {
-        let ok_smart =
-            SmartSummary { state: SmartState::Ok, temperature_c: None, power_on_hours: None, pending_sectors: None, reallocated_sectors: None, uncorrectable_sectors: None, nvme_critical_warning: None };
+        let ok_smart = SmartSummary {
+            state: SmartState::Ok,
+            temperature_c: None,
+            power_on_hours: None,
+            pending_sectors: None,
+            reallocated_sectors: None,
+            uncorrectable_sectors: None,
+            nvme_critical_warning: None,
+        };
         let mut system_disk = disk_fixture("vda", ok_smart.clone());
         system_disk.system_disk = true;
         system_disk.system_mounts = vec!["/".to_string(), "/boot".to_string()];
@@ -1515,7 +1713,10 @@ mod tests {
             1,
             "exactly one row (the system disk) may carry the marker: {text}"
         );
-        assert!(text.contains("/boot"), "the system disk's mounts must render: {text}");
+        assert!(
+            text.contains("/boot"),
+            "the system disk's mounts must render: {text}"
+        );
     }
 
     /// Regression, found on real hardware and NOT by the test above.
@@ -1543,8 +1744,7 @@ mod tests {
         };
         let mut system_disk = disk_fixture("vda", ok_smart);
         system_disk.system_disk = true;
-        system_disk.system_mounts =
-            vec!["/".to_string(), "/boot".to_string(), "/boot/efi".to_string()];
+        system_disk.system_mounts = vec!["/".to_string(), "/boot".to_string(), "/boot/efi".to_string()];
 
         let text = render_disks_text(disks_report(vec![system_disk]), 150);
 
@@ -1563,14 +1763,24 @@ mod tests {
     /// never invent a mount path to go with it.
     #[test]
     fn disks_tab_never_fabricates_a_mount_path_for_a_system_disk_with_none_observed() {
-        let ok_smart =
-            SmartSummary { state: SmartState::Ok, temperature_c: None, power_on_hours: None, pending_sectors: None, reallocated_sectors: None, uncorrectable_sectors: None, nvme_critical_warning: None };
+        let ok_smart = SmartSummary {
+            state: SmartState::Ok,
+            temperature_c: None,
+            power_on_hours: None,
+            pending_sectors: None,
+            reallocated_sectors: None,
+            uncorrectable_sectors: None,
+            nvme_critical_warning: None,
+        };
         let mut system_disk = disk_fixture("vda", ok_smart);
         system_disk.system_disk = true;
         // system_mounts left empty -- e.g. mount detection failed.
 
         let text = render_disks_text(disks_report(vec![system_disk]), 150);
-        assert!(text.contains("SYSTEM DISK"), "the marker itself must still show: {text}");
+        assert!(
+            text.contains("SYSTEM DISK"),
+            "the marker itself must still show: {text}"
+        );
     }
 
     fn tolerance_group(mode: &str, bands: Vec<GroupBandStatus>) -> GroupStatus {
@@ -1591,7 +1801,14 @@ mod tests {
     }
 
     fn member(name: &str, faulty: bool) -> MemberStatus {
-        MemberStatus { name: name.into(), role: Some(0), faulty, spare: false, write_mostly: false, replacement: false }
+        MemberStatus {
+            name: name.into(),
+            role: Some(0),
+            faulty,
+            spare: false,
+            write_mostly: false,
+            replacement: false,
+        }
     }
 
     fn band(md_name: &str, member_states: Vec<MemberStatus>) -> GroupBandStatus {
@@ -1615,7 +1832,9 @@ mod tests {
         let app = App::new(report);
         let backend = TestBackend::new(width, 10);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render_groups(frame, &app, frame.area())).unwrap();
+        terminal
+            .draw(|frame| render_groups(frame, &app, frame.area()))
+            .unwrap();
         buffer_text(terminal.backend().buffer())
     }
 
@@ -1630,7 +1849,15 @@ mod tests {
         let group = tolerance_group(
             "shr2",
             vec![
-                band("md0", vec![member("a", true), member("b", false), member("c", false), member("d", false)]),
+                band(
+                    "md0",
+                    vec![
+                        member("a", true),
+                        member("b", false),
+                        member("c", false),
+                        member("d", false),
+                    ],
+                ),
                 band("md1", vec![member("e", false), member("f", false)]),
             ],
         );
@@ -1643,8 +1870,14 @@ mod tests {
             state_path: None,
         };
         let text = render_groups_text(report, 140);
-        assert!(text.contains("1 remaining"), "remaining margin (2 - 1 faulty) must render: {text}");
-        assert!(text.contains("designed for 2-disk loss"), "nominal SHR-2 tolerance must render: {text}");
+        assert!(
+            text.contains("1 remaining"),
+            "remaining margin (2 - 1 faulty) must render: {text}"
+        );
+        assert!(
+            text.contains("designed for 2-disk loss"),
+            "nominal SHR-2 tolerance must render: {text}"
+        );
     }
 
     /// Honesty requirement, also ported from `groupToleranceStatus`:
@@ -1677,7 +1910,9 @@ mod tests {
         // "-disk loss" phrase and checking what precedes it, so a future
         // wording change that reintroduces the same collision keeps this
         // test honest rather than silently trusting `contains`.
-        let label_at = text.find("-disk loss").expect("tolerance label must render: {text}");
+        let label_at = text
+            .find("-disk loss")
+            .expect("tolerance label must render: {text}");
         assert!(
             text[..label_at].ends_with("designed for 1"),
             "the tolerance phrase must only appear inside the unknown-data sentence, never as the bare fully-healthy label: {text}"
@@ -1707,7 +1942,9 @@ mod tests {
         let app = App::new(report);
         let backend = TestBackend::new(140, 10);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render_bands(frame, &app, frame.area())).unwrap();
+        terminal
+            .draw(|frame| render_bands(frame, &app, frame.area()))
+            .unwrap();
         let text = buffer_text(terminal.backend().buffer());
         assert!(
             text.contains("no live RAID array"),

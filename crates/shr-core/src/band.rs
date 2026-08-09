@@ -140,10 +140,7 @@ impl RedundantBand {
             .pick_level(members.len())
             .ok_or(BandError::NoLevelAvailable(members.len()))?;
         if expected != level {
-            return Err(BandError::LevelMismatch {
-                expected,
-                got: level,
-            });
+            return Err(BandError::LevelMismatch { expected, got: level });
         }
         Self::from_parts(band_index, offset, size, members, level)
     }

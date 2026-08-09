@@ -19,12 +19,7 @@ impl<'a> MdadmExecutor<'a> {
     }
 
     /// Create new mdadm array
-    pub fn create_array(
-        &self,
-        md_name: &str,
-        level: &str,
-        members: &[&str],
-    ) -> Result<(), ExecError> {
+    pub fn create_array(&self, md_name: &str, level: &str, members: &[&str]) -> Result<(), ExecError> {
         let md_path = if md_name.starts_with("/dev/") {
             md_name.to_string()
         } else {
@@ -68,8 +63,7 @@ impl<'a> MdadmExecutor<'a> {
             format!("/dev/{}", md_name)
         };
 
-        self.runner
-            .run("mdadm", &["--add", &md_path, member_path])?;
+        self.runner.run("mdadm", &["--add", &md_path, member_path])?;
         Ok(())
     }
 
@@ -86,8 +80,7 @@ impl<'a> MdadmExecutor<'a> {
             format!("/dev/{}", md_name)
         };
 
-        self.runner
-            .run("mdadm", &["--remove", &md_path, member_path])?;
+        self.runner.run("mdadm", &["--remove", &md_path, member_path])?;
         Ok(())
     }
 
@@ -140,7 +133,8 @@ impl<'a> MdadmExecutor<'a> {
         } else {
             format!("/dev/{}", md_name)
         };
-        self.runner.run("mdadm", &[&md_path, "--replace", old_path, "--with", new_path])?;
+        self.runner
+            .run("mdadm", &[&md_path, "--replace", old_path, "--with", new_path])?;
         Ok(())
     }
 
@@ -304,7 +298,9 @@ impl<'a> MdadmExecutor<'a> {
 
         let output = self.runner.run("mdadm", &["--detail", "--export", &md_path])?;
         let level = parse_export_field(&output.stdout, "MD_LEVEL").ok_or_else(|| {
-            ExecError::Prerequisite(format!("mdadm --detail --export {md_path} did not report MD_LEVEL"))
+            ExecError::Prerequisite(format!(
+                "mdadm --detail --export {md_path} did not report MD_LEVEL"
+            ))
         })?;
         let devices = parse_export_field(&output.stdout, "MD_DEVICES").ok_or_else(|| {
             ExecError::Prerequisite(format!(
@@ -331,7 +327,11 @@ impl<'a> MdadmExecutor<'a> {
         match self.runner.run("readlink", &["-e", member_path]) {
             Ok(output) => {
                 let resolved = output.stdout.trim();
-                Ok(resolved.rsplit('/').next().map(str::to_string).filter(|s| !s.is_empty()))
+                Ok(resolved
+                    .rsplit('/')
+                    .next()
+                    .map(str::to_string)
+                    .filter(|s| !s.is_empty()))
             }
             Err(ExecError::NonZeroExit { .. }) => Ok(None),
             Err(e) => Err(e),
@@ -342,9 +342,11 @@ impl<'a> MdadmExecutor<'a> {
 /// Parse a `KEY=value` line out of `mdadm --detail --export` output.
 fn parse_export_field(export_output: &str, key: &str) -> Option<String> {
     let prefix = format!("{key}=");
-    export_output
-        .lines()
-        .find_map(|line| line.trim().strip_prefix(prefix.as_str()).map(|v| v.trim().to_string()))
+    export_output.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix(prefix.as_str())
+            .map(|v| v.trim().to_string())
+    })
 }
 
 /// Deterministic, structurally-valid-looking MD_UUID for dry-run simulation.

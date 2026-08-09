@@ -97,15 +97,16 @@ impl<'a> LvmExecutor<'a> {
         if self.runner.is_dry_run() {
             return Ok(String::new());
         }
-        let output = self.runner.run("pvs", &["--noheadings", "-o", "vg_name", pv_path])?;
+        let output = self
+            .runner
+            .run("pvs", &["--noheadings", "-o", "vg_name", pv_path])?;
         Ok(output.stdout.trim().to_string())
     }
 
     /// Extend Logical Volume to 100% of free space
     pub fn lvextend_max(&self, vg_name: &str, lv_name: &str) -> Result<(), ExecError> {
         let lv_path = format!("/dev/{}/{}", vg_name, lv_name);
-        self.runner
-            .run("lvextend", &["-l", "+100%FREE", &lv_path])?;
+        self.runner.run("lvextend", &["-l", "+100%FREE", &lv_path])?;
         Ok(())
     }
 
@@ -128,7 +129,10 @@ impl<'a> LvmExecutor<'a> {
         if self.runner.is_dry_run() {
             return Ok(false);
         }
-        match self.runner.run("vgs", &["--noheadings", "-o", "vg_name", vg_name]) {
+        match self
+            .runner
+            .run("vgs", &["--noheadings", "-o", "vg_name", vg_name])
+        {
             Ok(_) => Ok(true),
             Err(ExecError::NonZeroExit { .. }) => Ok(false),
             Err(e) => Err(e),
@@ -148,7 +152,10 @@ impl<'a> LvmExecutor<'a> {
             return Ok(false);
         }
         let target = format!("{vg_name}/{lv_name}");
-        match self.runner.run("lvs", &["--noheadings", "-o", "lv_name", &target]) {
+        match self
+            .runner
+            .run("lvs", &["--noheadings", "-o", "lv_name", &target])
+        {
             Ok(_) => Ok(true),
             Err(ExecError::NonZeroExit { .. }) => Ok(false),
             Err(e) => Err(e),

@@ -42,7 +42,11 @@ pub struct LiveMetricsSampler<'a> {
 }
 
 impl<'a> LiveMetricsSampler<'a> {
-    pub fn new(runner: &'a dyn CommandRunner, member_disks: Vec<String>, previous_smart_total: Option<u64>) -> Self {
+    pub fn new(
+        runner: &'a dyn CommandRunner,
+        member_disks: Vec<String>,
+        previous_smart_total: Option<u64>,
+    ) -> Self {
         Self {
             runner,
             member_disks,
@@ -139,11 +143,18 @@ struct CpuTimes {
 fn read_cpu_stat_line(runner: &dyn CommandRunner) -> Option<CpuTimes> {
     let output = runner.run("cat", &["/proc/stat"]).ok()?;
     let line = output.stdout.lines().find(|l| l.starts_with("cpu "))?;
-    let fields: Vec<u64> = line.split_whitespace().skip(1).filter_map(|f| f.parse().ok()).collect();
+    let fields: Vec<u64> = line
+        .split_whitespace()
+        .skip(1)
+        .filter_map(|f| f.parse().ok())
+        .collect();
     if fields.len() < 5 {
         return None;
     }
-    Some(CpuTimes { total: fields.iter().sum(), iowait: fields[4] })
+    Some(CpuTimes {
+        total: fields.iter().sum(),
+        iowait: fields[4],
+    })
 }
 
 /// Max temperature and total reallocated-sector count across every member
@@ -157,8 +168,12 @@ fn read_smart_signals(runner: &dyn CommandRunner, member_disks: &[String]) -> (O
     let mut total_realloc: Option<u64> = None;
 
     for dev in member_disks {
-        let Some(stdout) = smartctl_stdout(runner, dev) else { continue };
-        let Ok(info) = parse_smartctl(&stdout) else { continue };
+        let Some(stdout) = smartctl_stdout(runner, dev) else {
+            continue;
+        };
+        let Ok(info) = parse_smartctl(&stdout) else {
+            continue;
+        };
 
         if let Some(t) = info.temperature_c {
             let t = t.clamp(0, i64::from(u8::MAX)) as u8;
@@ -209,17 +224,29 @@ mod tests {
     }
     impl CommandRunner for ScriptedRunner {
         fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
-            self.recorded.lock().unwrap().push(format!("{program} {}", args.join(" ")));
+            self.recorded
+                .lock()
+                .unwrap()
+                .push(format!("{program} {}", args.join(" ")));
             match program {
                 "cat" => {
                     let stdout = self.cat_responses.lock().unwrap().remove(0);
-                    Ok(CommandOutput { stdout, stderr: String::new() })
+                    Ok(CommandOutput {
+                        stdout,
+                        stderr: String::new(),
+                    })
                 }
                 "smartctl" => match self.smartctl_responses.lock().unwrap().remove(0) {
-                    Ok(stdout) => Ok(CommandOutput { stdout, stderr: String::new() }),
+                    Ok(stdout) => Ok(CommandOutput {
+                        stdout,
+                        stderr: String::new(),
+                    }),
                     Err(()) => Err(ExecError::Prerequisite("smartctl not installed".into())),
                 },
-                _ => Ok(CommandOutput { stdout: String::new(), stderr: String::new() }),
+                _ => Ok(CommandOutput {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }),
             }
         }
         fn is_dry_run(&self) -> bool {
@@ -238,15 +265,14 @@ mod tests {
     fn reads_cpu_load_from_proc_loadavg() {
         let runner = ScriptedRunner {
             cat_responses: StdMutex::new(vec![
-                "0.42 0.30 0.25 1/523 12345\n".to_string(), // loadavg
+                "0.42 0.30 0.25 1/523 12345\n".to_string(),  // loadavg
                 "cpu  100 0 100 800 20 0 0 0\n".to_string(), // stat #1
                 "cpu  110 0 110 880 22 0 0 0\n".to_string(), // stat #2
             ]),
             smartctl_responses: StdMutex::new(vec![]),
             recorded: StdMutex::new(vec![]),
         };
-        let sampler =
-            LiveMetricsSampler::new(&runner, vec![], None).with_sample_interval(Duration::ZERO);
+        let sampler = LiveMetricsSampler::new(&runner, vec![], None).with_sample_interval(Duration::ZERO);
         let m = sampler.sample().unwrap();
         assert_eq!(m.cpu_load, Some(0.42));
     }
@@ -264,10 +290,11 @@ mod tests {
             smartctl_responses: StdMutex::new(vec![]),
             recorded: StdMutex::new(vec![]),
         };
-        let sampler =
-            LiveMetricsSampler::new(&runner, vec![], None).with_sample_interval(Duration::ZERO);
+        let sampler = LiveMetricsSampler::new(&runner, vec![], None).with_sample_interval(Duration::ZERO);
         let m = sampler.sample().unwrap();
-        let pct = m.io_wait_pct.expect("io_wait_pct must be computed from the two samples");
+        let pct = m
+            .io_wait_pct
+            .expect("io_wait_pct must be computed from the two samples");
         assert!((pct - 1.9607).abs() < 0.01, "got {pct}");
     }
 
@@ -284,16 +311,27 @@ mod tests {
         };
         let sampler = LiveMetricsSampler::new(
             &runner,
-            vec!["/dev/disk/by-id/ata-DISK1".to_string(), "/dev/disk/by-id/ata-DISK2".to_string()],
+            vec![
+                "/dev/disk/by-id/ata-DISK1".to_string(),
+                "/dev/disk/by-id/ata-DISK2".to_string(),
+            ],
             Some(1), // previous total = 1
         )
         .with_sample_interval(Duration::ZERO);
 
         let m = sampler.sample().unwrap();
-        assert_eq!(m.disk_temp_max, Some(45), "must report the MAX across member disks, not the last one");
+        assert_eq!(
+            m.disk_temp_max,
+            Some(45),
+            "must report the MAX across member disks, not the last one"
+        );
         // total realloc this sample = 2 + 3 = 5; previous = 1 -> delta = 4
         assert_eq!(m.smart_delta_reallocated, Some(4));
-        assert_eq!(sampler.last_smart_total(), Some(5), "caller must be able to persist the new absolute total");
+        assert_eq!(
+            sampler.last_smart_total(),
+            Some(5),
+            "caller must be able to persist the new absolute total"
+        );
     }
 
     #[test]
@@ -309,13 +347,20 @@ mod tests {
         };
         let sampler = LiveMetricsSampler::new(
             &runner,
-            vec!["/dev/disk/by-id/ata-DEAD".to_string(), "/dev/disk/by-id/ata-OK".to_string()],
+            vec![
+                "/dev/disk/by-id/ata-DEAD".to_string(),
+                "/dev/disk/by-id/ata-OK".to_string(),
+            ],
             None,
         )
         .with_sample_interval(Duration::ZERO);
 
         let m = sampler.sample().unwrap();
-        assert_eq!(m.disk_temp_max, Some(50), "the one readable disk's signal must still be used");
+        assert_eq!(
+            m.disk_temp_max,
+            Some(50),
+            "the one readable disk's signal must still be used"
+        );
         assert_eq!(sampler.last_smart_total(), Some(7));
     }
 
@@ -330,13 +375,15 @@ mod tests {
             smartctl_responses: StdMutex::new(vec![Err(())]),
             recorded: StdMutex::new(vec![]),
         };
-        let sampler =
-            LiveMetricsSampler::new(&runner, vec!["/dev/disk/by-id/ata-DEAD".to_string()], Some(3))
-                .with_sample_interval(Duration::ZERO);
+        let sampler = LiveMetricsSampler::new(&runner, vec!["/dev/disk/by-id/ata-DEAD".to_string()], Some(3))
+            .with_sample_interval(Duration::ZERO);
 
         let m = sampler.sample().unwrap();
         assert_eq!(m.disk_temp_max, None);
-        assert_eq!(m.smart_delta_reallocated, None, "no reading at all must never look like 'no increase'");
+        assert_eq!(
+            m.smart_delta_reallocated, None,
+            "no reading at all must never look like 'no increase'"
+        );
         assert_eq!(sampler.last_smart_total(), None);
     }
 
@@ -351,12 +398,14 @@ mod tests {
             smartctl_responses: StdMutex::new(vec![Ok(smart_json(40, 9))]),
             recorded: StdMutex::new(vec![]),
         };
-        let sampler =
-            LiveMetricsSampler::new(&runner, vec!["/dev/disk/by-id/ata-DISK1".to_string()], None)
-                .with_sample_interval(Duration::ZERO);
+        let sampler = LiveMetricsSampler::new(&runner, vec!["/dev/disk/by-id/ata-DISK1".to_string()], None)
+            .with_sample_interval(Duration::ZERO);
 
         let m = sampler.sample().unwrap();
-        assert_eq!(m.smart_delta_reallocated, None, "first-ever tick has nothing to diff against");
+        assert_eq!(
+            m.smart_delta_reallocated, None,
+            "first-ever tick has nothing to diff against"
+        );
         assert_eq!(sampler.last_smart_total(), Some(9));
     }
 
@@ -386,8 +435,13 @@ mod tests {
 
         let recorded = runner.recorded();
         assert!(recorded.iter().any(|c| c == "cat /proc/loadavg"));
-        assert_eq!(recorded.iter().filter(|c| c.as_str() == "cat /proc/stat").count(), 2);
-        assert!(recorded.iter().any(|c| c.starts_with("smartctl") && c.contains("ata-DISK1")));
+        assert_eq!(
+            recorded.iter().filter(|c| c.as_str() == "cat /proc/stat").count(),
+            2
+        );
+        assert!(recorded
+            .iter()
+            .any(|c| c.starts_with("smartctl") && c.contains("ata-DISK1")));
     }
 
     #[test]

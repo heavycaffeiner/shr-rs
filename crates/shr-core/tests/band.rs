@@ -17,26 +17,20 @@ fn ids(n: usize) -> Vec<DiskId> {
 #[test]
 fn new_rejects_duplicate_member() {
     let dup = vec![DiskId::new("d0"), DiskId::new("d0")];
-    let err =
-        RedundantBand::new(0, 0, 1000, dup, RaidLevel::Raid1, RedundancyMode::Shr).unwrap_err();
+    let err = RedundantBand::new(0, 0, 1000, dup, RaidLevel::Raid1, RedundancyMode::Shr).unwrap_err();
     assert_eq!(err, BandError::DuplicateMember);
 }
 
 #[test]
 fn new_rejects_too_few_members_for_mode() {
-    let err =
-        RedundantBand::new(0, 0, 1000, ids(2), RaidLevel::Raid6, RedundancyMode::Shr2).unwrap_err();
-    assert!(matches!(
-        err,
-        BandError::InsufficientForMode { got: 2, min: 4 }
-    ));
+    let err = RedundantBand::new(0, 0, 1000, ids(2), RaidLevel::Raid6, RedundancyMode::Shr2).unwrap_err();
+    assert!(matches!(err, BandError::InsufficientForMode { got: 2, min: 4 }));
 }
 
 #[test]
 fn new_rejects_level_mismatch() {
     // 3 disks in SHR would be RAID5, not RAID1.
-    let err =
-        RedundantBand::new(0, 0, 1000, ids(3), RaidLevel::Raid1, RedundancyMode::Shr).unwrap_err();
+    let err = RedundantBand::new(0, 0, 1000, ids(3), RaidLevel::Raid1, RedundancyMode::Shr).unwrap_err();
     assert!(matches!(
         err,
         BandError::LevelMismatch {
@@ -48,8 +42,7 @@ fn new_rejects_level_mismatch() {
 
 #[test]
 fn new_rejects_zero_size() {
-    let err =
-        RedundantBand::new(0, 0, 0, ids(2), RaidLevel::Raid1, RedundancyMode::Shr).unwrap_err();
+    let err = RedundantBand::new(0, 0, 0, ids(2), RaidLevel::Raid1, RedundancyMode::Shr).unwrap_err();
     assert_eq!(err, BandError::ZeroSize);
 }
 
@@ -100,8 +93,7 @@ fn deserialize_rejects_zero_size_band() {
 
 #[test]
 fn valid_band_round_trips_through_serde() {
-    let band =
-        RedundantBand::new(0, 0, 1000, ids(3), RaidLevel::Raid5, RedundancyMode::Shr).unwrap();
+    let band = RedundantBand::new(0, 0, 1000, ids(3), RaidLevel::Raid5, RedundancyMode::Shr).unwrap();
     let json = serde_json::to_string(&band).unwrap();
     let back: RedundantBand = serde_json::from_str(&json).unwrap();
     assert_eq!(band, back);

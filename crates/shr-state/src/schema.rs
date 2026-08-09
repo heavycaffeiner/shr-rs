@@ -241,7 +241,10 @@ pub const DEFAULT_GROUP_NAME: &str = "default";
 
 impl StateFile {
     pub fn new(groups: Vec<ArrayState>) -> Self {
-        Self { schema_version: CURRENT_SCHEMA_VERSION, groups }
+        Self {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            groups,
+        }
     }
 
     /// Wrap a single migrated-from-legacy group as the whole file's content.

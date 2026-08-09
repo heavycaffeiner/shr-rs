@@ -182,8 +182,7 @@ fn apply_detail_line(arr: &mut MdArray, line: &str) {
             .find_map(|t| t.strip_suffix('%').and_then(|n| n.parse::<f64>().ok()));
         let pending = line.contains("PENDING") || line.contains("DELAYED");
         if percent.is_some() || pending {
-            let speed_kb =
-                token_value(line, "speed=").and_then(|v| v.trim_end_matches("K/sec").parse().ok());
+            let speed_kb = token_value(line, "speed=").and_then(|v| v.trim_end_matches("K/sec").parse().ok());
             let finish_min =
                 token_value(line, "finish=").and_then(|v| v.trim_end_matches("min").parse().ok());
             arr.sync = Some(SyncStatus {
@@ -241,14 +240,26 @@ mod tests {
         let stat = parse_mdstat(text);
         assert_eq!(stat.arrays.len(), 1);
         let arr = &stat.arrays[0];
-        assert_eq!(arr.members.len(), 4, "the faulty member is still listed, not dropped");
+        assert_eq!(
+            arr.members.len(),
+            4,
+            "the faulty member is still listed, not dropped"
+        );
 
-        let faulty = arr.members.iter().find(|m| m.name == "loop12p1").expect("faulty member present");
+        let faulty = arr
+            .members
+            .iter()
+            .find(|m| m.name == "loop12p1")
+            .expect("faulty member present");
         assert_eq!(faulty.role, Some(3));
         assert!(faulty.faulty);
         assert!(!faulty.spare);
 
-        let healthy = arr.members.iter().find(|m| m.name == "loop15p1").expect("healthy member present");
+        let healthy = arr
+            .members
+            .iter()
+            .find(|m| m.name == "loop15p1")
+            .expect("healthy member present");
         assert!(!healthy.faulty);
         assert!(!healthy.spare);
     }
@@ -261,12 +272,20 @@ mod tests {
         let stat = parse_mdstat(text);
         let arr = &stat.arrays[0];
 
-        let spare = arr.members.iter().find(|m| m.name == "sde1").expect("spare member present");
+        let spare = arr
+            .members
+            .iter()
+            .find(|m| m.name == "sde1")
+            .expect("spare member present");
         assert_eq!(spare.role, Some(4));
         assert!(spare.spare);
         assert!(!spare.faulty);
 
-        let healthy = arr.members.iter().find(|m| m.name == "sdb1").expect("healthy member present");
+        let healthy = arr
+            .members
+            .iter()
+            .find(|m| m.name == "sdb1")
+            .expect("healthy member present");
         assert!(!healthy.spare);
         assert!(!healthy.faulty);
     }

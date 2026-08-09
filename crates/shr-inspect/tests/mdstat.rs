@@ -70,7 +70,8 @@ fn empty_mdstat_has_no_arrays() {
 
 #[test]
 fn captures_auto_read_only_state() {
-    let text = "md2 : active (auto-read-only) raid1 sda1[0] sdb1[1]\n      1000 blocks super 1.2 [2/2] [UU]\n";
+    let text =
+        "md2 : active (auto-read-only) raid1 sda1[0] sdb1[1]\n      1000 blocks super 1.2 [2/2] [UU]\n";
     let md = parse_mdstat(text);
     let a = &md.arrays[0];
     assert!(a.read_only);
@@ -80,13 +81,10 @@ fn captures_auto_read_only_state() {
 
 #[test]
 fn captures_replacement_member() {
-    let text = "md3 : active raid5 sda1[0] sdb1[1] sdc1[2] sdd1[4](R)\n      1000 blocks super 1.2 [3/3] [UUU]\n";
+    let text =
+        "md3 : active raid5 sda1[0] sdb1[1] sdc1[2] sdd1[4](R)\n      1000 blocks super 1.2 [3/3] [UUU]\n";
     let md = parse_mdstat(text);
-    let rep = md.arrays[0]
-        .members
-        .iter()
-        .find(|m| m.name == "sdd1")
-        .unwrap();
+    let rep = md.arrays[0].members.iter().find(|m| m.name == "sdd1").unwrap();
     assert!(rep.replacement);
     assert!(!rep.faulty);
 }

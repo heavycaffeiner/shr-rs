@@ -53,14 +53,12 @@ fn looks_like_kernel_name(s: &str) -> bool {
     }
     // sdX, hdX, vdX, xvdX, nvmeXnY, mmcblkN, loopN, dm-N
     let bytes = s.as_bytes();
-    if s.starts_with("nvme") || s.starts_with("mmcblk") || s.starts_with("loop") || s.starts_with("dm-")
-    {
+    if s.starts_with("nvme") || s.starts_with("mmcblk") || s.starts_with("loop") || s.starts_with("dm-") {
         return true;
     }
     if bytes.len() >= 3 {
         let prefix = &s[..2];
-        if matches!(prefix, "sd" | "hd" | "vd") && s[2..].chars().all(|c| c.is_ascii_alphanumeric())
-        {
+        if matches!(prefix, "sd" | "hd" | "vd") && s[2..].chars().all(|c| c.is_ascii_alphanumeric()) {
             return true;
         }
         if s.starts_with("xvd") && s[3..].chars().all(|c| c.is_ascii_alphanumeric()) {
@@ -72,7 +70,14 @@ fn looks_like_kernel_name(s: &str) -> bool {
 
 fn looks_like_by_id(s: &str) -> bool {
     const PREFIXES: &[&str] = &[
-        "ata-", "nvme-", "wwn-", "scsi-", "usb-", "mmc-", "md-uuid-", "lvm-pv-uuid-",
+        "ata-",
+        "nvme-",
+        "wwn-",
+        "scsi-",
+        "usb-",
+        "mmc-",
+        "md-uuid-",
+        "lvm-pv-uuid-",
     ];
     PREFIXES.iter().any(|p| s.starts_with(p))
 }
@@ -97,8 +102,7 @@ impl ResolvedDisk {
 
     /// Convert to the pure planner [`Disk`] (stable id only).
     pub fn to_planner_disk(&self) -> Disk {
-        Disk::new(self.id.clone(), self.size_bytes)
-            .with_meta(self.serial.clone(), self.model.clone())
+        Disk::new(self.id.clone(), self.size_bytes).with_meta(self.serial.clone(), self.model.clone())
     }
 
     /// Hard blockers that must prevent any write/plan-against-system use.
@@ -151,9 +155,7 @@ pub fn resolve_disk_ref(
     let id = index
         .id_for_kernel(&kernel)
         .cloned()
-        .ok_or_else(|| IdentityError::NoStableId {
-            name: kernel.clone(),
-        })?;
+        .ok_or_else(|| IdentityError::NoStableId { name: kernel.clone() })?;
 
     let size_bytes = dev.size.ok_or_else(|| IdentityError::NotFound {
         // Reuse NotFound-ish messaging via a dedicated size error would be nicer,
@@ -179,9 +181,7 @@ pub fn resolve_disk_refs(
     lsblk: &LsblkOutput,
     index: &ByIdIndex,
 ) -> Result<Vec<ResolvedDisk>, IdentityError> {
-    refs.iter()
-        .map(|r| resolve_disk_ref(r, lsblk, index))
-        .collect()
+    refs.iter().map(|r| resolve_disk_ref(r, lsblk, index)).collect()
 }
 
 #[cfg(test)]
@@ -224,12 +224,7 @@ mod tests {
         assert_eq!(by_path.kernel_name, "sdb");
         assert_eq!(by_path.id.as_str(), "ata-ST8000VN004_WKD1ABCD");
 
-        let by_id = resolve_disk_ref(
-            &DiskRef::parse("ata-ST8000VN004_WKD1ABCD"),
-            &lsblk,
-            &idx,
-        )
-        .unwrap();
+        let by_id = resolve_disk_ref(&DiskRef::parse("ata-ST8000VN004_WKD1ABCD"), &lsblk, &idx).unwrap();
         assert_eq!(by_id.kernel_name, "sdb");
 
         let by_serial = resolve_disk_ref(&DiskRef::parse("WKD1ABCD"), &lsblk, &idx).unwrap();

@@ -1,6 +1,6 @@
 use shr_exec::{
-    BtrfsExecutor, CommandOutput, CommandRunner, DryRunRunner, ExecError, LvmExecutor,
-    MdadmExecutor, PartedExecutor,
+    BtrfsExecutor, CommandOutput, CommandRunner, DryRunRunner, ExecError, LvmExecutor, MdadmExecutor,
+    PartedExecutor,
 };
 use std::sync::Mutex;
 
@@ -23,7 +23,10 @@ impl NonDryRunRunner {
 
 impl CommandRunner for NonDryRunRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
-        self.recorded.lock().unwrap().push(format!("{} {}", program, args.join(" ")));
+        self.recorded
+            .lock()
+            .unwrap()
+            .push(format!("{} {}", program, args.join(" ")));
         // ensure_supported()'s btrfs check parses this for "btrfs" support;
         // degraded_count() parses the sysfs "degraded" file as an integer.
         let stdout = if program == "cat" && args.contains(&"/proc/filesystems") {
@@ -40,7 +43,10 @@ impl CommandRunner for NonDryRunRunner {
         } else {
             String::new()
         };
-        Ok(CommandOutput { stdout, stderr: String::new() })
+        Ok(CommandOutput {
+            stdout,
+            stderr: String::new(),
+        })
     }
 
     fn is_dry_run(&self) -> bool {
@@ -74,7 +80,10 @@ struct ScriptedRunner {
 
 impl ScriptedRunner {
     fn new(outcomes: Vec<ScriptedOutcome>) -> Self {
-        Self { calls: Mutex::new(0), outcomes }
+        Self {
+            calls: Mutex::new(0),
+            outcomes,
+        }
     }
 
     fn call_count(&self) -> u32 {
@@ -94,12 +103,20 @@ impl CommandRunner for ScriptedRunner {
                 stdout: String::new(),
                 stderr: String::new(),
             }),
-            ScriptedOutcome::Empty => {
-                Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
-            }
+            ScriptedOutcome::Empty => Ok(CommandOutput {
+                stdout: String::new(),
+                stderr: String::new(),
+            }),
             ScriptedOutcome::Value(v) => {
-                let stdout = if program == "mdadm" { format!("MD_UUID={v}\n") } else { format!("{v}\n") };
-                Ok(CommandOutput { stdout, stderr: String::new() })
+                let stdout = if program == "mdadm" {
+                    format!("MD_UUID={v}\n")
+                } else {
+                    format!("{v}\n")
+                };
+                Ok(CommandOutput {
+                    stdout,
+                    stderr: String::new(),
+                })
             }
         }
     }
@@ -135,9 +152,16 @@ fn read_partuuid_surfaces_a_clear_retried_error_when_blkid_always_fails() {
 
     let err = parted.read_partuuid("/dev/loop10p1").unwrap_err().to_string();
 
-    assert!(runner.call_count() > 1, "must retry, not fail on the first attempt: {}", runner.call_count());
+    assert!(
+        runner.call_count() > 1,
+        "must retry, not fail on the first attempt: {}",
+        runner.call_count()
+    );
     assert!(err.contains("/dev/loop10p1"), "{err}");
-    assert!(err.to_lowercase().contains("retr"), "error should make the retry evident: {err}");
+    assert!(
+        err.to_lowercase().contains("retr"),
+        "error should make the retry evident: {err}"
+    );
 }
 
 #[test]
@@ -150,7 +174,10 @@ fn read_partuuid_treats_empty_output_as_not_ready_and_never_returns_ok_empty() {
 
     let result = parted.read_partuuid("/dev/loop10p1");
 
-    assert!(result.is_err(), "empty blkid output must be an error, got {result:?}");
+    assert!(
+        result.is_err(),
+        "empty blkid output must be an error, got {result:?}"
+    );
 }
 
 #[test]
@@ -189,7 +216,10 @@ fn btrfs_read_uuid_surfaces_a_clear_retried_error_when_blkid_always_fails() {
     let err = btrfs.read_uuid("/dev/shr_vg/data").unwrap_err().to_string();
 
     assert!(runner.call_count() > 1, "must retry: {}", runner.call_count());
-    assert!(err.to_lowercase().contains("retr"), "error should make the retry evident: {err}");
+    assert!(
+        err.to_lowercase().contains("retr"),
+        "error should make the retry evident: {err}"
+    );
 }
 
 #[test]
@@ -199,7 +229,10 @@ fn btrfs_read_uuid_treats_empty_output_as_not_ready_and_never_returns_ok_empty()
 
     let result = btrfs.read_uuid("/dev/shr_vg/data");
 
-    assert!(result.is_err(), "empty blkid output must be an error, got {result:?}");
+    assert!(
+        result.is_err(),
+        "empty blkid output must be an error, got {result:?}"
+    );
 }
 
 #[test]
@@ -209,7 +242,11 @@ fn btrfs_read_uuid_dry_run_does_not_retry_or_touch_the_runner() {
 
     btrfs.read_uuid("/dev/shr_vg/data").unwrap();
 
-    assert!(runner.get_recorded().is_empty(), "dry-run must never call the runner: {:?}", runner.get_recorded());
+    assert!(
+        runner.get_recorded().is_empty(),
+        "dry-run must never call the runner: {:?}",
+        runner.get_recorded()
+    );
 }
 
 #[test]
@@ -239,7 +276,10 @@ fn mdadm_read_uuid_surfaces_a_clear_retried_error_when_always_failing() {
 
     assert!(runner.call_count() > 1, "must retry: {}", runner.call_count());
     assert!(err.contains("md0") || err.contains("/dev/md0"), "{err}");
-    assert!(err.to_lowercase().contains("retr"), "error should make the retry evident: {err}");
+    assert!(
+        err.to_lowercase().contains("retr"),
+        "error should make the retry evident: {err}"
+    );
 }
 
 #[test]
@@ -254,7 +294,10 @@ fn mdadm_read_uuid_treats_missing_md_uuid_line_as_not_ready_and_never_returns_ok
 
     let result = mdadm.read_uuid("md0");
 
-    assert!(result.is_err(), "missing MD_UUID must be an error, got {result:?}");
+    assert!(
+        result.is_err(),
+        "missing MD_UUID must be an error, got {result:?}"
+    );
 }
 
 #[test]
@@ -264,7 +307,11 @@ fn mdadm_read_uuid_dry_run_does_not_retry_or_touch_the_runner() {
 
     mdadm.read_uuid("md0").unwrap();
 
-    assert!(runner.get_recorded().is_empty(), "dry-run must never call the runner: {:?}", runner.get_recorded());
+    assert!(
+        runner.get_recorded().is_empty(),
+        "dry-run must never call the runner: {:?}",
+        runner.get_recorded()
+    );
 }
 
 #[test]
@@ -298,7 +345,10 @@ fn dry_run_partuuid_is_stable_but_obviously_not_a_real_uuid() {
     let first = parted.read_partuuid("/dev/loop10p1").unwrap();
     let second = parted.read_partuuid("/dev/loop10p1").unwrap();
 
-    assert_eq!(first, second, "must stay stable across repeated reads within one preview");
+    assert_eq!(
+        first, second,
+        "must stay stable across repeated reads within one preview"
+    );
     assert!(!uuid_like(&first), "{first} must not look like a real PARTUUID");
     assert!(first.starts_with("pending-"), "{first}");
 }
@@ -377,7 +427,10 @@ fn real_ensure_supported_rejects_kernel_without_btrfs_before_running_mkfs_btrfs(
             } else {
                 panic!("must not run `{program}` after the kernel support check fails");
             };
-            Ok(CommandOutput { stdout, stderr: String::new() })
+            Ok(CommandOutput {
+                stdout,
+                stderr: String::new(),
+            })
         }
         fn is_dry_run(&self) -> bool {
             false
@@ -385,7 +438,10 @@ fn real_ensure_supported_rejects_kernel_without_btrfs_before_running_mkfs_btrfs(
     }
 
     let err = BtrfsExecutor::new(&NoBtrfsRunner).ensure_supported().unwrap_err();
-    assert!(matches!(err, ExecError::Prerequisite(_)), "expected Prerequisite, got {err:?}");
+    assert!(
+        matches!(err, ExecError::Prerequisite(_)),
+        "expected Prerequisite, got {err:?}"
+    );
 }
 
 #[test]
@@ -398,7 +454,10 @@ fn dry_run_remove_partition_records_command() {
     let runner = DryRunRunner::new();
     let parted = PartedExecutor::new(&runner);
     parted.remove_partition("/dev/disk/by-id/ata-TEST1", 2).unwrap();
-    assert_eq!(runner.get_recorded(), vec!["parted -s /dev/disk/by-id/ata-TEST1 rm 2"]);
+    assert_eq!(
+        runner.get_recorded(),
+        vec!["parted -s /dev/disk/by-id/ata-TEST1 rm 2"]
+    );
 }
 
 #[test]
@@ -410,7 +469,9 @@ fn dry_run_unmount_records_command() {
 
 fn uuid_like(value: &str) -> bool {
     value.len() == 36
-        && [8, 13, 18, 23].into_iter().all(|index| value.as_bytes()[index] == b'-')
+        && [8, 13, 18, 23]
+            .into_iter()
+            .all(|index| value.as_bytes()[index] == b'-')
         && value
             .bytes()
             .enumerate()
@@ -443,9 +504,11 @@ fn dry_run_mdadm_read_uuid_differs_for_different_arrays() {
 fn md_uuid_like(value: &str) -> bool {
     let groups: Vec<&str> = value.split(':').collect();
     groups.len() == 4
-        && groups
-            .iter()
-            .all(|g| g.len() == 8 && g.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()))
+        && groups.iter().all(|g| {
+            g.len() == 8
+                && g.bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        })
 }
 
 #[test]
@@ -497,7 +560,13 @@ fn dry_run_mdadm_create_always_includes_an_internal_write_intent_bitmap() {
     let runner = DryRunRunner::new();
     let mdadm = MdadmExecutor::new(&runner);
 
-    mdadm.create_array("md1", "raid6", &["/dev/sdb2", "/dev/sdc2", "/dev/sdd2", "/dev/sde2"]).unwrap();
+    mdadm
+        .create_array(
+            "md1",
+            "raid6",
+            &["/dev/sdb2", "/dev/sdc2", "/dev/sdd2", "/dev/sde2"],
+        )
+        .unwrap();
 
     let cmds = runner.get_recorded();
     assert!(cmds[0].contains("--bitmap=internal"), "{}", cmds[0]);
@@ -510,13 +579,18 @@ fn dry_run_mdadm_grow_always_includes_backup_file() {
     let runner = DryRunRunner::new();
     let mdadm = MdadmExecutor::new(&runner);
 
-    mdadm.grow("md0", None, 4, "/var/lib/shr-rs/backup-md0.bak").unwrap();
+    mdadm
+        .grow("md0", None, 4, "/var/lib/shr-rs/backup-md0.bak")
+        .unwrap();
     mdadm
         .grow("md0", Some("raid5"), 3, "/var/lib/shr-rs/backup-md0.bak")
         .unwrap();
 
     let cmds = runner.get_recorded();
-    assert_eq!(cmds[0], "mdadm --grow /dev/md0 --raid-devices=4 --backup-file=/var/lib/shr-rs/backup-md0.bak");
+    assert_eq!(
+        cmds[0],
+        "mdadm --grow /dev/md0 --raid-devices=4 --backup-file=/var/lib/shr-rs/backup-md0.bak"
+    );
     assert_eq!(
         cmds[1],
         "mdadm --grow /dev/md0 --level=raid5 --raid-devices=3 --backup-file=/var/lib/shr-rs/backup-md0.bak"
@@ -528,7 +602,10 @@ fn dry_run_mdadm_remove_member_issues_remove() {
     let runner = DryRunRunner::new();
     let mdadm = MdadmExecutor::new(&runner);
     mdadm.remove_member("md0", "/dev/loop14p1").unwrap();
-    assert_eq!(runner.get_recorded(), vec!["mdadm --remove /dev/md0 /dev/loop14p1"]);
+    assert_eq!(
+        runner.get_recorded(),
+        vec!["mdadm --remove /dev/md0 /dev/loop14p1"]
+    );
 }
 
 #[test]
@@ -549,7 +626,9 @@ fn real_degraded_count_reads_sysfs_via_the_runner() {
     let mdadm = MdadmExecutor::new(&runner);
     mdadm.degraded_count("md0").unwrap();
     assert!(
-        runner.get_recorded().contains(&"cat /sys/block/md0/md/degraded".to_string()),
+        runner
+            .get_recorded()
+            .contains(&"cat /sys/block/md0/md/degraded".to_string()),
         "{:?}",
         runner.get_recorded()
     );
@@ -569,7 +648,9 @@ fn real_sync_action_reads_sysfs_via_the_runner() {
     let mdadm = MdadmExecutor::new(&runner);
     assert_eq!(mdadm.sync_action("md0").unwrap(), "reshape");
     assert!(
-        runner.get_recorded().contains(&"cat /sys/block/md0/md/sync_action".to_string()),
+        runner
+            .get_recorded()
+            .contains(&"cat /sys/block/md0/md/sync_action".to_string()),
         "{:?}",
         runner.get_recorded()
     );
@@ -579,7 +660,9 @@ fn real_sync_action_reads_sysfs_via_the_runner() {
 fn dry_run_mdadm_replace_member_records_the_expected_command() {
     let runner = DryRunRunner::new();
     let mdadm = MdadmExecutor::new(&runner);
-    mdadm.replace_member("md0", "/dev/disk/by-partuuid/OLD", "/dev/disk/by-partuuid/NEW").unwrap();
+    mdadm
+        .replace_member("md0", "/dev/disk/by-partuuid/OLD", "/dev/disk/by-partuuid/NEW")
+        .unwrap();
     assert_eq!(
         runner.get_recorded(),
         vec!["mdadm /dev/md0 --replace /dev/disk/by-partuuid/OLD --with /dev/disk/by-partuuid/NEW"]
@@ -593,7 +676,13 @@ fn dry_run_mdadm_scrub_start_and_cancel_touch_nothing() {
     mdadm.scrub_start("md0").unwrap();
     mdadm.scrub_cancel("md0").unwrap();
     let recorded = runner.get_recorded();
-    assert_eq!(recorded, vec!["sh -c echo check > /sys/block/md0/md/sync_action", "sh -c echo idle > /sys/block/md0/md/sync_action"]);
+    assert_eq!(
+        recorded,
+        vec![
+            "sh -c echo check > /sys/block/md0/md/sync_action",
+            "sh -c echo idle > /sys/block/md0/md/sync_action"
+        ]
+    );
 }
 
 #[test]
@@ -604,7 +693,9 @@ fn real_mdadm_scrub_start_writes_check_to_sync_action_via_the_same_sysfs_convent
     let mdadm = MdadmExecutor::new(&runner);
     mdadm.scrub_start("md0").unwrap();
     assert!(
-        runner.get_recorded().contains(&"sh -c echo check > /sys/block/md0/md/sync_action".to_string()),
+        runner
+            .get_recorded()
+            .contains(&"sh -c echo check > /sys/block/md0/md/sync_action".to_string()),
         "{:?}",
         runner.get_recorded()
     );
@@ -616,7 +707,9 @@ fn real_mdadm_scrub_cancel_writes_idle_to_sync_action() {
     let mdadm = MdadmExecutor::new(&runner);
     mdadm.scrub_cancel("md0").unwrap();
     assert!(
-        runner.get_recorded().contains(&"sh -c echo idle > /sys/block/md0/md/sync_action".to_string()),
+        runner
+            .get_recorded()
+            .contains(&"sh -c echo idle > /sys/block/md0/md/sync_action".to_string()),
         "{:?}",
         runner.get_recorded()
     );
@@ -636,7 +729,9 @@ fn real_mdadm_scrub_error_count_reads_mismatch_cnt_via_the_runner() {
     let mdadm = MdadmExecutor::new(&runner);
     assert_eq!(mdadm.scrub_error_count("md0").unwrap(), 3);
     assert!(
-        runner.get_recorded().contains(&"cat /sys/block/md0/md/mismatch_cnt".to_string()),
+        runner
+            .get_recorded()
+            .contains(&"cat /sys/block/md0/md/mismatch_cnt".to_string()),
         "{:?}",
         runner.get_recorded()
     );
@@ -661,7 +756,9 @@ fn real_pv_vg_name_reads_via_pvs() {
     let lvm = LvmExecutor::new(&runner);
     lvm.pv_vg_name("/dev/md1").unwrap();
     assert!(
-        runner.get_recorded().contains(&"pvs --noheadings -o vg_name /dev/md1".to_string()),
+        runner
+            .get_recorded()
+            .contains(&"pvs --noheadings -o vg_name /dev/md1".to_string()),
         "{:?}",
         runner.get_recorded()
     );
@@ -685,7 +782,9 @@ fn real_vg_exists_issues_a_live_vgs_check_for_the_requested_name() {
     let lvm = LvmExecutor::new(&runner);
     let _ = lvm.vg_exists("shr_vg");
     assert!(
-        runner.get_recorded().contains(&"vgs --noheadings -o vg_name shr_vg".to_string()),
+        runner
+            .get_recorded()
+            .contains(&"vgs --noheadings -o vg_name shr_vg".to_string()),
         "{:?}",
         runner.get_recorded()
     );
@@ -722,7 +821,9 @@ fn real_lv_exists_issues_a_live_lvs_check_for_vg_slash_lv() {
     let lvm = LvmExecutor::new(&runner);
     let _ = lvm.lv_exists("shr_vg", "data");
     assert!(
-        runner.get_recorded().contains(&"lvs --noheadings -o lv_name shr_vg/data".to_string()),
+        runner
+            .get_recorded()
+            .contains(&"lvs --noheadings -o lv_name shr_vg/data".to_string()),
         "{:?}",
         runner.get_recorded()
     );
@@ -797,7 +898,10 @@ fn dry_run_lvm_and_btrfs() {
     // suppress that prompt on real EL9 lvm2 (measured on the guest) --
     // `--yes` is what does -- see `LvmExecutor::lvcreate_max`'s doc comment.
     assert_eq!(cmds[2], "lvcreate -l 100%FREE -n data -Wy -Zy --yes shr_vg");
-    assert_eq!(cmds[3], "mkfs.btrfs -f -d single -m single -L SHR_DATA /dev/shr_vg/data");
+    assert_eq!(
+        cmds[3],
+        "mkfs.btrfs -f -d single -m single -L SHR_DATA /dev/shr_vg/data"
+    );
     assert_eq!(cmds[4], "mount -o compress=zstd:3 /dev/shr_vg/data /mnt/data");
 }
 
@@ -808,7 +912,10 @@ fn dry_run_btrfs_recompress_issues_defragment_with_the_requested_algorithm() {
     let runner = DryRunRunner::new();
     let btrfs = BtrfsExecutor::new(&runner);
     btrfs.recompress("/mnt/data", "zstd:9").unwrap();
-    assert_eq!(runner.get_recorded(), vec!["btrfs filesystem defragment -r -czstd /mnt/data"]);
+    assert_eq!(
+        runner.get_recorded(),
+        vec!["btrfs filesystem defragment -r -czstd /mnt/data"]
+    );
 }
 
 #[test]
@@ -831,7 +938,10 @@ fn dry_run_btrfs_scrub_start_and_cancel_issue_the_expected_commands() {
 fn dry_run_btrfs_scrub_status_is_the_default_without_touching_the_system() {
     let runner = DryRunRunner::new();
     let btrfs = BtrfsExecutor::new(&runner);
-    assert_eq!(btrfs.scrub_status("/mnt/data").unwrap(), shr_exec::BtrfsScrubStatus::default());
+    assert_eq!(
+        btrfs.scrub_status("/mnt/data").unwrap(),
+        shr_exec::BtrfsScrubStatus::default()
+    );
     assert!(runner.get_recorded().is_empty());
 }
 
@@ -876,5 +986,8 @@ fn real_btrfs_scrub_status_reports_the_error_count_not_just_completion() {
     let btrfs = BtrfsExecutor::new(&runner);
     let status = btrfs.scrub_status("/mnt/data").unwrap();
     assert!(!status.running, "a finished scrub must not report running");
-    assert_eq!(status.error_count, 3, "must sum every error category, not just report 'finished'");
+    assert_eq!(
+        status.error_count, 3,
+        "must sum every error category, not just report 'finished'"
+    );
 }

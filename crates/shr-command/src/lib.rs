@@ -19,18 +19,15 @@ pub mod ui_mode;
 
 use thiserror::Error;
 
-pub use ops::{
-    build_fs_df, build_plan_report, build_status, preflight_create, system_disk_aliases,
-};
+pub use ops::{build_fs_df, build_plan_report, build_status, preflight_create, system_disk_aliases};
 pub use report::{
     ArrayStatus, BandReport, DiskStatus, FsDfReport, FsUsageInput, GroupBandStatus, GroupDfStatus,
-    GroupStatus, Health, MetricsReport, PlanReport, ScrubOutcome, ScrubSummary, SmartState,
-    SmartSummary, StatusReport, SyncSummary,
+    GroupStatus, Health, MetricsReport, PlanReport, ScrubOutcome, ScrubSummary, SmartState, SmartSummary,
+    StatusReport, SyncSummary,
 };
 pub use sink::{
-    AlwaysConfirmSink, AlwaysRejectConfirmSink, Confirmation, ConfirmRequest, ConfirmSink,
-    NullProgressSink, ProgressSink, ProgressUpdate, RecordingConfirmSink, RecordingProgressSink,
-    TextProgressSink,
+    AlwaysConfirmSink, AlwaysRejectConfirmSink, ConfirmRequest, ConfirmSink, Confirmation, NullProgressSink,
+    ProgressSink, ProgressUpdate, RecordingConfirmSink, RecordingProgressSink, TextProgressSink,
 };
 pub use ui_mode::{can_prompt_operator, detect_ui_mode, is_interactive_terminal, UiMode};
 

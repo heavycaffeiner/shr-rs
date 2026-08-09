@@ -71,23 +71,19 @@ fn exit_status_problem_bits_warn_but_usage_errors_are_unknown() {
 
 #[test]
 fn nvme_and_ata_error_signals_warn_and_are_not_unknown() {
-    let nvme_crit = parse_smartctl(
-        r#"{"nvme_smart_health_information_log":{"critical_warning":8,"temperature":41}}"#,
-    )
-    .unwrap();
+    let nvme_crit =
+        parse_smartctl(r#"{"nvme_smart_health_information_log":{"critical_warning":8,"temperature":41}}"#)
+            .unwrap();
     assert!(nvme_crit.has_warning());
     assert!(!nvme_crit.is_unknown());
 
-    let nvme_media =
-        parse_smartctl(r#"{"nvme_smart_health_information_log":{"media_errors":5}}"#).unwrap();
+    let nvme_media = parse_smartctl(r#"{"nvme_smart_health_information_log":{"media_errors":5}}"#).unwrap();
     assert_eq!(nvme_media.nvme_media_errors, Some(5));
     assert!(nvme_media.has_warning());
     assert!(!nvme_media.is_unknown());
 
     // ATA 198 uncorrectable, without a passed verdict, is a warning (and known).
-    let ata =
-        parse_smartctl(r#"{"ata_smart_attributes":{"table":[{"id":198,"raw":{"value":3}}]}}"#)
-            .unwrap();
+    let ata = parse_smartctl(r#"{"ata_smart_attributes":{"table":[{"id":198,"raw":{"value":3}}]}}"#).unwrap();
     assert_eq!(ata.uncorrectable_sectors, Some(3));
     assert!(ata.has_warning());
     assert!(!ata.is_unknown());

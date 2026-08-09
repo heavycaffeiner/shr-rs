@@ -36,12 +36,7 @@ fn detects_system_mounts_on_root_disk() {
 fn preflight_blocks_system_and_missing_id() {
     let lsblk = parse_lsblk(LSBLK).unwrap();
     let idx = index();
-    let report = preflight_write_targets(
-        &["sda".into(), "sdc".into(), "sdd".into()],
-        &lsblk,
-        &idx,
-        false,
-    );
+    let report = preflight_write_targets(&["sda".into(), "sdc".into(), "sdd".into()], &lsblk, &idx, false);
     assert!(!report.ok);
     assert!(report
         .blockers
@@ -72,7 +67,10 @@ fn preflight_blocks_a_disk_with_existing_content_unless_forced() {
         .any(|b| matches!(b, WriteBlocker::HasContent { name } if name == "sdb")));
 
     let forced = preflight_write_targets(&["sdb".into()], &lsblk, &idx, true);
-    assert!(forced.ok, "force_content=true must let a content-bearing disk through");
+    assert!(
+        forced.ok,
+        "force_content=true must let a content-bearing disk through"
+    );
     assert!(
         forced.warnings.iter().any(|w| w.contains("sdb")),
         "forcing past it must still leave a warning: {:?}",

@@ -74,10 +74,17 @@ jobs:
       - name: Set up the musl target
         run: |
           rustup target add x86_64-unknown-linux-musl
-          rustup component add clippy
+          rustup component add clippy rustfmt
           # .cargo/config.toml links the musl target with rust-lld, which ships
           # inside the toolchain rather than on PATH.
           echo "$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin" >> "$GITHUB_PATH"
+
+      # First, and deliberately: it needs no build at all, so a formatting
+      # slip fails in seconds instead of after the musl toolchain has
+      # compiled the whole workspace. `--check` never rewrites anything --
+      # `rustfmt.toml` at the repo root is the settings this enforces.
+      - name: Format
+        run: cargo fmt --all --check
 
       - name: Test
         run: cargo test --workspace

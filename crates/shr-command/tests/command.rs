@@ -337,7 +337,7 @@ fn sample_group(name: &str) -> ArrayState {
                 resize_pending: false,
                 last_smart_reallocated: None,
                 last_scrub: None,
-            scrub_in_progress: false,
+                scrub_in_progress: false,
                 pending_member_removal: None,
                 reshape_priority: None,
             },
@@ -351,7 +351,7 @@ fn sample_group(name: &str) -> ArrayState {
                 resize_pending: true,
                 last_smart_reallocated: None,
                 last_scrub: None,
-            scrub_in_progress: false,
+                scrub_in_progress: false,
                 pending_member_removal: None,
                 reshape_priority: None,
             },
@@ -523,7 +523,10 @@ fn status_band_detail_correlates_live_sync_and_members_by_md_name() {
     assert_eq!(sync.action, "recovery");
     assert_eq!(sync.percent, Some(15.0));
     assert_eq!(sync.finish_min, Some(45.0));
-    let scrub = band0.last_scrub.as_ref().expect("scrub history carried through from state.toml");
+    let scrub = band0
+        .last_scrub
+        .as_ref()
+        .expect("scrub history carried through from state.toml");
     assert_eq!(scrub.error_count, 0);
     assert!(!band0.scrub_in_progress);
 
@@ -554,14 +557,25 @@ fn status_flags_a_faulty_member_on_array_status_without_dropping_it_from_members
     // The plain (legacy) field still lists every member, faulty included --
     // additive, backward-compatible (see `ArrayStatus::member_states`'s doc
     // comment).
-    assert_eq!(md0.members, vec!["sda1".to_string(), "sdb1".to_string(), "sdc1".to_string()]);
+    assert_eq!(
+        md0.members,
+        vec!["sda1".to_string(), "sdb1".to_string(), "sdc1".to_string()]
+    );
 
-    let faulty = md0.member_states.iter().find(|m| m.name == "sdc1").expect("faulty member present");
+    let faulty = md0
+        .member_states
+        .iter()
+        .find(|m| m.name == "sdc1")
+        .expect("faulty member present");
     assert!(faulty.faulty);
     assert!(!faulty.spare);
     assert_eq!(faulty.role, Some(2));
 
-    let healthy = md0.member_states.iter().find(|m| m.name == "sda1").expect("healthy member present");
+    let healthy = md0
+        .member_states
+        .iter()
+        .find(|m| m.name == "sda1")
+        .expect("healthy member present");
     assert!(!healthy.faulty);
     assert!(!healthy.spare);
 }
@@ -575,7 +589,11 @@ fn status_propagates_faulty_member_state_onto_the_matching_group_band() {
     let report = build_status(&insp, Some(&state)).unwrap();
 
     let band0 = &report.groups[0].bands[0];
-    let faulty = band0.member_states.iter().find(|m| m.name == "sdc1").expect("band carries member_states too");
+    let faulty = band0
+        .member_states
+        .iter()
+        .find(|m| m.name == "sdc1")
+        .expect("band carries member_states too");
     assert!(faulty.faulty);
 }
 
@@ -622,7 +640,10 @@ fn status_detail_renders_correlated_band_without_panic() {
 #[test]
 fn status_watch_frame_renders_live_recovery_progress_without_panic() {
     let report = build_status(&inspector_with_recovery(), None).unwrap();
-    let meta = render::WatchFrameMeta { width: 72, max_height: 20 };
+    let meta = render::WatchFrameMeta {
+        width: 72,
+        max_height: 20,
+    };
     let text = render::render_status_watch_frame(&report, &meta);
     assert_eq!(text.lines().count(), meta.max_height);
     assert!(text.contains("recovery"));
@@ -678,8 +699,7 @@ md0 : active raid5 sda1[0] sdb1[1] sdc1[2](F)
 #[test]
 fn status_resolves_pending_member_removal_to_the_kernel_name_member_states_uses() {
     let insp =
-        StaticInspector::from_raw(LSBLK_WITH_PARTUUID, MDSTAT_REPLACE_PENDING, HashMap::new())
-            .unwrap();
+        StaticInspector::from_raw(LSBLK_WITH_PARTUUID, MDSTAT_REPLACE_PENDING, HashMap::new()).unwrap();
 
     let mut g = sample_group("shr1");
     // Lowercase on purpose -- `StatePartition::part_uuid` and lsblk's own
@@ -700,7 +720,10 @@ fn status_resolves_pending_member_removal_to_the_kernel_name_member_states_uses(
         .iter()
         .find(|m| Some(m.name.as_str()) == band0.pending_member_removal.as_deref())
         .expect("the resolved name must match a real member_states entry, not just any string");
-    assert!(flagged.faulty, "the correlated member is the one mdstat actually marks (F)");
+    assert!(
+        flagged.faulty,
+        "the correlated member is the one mdstat actually marks (F)"
+    );
 
     // JSON carries it too, under the same key state.toml uses.
     let json = serde_json::to_value(&report).unwrap();
@@ -731,14 +754,15 @@ fn status_falls_back_to_the_raw_partuuid_path_when_it_cannot_be_resolved() {
 fn status_reports_no_pending_removal_and_omits_the_json_key_when_state_has_none() {
     // `sample_group` leaves `pending_member_removal: None` on every band --
     // never fabricated as `false`/empty string/present-but-null.
-    let report =
-        build_status(&inspector(), Some(&StateFile::new(vec![sample_group("shr1")]))).unwrap();
+    let report = build_status(&inspector(), Some(&StateFile::new(vec![sample_group("shr1")]))).unwrap();
     let band0 = &report.groups[0].bands[0];
     assert_eq!(band0.pending_member_removal, None);
 
     let json = serde_json::to_value(&report).unwrap();
     assert!(
-        json["groups"][0]["bands"][0].get("pending_member_removal").is_none(),
+        json["groups"][0]["bands"][0]
+            .get("pending_member_removal")
+            .is_none(),
         "key must be omitted, not null, when nothing is pending: {json}"
     );
 }
@@ -749,8 +773,7 @@ fn status_reports_no_pending_removal_and_omits_the_json_key_when_state_has_none(
 #[test]
 fn status_detail_explains_a_pending_removal_next_to_the_faulty_member() {
     let insp =
-        StaticInspector::from_raw(LSBLK_WITH_PARTUUID, MDSTAT_REPLACE_PENDING, HashMap::new())
-            .unwrap();
+        StaticInspector::from_raw(LSBLK_WITH_PARTUUID, MDSTAT_REPLACE_PENDING, HashMap::new()).unwrap();
     let mut g = sample_group("shr1");
     g.bands[0].pending_member_removal =
         Some("/dev/disk/by-partuuid/AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE".to_string());

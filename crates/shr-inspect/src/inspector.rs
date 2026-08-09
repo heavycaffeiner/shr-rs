@@ -23,15 +23,9 @@ pub enum InspectError {
         stderr: String,
     },
     #[error("failed to read {path}: {source}")]
-    Read {
-        path: String,
-        source: std::io::Error,
-    },
+    Read { path: String, source: std::io::Error },
     #[error("failed to parse {what} output: {source}")]
-    Parse {
-        what: String,
-        source: serde_json::Error,
-    },
+    Parse { what: String, source: serde_json::Error },
     #[error(transparent)]
     Identity(#[from] IdentityError),
 }
@@ -65,8 +59,7 @@ pub trait Inspector: Send + Sync {
 }
 
 /// The lsblk columns shr-rs relies on.
-pub const LSBLK_COLUMNS: &str =
-    "NAME,SIZE,TYPE,MODEL,SERIAL,ROTA,TRAN,PARTUUID,FSTYPE,MOUNTPOINT,PTTYPE";
+pub const LSBLK_COLUMNS: &str = "NAME,SIZE,TYPE,MODEL,SERIAL,ROTA,TRAN,PARTUUID,FSTYPE,MOUNTPOINT,PTTYPE";
 
 /// Runs the real system tools. Intended for the Linux target; on other hosts
 /// the commands simply fail to spawn.
@@ -230,7 +223,10 @@ mod tests {
         let logs = vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()];
         let inspector = StaticInspector::default().with_logs(logs);
 
-        assert_eq!(inspector.recent_log_lines(2).unwrap(), vec!["c".to_string(), "d".to_string()]);
+        assert_eq!(
+            inspector.recent_log_lines(2).unwrap(),
+            vec!["c".to_string(), "d".to_string()]
+        );
         assert_eq!(
             inspector.recent_log_lines(100).unwrap(),
             vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()],

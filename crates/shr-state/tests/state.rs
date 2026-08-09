@@ -1,6 +1,6 @@
 use shr_state::{
-    ArrayState, StateBand, StateDisk, StateError, StateExpansion, StateFile, StateFilesystem,
-    StatePartition, StateStore,
+    ArrayState, StateBand, StateDisk, StateError, StateExpansion, StateFile, StateFilesystem, StatePartition,
+    StateStore,
 };
 use tempfile::tempdir;
 
@@ -160,7 +160,9 @@ fn save_rejects_duplicate_group_names() {
     group_b.disks[0].id = "ata-TEST-DISK-2".to_string();
 
     let state = StateFile::new(vec![group_a, group_b]);
-    let err = store.save(&state).expect_err("duplicate group names must be rejected");
+    let err = store
+        .save(&state)
+        .expect_err("duplicate group names must be rejected");
     assert!(matches!(err, StateError::DuplicateGroupName(_)));
     assert_no_files_written(&dir, &store);
 }
@@ -214,9 +216,16 @@ compression = "zstd:3"
 
     let loaded = store.load().unwrap().expect("legacy state.toml must still load");
 
-    assert_eq!(loaded.groups.len(), 1, "the old single array must migrate to exactly one group");
+    assert_eq!(
+        loaded.groups.len(),
+        1,
+        "the old single array must migrate to exactly one group"
+    );
     let group = &loaded.groups[0];
-    assert_eq!(group.name, "default", "a legacy array with no name must migrate to the default name");
+    assert_eq!(
+        group.name, "default",
+        "a legacy array with no name must migrate to the default name"
+    );
     assert_eq!(group.mode, "shr");
     assert_eq!(group.layout_version, 1);
     assert_eq!(group.disks.len(), 1);
@@ -232,7 +241,10 @@ compression = "zstd:3"
         group.filesystem.fs_uuid.as_deref(),
         Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
     );
-    assert!(!group.expansion.in_progress, "an omitted [expansion] table must default, not fail to parse");
+    assert!(
+        !group.expansion.in_progress,
+        "an omitted [expansion] table must default, not fail to parse"
+    );
 }
 
 #[test]
@@ -291,7 +303,10 @@ description = "expansion starting: 2 step(s) planned"
     std::fs::write(&state_file, pre_e11_toml).unwrap();
     let store = StateStore::new(&state_file);
 
-    let loaded = store.load().unwrap().expect("older v2 state.toml must still load");
+    let loaded = store
+        .load()
+        .unwrap()
+        .expect("older v2 state.toml must still load");
 
     let group = &loaded.groups[0];
     assert!(group.expansion.in_progress);
@@ -337,12 +352,11 @@ fn save_rejects_legacy_placeholder_md_uuid() {
     let dir = tempdir().unwrap();
     let store = StateStore::new(dir.path().join("state.toml"));
 
-    let state = base_state(
-        Some("00000000:00000000:00000000:00000001".to_string()),
-        None,
-    );
+    let state = base_state(Some("00000000:00000000:00000000:00000001".to_string()), None);
 
-    let err = store.save(&wrap(state)).expect_err("placeholder md_uuid should be rejected");
+    let err = store
+        .save(&wrap(state))
+        .expect_err("placeholder md_uuid should be rejected");
     assert!(matches!(err, StateError::PlaceholderIdentifier(_)));
     assert_no_files_written(&dir, &store);
 }
@@ -352,12 +366,11 @@ fn save_rejects_placeholder_md_uuid_variant_band_index() {
     let dir = tempdir().unwrap();
     let store = StateStore::new(dir.path().join("state.toml"));
 
-    let state = base_state(
-        Some("00000000:00000000:00000000:00000007".to_string()),
-        None,
-    );
+    let state = base_state(Some("00000000:00000000:00000000:00000007".to_string()), None);
 
-    let err = store.save(&wrap(state)).expect_err("placeholder md_uuid variant should be rejected");
+    let err = store
+        .save(&wrap(state))
+        .expect_err("placeholder md_uuid variant should be rejected");
     assert!(matches!(err, StateError::PlaceholderIdentifier(_)));
     assert_no_files_written(&dir, &store);
 }
@@ -367,12 +380,11 @@ fn save_rejects_legacy_placeholder_fs_uuid() {
     let dir = tempdir().unwrap();
     let store = StateStore::new(dir.path().join("state.toml"));
 
-    let state = base_state(
-        None,
-        Some("00000000-0000-4000-8000-000000000001".to_string()),
-    );
+    let state = base_state(None, Some("00000000-0000-4000-8000-000000000001".to_string()));
 
-    let err = store.save(&wrap(state)).expect_err("placeholder fs_uuid should be rejected");
+    let err = store
+        .save(&wrap(state))
+        .expect_err("placeholder fs_uuid should be rejected");
     assert!(matches!(err, StateError::PlaceholderIdentifier(_)));
     assert_no_files_written(&dir, &store);
 }
@@ -382,12 +394,11 @@ fn save_rejects_all_zero_fs_uuid() {
     let dir = tempdir().unwrap();
     let store = StateStore::new(dir.path().join("state.toml"));
 
-    let state = base_state(
-        None,
-        Some("00000000-0000-0000-0000-000000000000".to_string()),
-    );
+    let state = base_state(None, Some("00000000-0000-0000-0000-000000000000".to_string()));
 
-    let err = store.save(&wrap(state)).expect_err("all-zero fs_uuid should be rejected");
+    let err = store
+        .save(&wrap(state))
+        .expect_err("all-zero fs_uuid should be rejected");
     assert!(matches!(err, StateError::PlaceholderIdentifier(_)));
     assert_no_files_written(&dir, &store);
 }
@@ -402,10 +413,7 @@ fn save_rejects_md_uuid_with_zero_groups_in_a_different_arrangement() {
     let dir = tempdir().unwrap();
     let store = StateStore::new(dir.path().join("state.toml"));
 
-    let state = base_state(
-        Some("00000000:00000000:00000001:00000000".to_string()),
-        None,
-    );
+    let state = base_state(Some("00000000:00000000:00000001:00000000".to_string()), None);
 
     let err = store
         .save(&wrap(state))
@@ -425,7 +433,10 @@ fn save_rejects_malformed_md_uuid() {
         let state = base_state(Some(bad.to_string()), None);
         let result = store.save(&wrap(state));
         assert!(result.is_err(), "malformed md_uuid `{bad}` should be rejected");
-        assert!(matches!(result.unwrap_err(), StateError::PlaceholderIdentifier(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            StateError::PlaceholderIdentifier(_)
+        ));
         assert_no_files_written(&dir, &store);
     }
 }
@@ -439,7 +450,10 @@ fn save_rejects_malformed_fs_uuid() {
         let state = base_state(None, Some(bad.to_string()));
         let result = store.save(&wrap(state));
         assert!(result.is_err(), "malformed fs_uuid `{bad}` should be rejected");
-        assert!(matches!(result.unwrap_err(), StateError::PlaceholderIdentifier(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            StateError::PlaceholderIdentifier(_)
+        ));
         assert_no_files_written(&dir, &store);
     }
 }
@@ -490,7 +504,9 @@ fn load_returns_a_clear_error_not_a_panic_on_a_corrupted_file() {
     std::fs::write(&state_file, b"this is not valid toml {{{").unwrap();
     let store = StateStore::new(&state_file);
 
-    let err = store.load().expect_err("corrupted state.toml must not parse successfully");
+    let err = store
+        .load()
+        .expect_err("corrupted state.toml must not parse successfully");
     assert!(matches!(err, StateError::Deserialize(_)));
 }
 
@@ -501,7 +517,9 @@ fn save_accepts_none_identifiers() {
 
     let state = wrap(base_state(None, None));
 
-    store.save(&state).expect("None identifiers should always be accepted");
+    store
+        .save(&state)
+        .expect("None identifiers should always be accepted");
     assert!(store.exists());
 
     let loaded = store.load().unwrap().expect("state should be loaded");

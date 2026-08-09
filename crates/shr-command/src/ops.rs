@@ -27,10 +27,7 @@ use crate::ShrError;
 ///    `groups` list, never an error and never fabricated data. `Option`
 ///    makes that case explicit at the call site instead of requiring an
 ///    empty-but-still-real `StateFile` sentinel value.
-pub fn build_status(
-    inspector: &dyn Inspector,
-    state: Option<&StateFile>,
-) -> Result<StatusReport, ShrError> {
+pub fn build_status(inspector: &dyn Inspector, state: Option<&StateFile>) -> Result<StatusReport, ShrError> {
     let lsblk = inspector.block_devices()?;
     let md = inspector.mdstat()?;
     let by_id = inspector.by_id_index()?;
@@ -48,9 +45,7 @@ pub fn build_status(
         let system_disk = !system_mounts.is_empty();
         disks.push(DiskStatus {
             name: d.name.clone(),
-            id: by_id
-                .id_for_kernel(&d.name)
-                .map(|id| id.as_str().to_string()),
+            id: by_id.id_for_kernel(&d.name).map(|id| id.as_str().to_string()),
             size: d.size,
             model: d.model_trimmed(),
             serial: d.serial_trimmed(),
@@ -68,7 +63,12 @@ pub fn build_status(
     // Cockpit polling before anything has been `create`d) -- `state` being
     // `None` must not be conflated with "state.toml exists but is empty."
     let groups: Vec<GroupStatus> = state
-        .map(|s| s.groups.iter().map(|g| group_status(g, &arrays, &lsblk)).collect())
+        .map(|s| {
+            s.groups
+                .iter()
+                .map(|g| group_status(g, &arrays, &lsblk))
+                .collect()
+        })
         .unwrap_or_default();
 
     // Computed from the flat live-array list ALONE used to miss a
@@ -94,8 +94,9 @@ pub fn build_status(
     // exactly that, not a different question ("no array present yet" is
     // `Unknown`'s meaning, which does not apply here since group A IS
     // live).
-    let any_group_unassembled =
-        groups.iter().any(|g| g.bands.iter().any(|b| b.members.is_empty()));
+    let any_group_unassembled = groups
+        .iter()
+        .any(|g| g.bands.iter().any(|b| b.members.is_empty()));
 
     // Healthy only if every array is active/clean, writable, structurally
     // possible, not degraded, AND no state.toml group is missing its live
@@ -131,8 +132,7 @@ pub fn build_status(
 /// `band_status` can resolve `pending_member_removal`'s by-partuuid path
 /// without a second `lsblk` call.
 fn group_status(g: &ArrayState, arrays: &[ArrayStatus], lsblk: &LsblkOutput) -> GroupStatus {
-    let bands: Vec<GroupBandStatus> =
-        g.bands.iter().map(|b| band_status(b, arrays, lsblk)).collect();
+    let bands: Vec<GroupBandStatus> = g.bands.iter().map(|b| band_status(b, arrays, lsblk)).collect();
     let usable_bytes = bands.iter().map(|b| b.usable_bytes).sum();
     let resize_pending = bands.iter().any(|b| b.resize_pending);
 
@@ -204,7 +204,10 @@ fn kernel_name_for_partuuid(lsblk: &LsblkOutput, raw: &str) -> Option<String> {
     let uuid = raw.strip_prefix("/dev/disk/by-partuuid/")?;
     fn find<'a>(devices: &'a [BlockDevice], uuid: &str) -> Option<&'a str> {
         for d in devices {
-            if d.partuuid.as_deref().is_some_and(|p| p.eq_ignore_ascii_case(uuid)) {
+            if d.partuuid
+                .as_deref()
+                .is_some_and(|p| p.eq_ignore_ascii_case(uuid))
+            {
                 return Some(d.name.as_str());
             }
             if let Some(found) = find(&d.children, uuid) {
@@ -336,10 +339,7 @@ fn member_status(m: &shr_inspect::MdMember) -> MemberStatus {
 /// hasn't run `shr_exec::BtrfsExecutor::usage` for it) simply reports every
 /// `FsUsageInput` field as `None`, which `render_fs_df` shows as `?`. Never
 /// fabricated.
-pub fn build_fs_df(
-    groups: &[GroupStatus],
-    usage: &BTreeMap<String, FsUsageInput>,
-) -> FsDfReport {
+pub fn build_fs_df(groups: &[GroupStatus], usage: &BTreeMap<String, FsUsageInput>) -> FsDfReport {
     let rows = groups
         .iter()
         .map(|g| {
@@ -357,7 +357,10 @@ pub fn build_fs_df(
             }
         })
         .collect();
-    FsDfReport { schema_version: SCHEMA_VERSION, groups: rows }
+    FsDfReport {
+        schema_version: SCHEMA_VERSION,
+        groups: rows,
+    }
 }
 
 /// Dry-run: plan the initial layout for `disks` in `mode` and report it. Never
@@ -435,11 +438,7 @@ fn plan_to_report(mode: RedundancyMode, out: &PlannerOutput) -> PlanReport {
         redundancy_overhead: m.redundancy_overhead,
         stranded_bytes: m.stranded_bytes,
         waste_ratio: m.waste_ratio,
-        utilization: m
-            .utilization
-            .iter()
-            .map(|(k, v)| (k.to_string(), *v))
-            .collect(),
+        utilization: m.utilization.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
     };
 
     PlanReport {
@@ -463,9 +462,7 @@ fn fmt_warning(w: &PlannerWarning) -> String {
             size,
             members,
             needed,
-        } => format!(
-            "slice at offset {offset} ({size} B) has only {members} member(s), needs {needed}"
-        ),
+        } => format!("slice at offset {offset} ({size} B) has only {members} member(s), needs {needed}"),
         PlannerWarning::UnusableTail { disk, bytes } => {
             format!("{disk}: {bytes} B stranded (no redundancy)")
         }

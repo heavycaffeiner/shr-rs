@@ -5,19 +5,13 @@ use std::fmt::Write as _;
 use shr_core::{Disk, DiskId, PlannerOutput};
 
 use crate::report::{
-    ArrayStatus, DiskStatus, FsDfReport, GroupBandStatus, GroupDfStatus, GroupStatus, Health,
-    MemberStatus, PlanReport, ScrubOutcome, SmartState, StatusReport,
+    ArrayStatus, DiskStatus, FsDfReport, GroupBandStatus, GroupDfStatus, GroupStatus, Health, MemberStatus,
+    PlanReport, ScrubOutcome, SmartState, StatusReport,
 };
 
 /// Format a byte count in decimal units (matching the plan/mockup, e.g. 4.0 TB).
 pub fn human_bytes(bytes: u64) -> String {
-    const UNITS: [(&str, f64); 5] = [
-        ("PB", 1e15),
-        ("TB", 1e12),
-        ("GB", 1e9),
-        ("MB", 1e6),
-        ("KB", 1e3),
-    ];
+    const UNITS: [(&str, f64); 5] = [("PB", 1e15), ("TB", 1e12), ("GB", 1e9), ("MB", 1e6), ("KB", 1e3)];
     let b = bytes as f64;
     for (unit, factor) in UNITS {
         if b >= factor {
@@ -117,7 +111,11 @@ pub fn render_status(r: &StatusReport) -> String {
         for g in &r.groups {
             let _ = writeln!(out, "             {}", render_group_row(g));
             for b in &g.bands {
-                let pending = if b.resize_pending { " [expansion unfinished]" } else { "" };
+                let pending = if b.resize_pending {
+                    " [expansion unfinished]"
+                } else {
+                    ""
+                };
                 // Real reboot observation -- state.toml survived a hard
                 // reboot, loopback devices/mdadm arrays did not, and this
                 // (plain, DEFAULT) view printed `band0 raid5 md0  17.2 GB`
@@ -126,7 +124,11 @@ pub fn render_status(r: &StatusReport) -> String {
                 // (`b.members.is_empty()` == "no live mdadm array with this
                 // name right now", see `GroupBandStatus::members`'s doc
                 // comment); it just never reached this sibling path.
-                let live = if b.members.is_empty() { " (no live mdadm array)" } else { "" };
+                let live = if b.members.is_empty() {
+                    " (no live mdadm array)"
+                } else {
+                    ""
+                };
                 let _ = writeln!(
                     out,
                     "                 band{:<3}{:<8}{:<12}{:>12}{}{}",
@@ -145,7 +147,11 @@ pub fn render_status(r: &StatusReport) -> String {
 }
 
 fn render_group_row(g: &GroupStatus) -> String {
-    let resize = if g.resize_pending { " [expansion unfinished]" } else { "" };
+    let resize = if g.resize_pending {
+        " [expansion unfinished]"
+    } else {
+        ""
+    };
     format!(
         "{:<10}{:<8}{:<8}{:<10}{}{}",
         g.name,
@@ -178,10 +184,7 @@ fn render_array_row(a: &ArrayStatus) -> String {
             None => format!("{} pending", s.action),
         })
         .unwrap_or_else(|| "idle".into());
-    format!(
-        "{:<8}{:<8}{:<10}{:<8}{}",
-        a.name, level, state, disks, progress
-    )
+    format!("{:<8}{:<8}{:<10}{:<8}{}", a.name, level, state, disks, progress)
 }
 
 /// Truncate `s` (with a trailing `>`) to fit `width` columns -- keeps a
@@ -276,12 +279,20 @@ pub fn render_status_detail(r: &StatusReport) -> String {
             // is a required String (never Option, see GroupStatus's doc
             // comment), so an empty value would mean something went wrong
             // upstream -- shown as "-" rather than fabricated.
-            let compression = if g.compression.is_empty() { "-" } else { g.compression.as_str() };
+            let compression = if g.compression.is_empty() {
+                "-"
+            } else {
+                g.compression.as_str()
+            };
             let _ = writeln!(
                 out,
                 // No layout version here either -- see render_group_row.
                 "  {} (mode={}, disks={}, compression={}) -> {}",
-                g.name, g.mode, g.disks.len(), compression, g.mount_point
+                g.name,
+                g.mode,
+                g.disks.len(),
+                compression,
+                g.mount_point
             );
             for b in &g.bands {
                 let _ = writeln!(out, "    {}", render_band_detail_row(b));
@@ -359,7 +370,11 @@ pub fn annotated_members(members: &[String], member_states: &[MemberStatus]) -> 
 /// name right now" (see `GroupBandStatus::members`'s doc comment) rather than
 /// silently reporting a made-up "idle".
 fn render_band_detail_row(b: &GroupBandStatus) -> String {
-    let resize = if b.resize_pending { " [expansion unfinished]" } else { "" };
+    let resize = if b.resize_pending {
+        " [expansion unfinished]"
+    } else {
+        ""
+    };
     let live = if b.members.is_empty() {
         "no live mdadm array".to_string()
     } else if let Some(s) = &b.sync {
@@ -374,7 +389,11 @@ fn render_band_detail_row(b: &GroupBandStatus) -> String {
     } else {
         "idle".to_string()
     };
-    let scrub_prefix = if b.scrub_in_progress { "scrub running; " } else { "" };
+    let scrub_prefix = if b.scrub_in_progress {
+        "scrub running; "
+    } else {
+        ""
+    };
     let scrub = match &b.last_scrub {
         Some(s) => {
             let outcome = match s.outcome {
@@ -382,14 +401,20 @@ fn render_band_detail_row(b: &GroupBandStatus) -> String {
                 ScrubOutcome::Cancelled => "cancelled",
                 ScrubOutcome::Failed => "FAILED",
             };
-            format!("{scrub_prefix}last scrub {outcome} at {} ({} errors)", s.finished_at, s.error_count)
+            format!(
+                "{scrub_prefix}last scrub {outcome} at {} ({} errors)",
+                s.finished_at, s.error_count
+            )
         }
         None => format!("{scrub_prefix}last scrub: never"),
     };
     let members = if b.members.is_empty() {
         "-".to_string()
     } else {
-        join_bounded(&annotated_members(&b.members, &b.member_states), DIAGRAM_MEMBERS_WIDTH)
+        join_bounded(
+            &annotated_members(&b.members, &b.member_states),
+            DIAGRAM_MEMBERS_WIDTH,
+        )
     };
     // A member `annotated_members` marked `(F)` above can be a genuine
     // new fault OR the harmless, self-clearing tail of a `disk replace`
@@ -399,9 +424,9 @@ fn render_band_detail_row(b: &GroupBandStatus) -> String {
     // no explanation at all, would leave the operator exactly as unable to
     // tell the two apart as before this field existed.
     let pending_removal = match &b.pending_member_removal {
-        Some(name) => format!(
-            "  pending-removal: {name} (its replace copy is still finishing -- not a new fault)"
-        ),
+        Some(name) => {
+            format!("  pending-removal: {name} (its replace copy is still finishing -- not a new fault)")
+        }
         None => String::new(),
     };
     format!(
@@ -488,7 +513,9 @@ fn watch_array_row(a: &ArrayStatus) -> String {
     let percent = a.sync.as_ref().and_then(|s| s.percent);
     let bar = watch_progress_bar(percent, WATCH_BAR_WIDTH);
     let action = watch_action_label(
-        a.sync.as_ref().map(|s| (s.action.as_str(), s.percent, s.finish_min)),
+        a.sync
+            .as_ref()
+            .map(|s| (s.action.as_str(), s.percent, s.finish_min)),
     );
     format!("{:<8}[{bar}] {action}", a.name)
 }
@@ -499,7 +526,11 @@ fn watch_band_row(b: &GroupBandStatus) -> String {
     let action = if b.sync.is_none() && b.members.is_empty() {
         "no live mdadm array".to_string()
     } else {
-        watch_action_label(b.sync.as_ref().map(|s| (s.action.as_str(), s.percent, s.finish_min)))
+        watch_action_label(
+            b.sync
+                .as_ref()
+                .map(|s| (s.action.as_str(), s.percent, s.finish_min)),
+        )
     };
     let scrub = if b.scrub_in_progress { " [scrubbing]" } else { "" };
     format!("band{:<3}{:<10}[{bar}] {action}{scrub}", b.index, b.md_name)
@@ -512,7 +543,9 @@ fn watch_action_label(sync: Option<(&str, Option<f64>, Option<f64>)>) -> String 
     match sync {
         None => "idle".to_string(),
         Some((action, percent, finish_min)) => {
-            let eta = finish_min.map(|m| format!(", finish ~{m:.1}m")).unwrap_or_default();
+            let eta = finish_min
+                .map(|m| format!(", finish ~{m:.1}m"))
+                .unwrap_or_default();
             match percent {
                 Some(p) => format!("{action} {p:.1}%{eta}"),
                 None => format!("{action} pending{eta}"),
@@ -561,13 +594,18 @@ fn fit_frame(mut lines: Vec<String>, meta: &WatchFrameMeta) -> Vec<String> {
     if lines.len() > meta.max_height {
         let hidden = lines.len() - (meta.max_height - 1);
         lines.truncate(meta.max_height - 1);
-        lines.push(format!("... +{hidden} more line(s), resize terminal for full detail"));
+        lines.push(format!(
+            "... +{hidden} more line(s), resize terminal for full detail"
+        ));
     } else {
         while lines.len() < meta.max_height {
             lines.push(String::new());
         }
     }
-    lines.into_iter().map(|l| pad_or_truncate(&l, meta.width)).collect()
+    lines
+        .into_iter()
+        .map(|l| pad_or_truncate(&l, meta.width))
+        .collect()
 }
 
 /// Render a dry-run plan report: band table, capacity accounting, and a bar.
@@ -829,8 +867,7 @@ fn join_bounded(items: &[String], max_width: usize) -> String {
         let remaining = items.len() - i;
         let more_suffix_len = format!(" +{remaining} more").len();
         if !out.is_empty()
-            && out.chars().count() + sep.len() + item.chars().count() + more_suffix_len
-                > max_width
+            && out.chars().count() + sep.len() + item.chars().count() + more_suffix_len > max_width
         {
             let _ = write!(out, " +{remaining} more");
             return out;
@@ -879,13 +916,7 @@ pub fn render_fs_df(r: &FsDfReport) -> String {
     let _ = writeln!(
         out,
         "  {:<10}{:<18}{:>10}{:>22}{:>22}{:>10}{:>10}",
-        "GROUP",
-        "MOUNT",
-        "USABLE",
-        "DATA (used/total)",
-        "META (used/total)",
-        "UNALLOC",
-        "DF-AVAIL"
+        "GROUP", "MOUNT", "USABLE", "DATA (used/total)", "META (used/total)", "UNALLOC", "DF-AVAIL"
     );
     for g in &r.groups {
         let _ = writeln!(out, "  {}", render_df_row(g));
@@ -963,14 +994,13 @@ pub fn render_disk_list(r: &StatusReport) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        capacity_bar, human_bytes, render_disk_list, render_fs_df, render_layout_diagram,
-        render_plan, render_status, render_status_detail, render_status_watch_frame,
-        WatchFrameMeta,
+        capacity_bar, human_bytes, render_disk_list, render_fs_df, render_layout_diagram, render_plan,
+        render_status, render_status_detail, render_status_watch_frame, WatchFrameMeta,
     };
     use crate::report::{
-        ArrayStatus, BandReport, DiskStatus, FsDfReport, GroupBandStatus, GroupDfStatus,
-        GroupStatus, Health, MemberStatus, MetricsReport, PlanReport, ScrubOutcome, ScrubSummary,
-        SmartState, SmartSummary, StatusReport, SyncSummary,
+        ArrayStatus, BandReport, DiskStatus, FsDfReport, GroupBandStatus, GroupDfStatus, GroupStatus, Health,
+        MemberStatus, MetricsReport, PlanReport, ScrubOutcome, ScrubSummary, SmartState, SmartSummary,
+        StatusReport, SyncSummary,
     };
     use std::collections::BTreeMap;
 
@@ -1016,10 +1046,7 @@ mod tests {
                 raid_disks: Some(3),
                 active_disks: Some(2),
                 members: vec!["sdb1".to_string(), "sdc1".to_string()],
-                member_states: vec![
-                    healthy_member("sdb1", 0),
-                    healthy_member("sdc1", 1),
-                ],
+                member_states: vec![healthy_member("sdb1", 0), healthy_member("sdc1", 1)],
                 sync: Some(SyncSummary {
                     action: "recover".to_string(),
                     percent: Some(42.5),
@@ -1046,10 +1073,7 @@ mod tests {
                     usable_bytes: 8_000_000_000_000,
                     resize_pending: true,
                     members: vec!["sdb1".to_string(), "sdc1".to_string()],
-                    member_states: vec![
-                        healthy_member("sdb1", 0),
-                        healthy_member("sdc1", 1),
-                    ],
+                    member_states: vec![healthy_member("sdb1", 0), healthy_member("sdc1", 1)],
                     sync: None,
                     last_scrub: None,
                     scrub_in_progress: false,
@@ -1101,7 +1125,11 @@ mod tests {
                 index: 0,
                 level: "raid5".to_string(),
                 size: 4_000_000_000_000,
-                members: vec!["ata-DISK1".to_string(), "ata-DISK2".to_string(), "ata-DISK3".to_string()],
+                members: vec![
+                    "ata-DISK1".to_string(),
+                    "ata-DISK2".to_string(),
+                    "ata-DISK3".to_string(),
+                ],
                 usable: 8_000_000_000_000,
                 raw: 12_000_000_000_000,
             }],
@@ -1141,10 +1169,7 @@ mod tests {
             _ => 3,
         };
         let ranks: Vec<u8> = bar.chars().map(order).collect();
-        assert!(
-            ranks.windows(2).all(|w| w[0] <= w[1]),
-            "bar not monotonic: {bar}"
-        );
+        assert!(ranks.windows(2).all(|w| w[0] <= w[1]), "bar not monotonic: {bar}");
     }
 
     #[test]
@@ -1342,10 +1367,7 @@ mod tests {
                         usable_bytes: 8_000_000_000_000,
                         resize_pending: false,
                         members: vec!["sdb1".to_string(), "sdc1".to_string()],
-                        member_states: vec![
-                            healthy_member("sdb1", 0),
-                            healthy_member("sdc1", 1),
-                        ],
+                        member_states: vec![healthy_member("sdb1", 0), healthy_member("sdc1", 1)],
                         sync: Some(SyncSummary {
                             action: "recover".to_string(),
                             percent: Some(42.5),
@@ -1456,7 +1478,10 @@ mod tests {
     #[test]
     fn render_status_detail_omits_pending_removal_text_when_none_is_pending() {
         let text = render_status_detail(&status_detail_fixture());
-        let band0_line = text.lines().find(|l| l.contains("md0")).expect("band0 row present");
+        let band0_line = text
+            .lines()
+            .find(|l| l.contains("md0"))
+            .expect("band0 row present");
         assert!(!band0_line.contains("pending-removal"), "{band0_line}");
     }
 
@@ -1530,10 +1555,7 @@ mod tests {
                     raid_disks: Some(3),
                     active_disks: Some(2),
                     members: vec!["sdb1".to_string(), "sdc1".to_string()],
-                    member_states: vec![
-                        healthy_member("sdb1", 0),
-                        healthy_member("sdc1", 1),
-                    ],
+                    member_states: vec![healthy_member("sdb1", 0), healthy_member("sdc1", 1)],
                     sync: Some(SyncSummary {
                         action: "recover".to_string(),
                         percent: Some(42.5),
@@ -1549,10 +1571,7 @@ mod tests {
                     raid_disks: Some(2),
                     active_disks: Some(2),
                     members: vec!["sdd1".to_string(), "sde1".to_string()],
-                    member_states: vec![
-                        healthy_member("sdd1", 0),
-                        healthy_member("sde1", 1),
-                    ],
+                    member_states: vec![healthy_member("sdd1", 0), healthy_member("sde1", 1)],
                     sync: None,
                 },
             ],
@@ -1564,7 +1583,10 @@ mod tests {
 
     #[test]
     fn render_status_watch_frame_snapshot() {
-        let meta = WatchFrameMeta { width: 72, max_height: 12 };
+        let meta = WatchFrameMeta {
+            width: 72,
+            max_height: 12,
+        };
         insta::assert_snapshot!(render_status_watch_frame(&watch_fixture(), &meta));
     }
 
@@ -1574,8 +1596,14 @@ mod tests {
         // one that forces padding (more rows than content needs) -- both
         // must still land on exactly `max_height` lines.
         for meta in [
-            WatchFrameMeta { width: 60, max_height: 3 },
-            WatchFrameMeta { width: 60, max_height: 40 },
+            WatchFrameMeta {
+                width: 60,
+                max_height: 3,
+            },
+            WatchFrameMeta {
+                width: 60,
+                max_height: 40,
+            },
         ] {
             let text = render_status_watch_frame(&watch_fixture(), &meta);
             assert_eq!(text.lines().count(), meta.max_height, "meta={meta:?}: {text}");
@@ -1584,7 +1612,10 @@ mod tests {
 
     #[test]
     fn watch_frame_width_is_always_exactly_meta_width() {
-        let meta = WatchFrameMeta { width: 50, max_height: 10 };
+        let meta = WatchFrameMeta {
+            width: 50,
+            max_height: 10,
+        };
         let text = render_status_watch_frame(&watch_fixture(), &meta);
         for line in text.lines() {
             assert_eq!(line.chars().count(), meta.width, "line: {line:?}");
@@ -1596,7 +1627,10 @@ mod tests {
         // No wall-clock, no randomness -- the same report+meta must produce
         // byte-for-byte the same frame, which is what lets a redraw loop
         // diff frames and skip repainting when nothing changed.
-        let meta = WatchFrameMeta { width: 64, max_height: 16 };
+        let meta = WatchFrameMeta {
+            width: 64,
+            max_height: 16,
+        };
         let a = render_status_watch_frame(&watch_fixture(), &meta);
         let b = render_status_watch_frame(&watch_fixture(), &meta);
         assert_eq!(a, b);
@@ -1606,7 +1640,10 @@ mod tests {
     fn watch_frame_reflects_content_changes() {
         // Sanity check on the idempotence test above: this isn't a constant
         // frame regardless of input -- a real content change must change it.
-        let meta = WatchFrameMeta { width: 64, max_height: 16 };
+        let meta = WatchFrameMeta {
+            width: 64,
+            max_height: 16,
+        };
         let mut changed = watch_fixture();
         changed.arrays[0].sync.as_mut().unwrap().percent = Some(99.9);
         let a = render_status_watch_frame(&watch_fixture(), &meta);

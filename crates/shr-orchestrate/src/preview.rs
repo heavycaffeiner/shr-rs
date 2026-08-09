@@ -250,7 +250,7 @@ mod tests {
                 resize_pending: false,
                 last_smart_reallocated: None,
                 last_scrub: None,
-            scrub_in_progress: false,
+                scrub_in_progress: false,
                 pending_member_removal: None,
                 reshape_priority: None,
             }],
@@ -288,7 +288,12 @@ mod tests {
 
         let (state, commands) = preview_expand(store, req).unwrap();
 
-        assert_eq!(state.bands.len(), 2, "expected a new band1 to be planned: {:?}", state.bands);
+        assert_eq!(
+            state.bands.len(),
+            2,
+            "expected a new band1 to be planned: {:?}",
+            state.bands
+        );
         let create_cmds: Vec<&String> = commands.iter().filter(|c| c.contains("mdadm --create")).collect();
         assert_eq!(create_cmds.len(), 1, "{commands:?}");
         assert!(create_cmds[0].contains("--bitmap=internal"), "{create_cmds:?}");
@@ -306,13 +311,18 @@ mod tests {
             let stdout = if program == "cat" && args.iter().any(|a| a.ends_with("/md/sync_action")) {
                 "check\n".to_string()
             } else if program == "cat"
-                && args.iter().any(|a| a.ends_with("/md/degraded") || a.ends_with("/md/mismatch_cnt"))
+                && args
+                    .iter()
+                    .any(|a| a.ends_with("/md/degraded") || a.ends_with("/md/mismatch_cnt"))
             {
                 "0\n".to_string()
             } else {
                 String::new()
             };
-            Ok(shr_exec::CommandOutput { stdout, stderr: String::new() })
+            Ok(shr_exec::CommandOutput {
+                stdout,
+                stderr: String::new(),
+            })
         }
         fn is_dry_run(&self) -> bool {
             false

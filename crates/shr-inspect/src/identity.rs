@@ -16,15 +16,9 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum IdentityError {
     #[error("failed to read {path}: {source}")]
-    ReadDir {
-        path: String,
-        source: std::io::Error,
-    },
+    ReadDir { path: String, source: std::io::Error },
     #[error("failed to resolve symlink {path}: {source}")]
-    Resolve {
-        path: String,
-        source: std::io::Error,
-    },
+    Resolve { path: String, source: std::io::Error },
     #[error("no stable by-id name for kernel device `{name}`")]
     NoStableId { name: String },
     #[error("ambiguous serial match `{serial}` → {matches:?}")]
@@ -69,13 +63,11 @@ impl ByIdIndex {
                 let old = existing.as_str().to_string();
                 self.id_to_kernel.remove(&old);
                 self.kernel_to_id.insert(kernel.clone(), candidate.clone());
-                self.id_to_kernel
-                    .insert(candidate.as_str().to_string(), kernel);
+                self.id_to_kernel.insert(candidate.as_str().to_string(), kernel);
             }
             None => {
                 self.kernel_to_id.insert(kernel.clone(), candidate.clone());
-                self.id_to_kernel
-                    .insert(candidate.as_str().to_string(), kernel);
+                self.id_to_kernel.insert(candidate.as_str().to_string(), kernel);
             }
         }
     }
@@ -243,10 +235,7 @@ mod tests {
         let mut idx = ByIdIndex::empty();
         idx.insert("sda", "wwn-0x5000c500");
         idx.insert("sda", "ata-WDC_WD40_SERIAL");
-        assert_eq!(
-            idx.id_for_kernel("sda").unwrap().as_str(),
-            "ata-WDC_WD40_SERIAL"
-        );
+        assert_eq!(idx.id_for_kernel("sda").unwrap().as_str(), "ata-WDC_WD40_SERIAL");
     }
 
     #[test]
@@ -255,10 +244,7 @@ mod tests {
         idx.insert("sda", "ata-WDC_WD40_SERIAL-part1");
         assert!(idx.id_for_kernel("sda").is_none());
         idx.insert("sda", "ata-WDC_WD40_SERIAL");
-        assert_eq!(
-            idx.id_for_kernel("sda").unwrap().as_str(),
-            "ata-WDC_WD40_SERIAL"
-        );
+        assert_eq!(idx.id_for_kernel("sda").unwrap().as_str(), "ata-WDC_WD40_SERIAL");
     }
 
     #[test]

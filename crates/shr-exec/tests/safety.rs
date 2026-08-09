@@ -33,8 +33,7 @@ fn by_id_alias_of_a_system_disk_is_blocked_by_exact_match() {
     // alias closes the false negative: the old substring check never caught
     // this, because "ata-WDC_WD40EFRX_SYS" does not contain "sda" anywhere.
     let system_disks = vec!["sda".to_string(), "ata-WDC_WD40EFRX_SYS".to_string()];
-    let res =
-        SafetyGuard::validate_disk_target("/dev/disk/by-id/ata-WDC_WD40EFRX_SYS", &system_disks);
+    let res = SafetyGuard::validate_disk_target("/dev/disk/by-id/ata-WDC_WD40EFRX_SYS", &system_disks);
     assert!(res.is_err());
 }
 

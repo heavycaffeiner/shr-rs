@@ -11,14 +11,7 @@ use crate::identity::ByIdIndex;
 use crate::lsblk::{BlockDevice, LsblkOutput};
 
 /// Mountpoints that mark a disk as holding the operating system.
-pub const SYSTEM_MOUNTPOINTS: &[&str] = &[
-    "/",
-    "/boot",
-    "/boot/efi",
-    "/boot/EFI",
-    "/efi",
-    "/boot/grub",
-];
+pub const SYSTEM_MOUNTPOINTS: &[&str] = &["/", "/boot", "/boot/efi", "/boot/EFI", "/efi", "/boot/grub"];
 
 /// Hard reasons a disk must not be written by shr-rs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -56,10 +49,9 @@ impl std::fmt::Display for WriteBlocker {
                 "disk `{name}` ({id}) holds system mounts {}; refused (data-disk-only policy)",
                 mounts.join(", ")
             ),
-            WriteBlocker::NoStableId { name } => write!(
-                f,
-                "disk `{name}` has no stable /dev/disk/by-id name; refused"
-            ),
+            WriteBlocker::NoStableId { name } => {
+                write!(f, "disk `{name}` has no stable /dev/disk/by-id name; refused")
+            }
             WriteBlocker::NotFound { reference } => {
                 write!(f, "disk reference `{reference}` not found")
             }
@@ -170,7 +162,9 @@ pub fn preflight_write_targets(
                 "disk `{name}` already has partitions or a filesystem signature"
             ));
             if !force_content {
-                blockers.push(WriteBlocker::HasContent { name: name.to_string() });
+                blockers.push(WriteBlocker::HasContent {
+                    name: name.to_string(),
+                });
             }
         }
         targets.push(PreflightTarget {

@@ -73,8 +73,7 @@ impl<'a> BtrfsExecutor<'a> {
         if let Some(sv) = subvol {
             opts.push_str(&format!(",subvol={sv}"));
         }
-        self.runner
-            .run("mount", &["-o", &opts, dev_path, mount_point])?;
+        self.runner.run("mount", &["-o", &opts, dev_path, mount_point])?;
         Ok(())
     }
 
@@ -95,8 +94,21 @@ impl<'a> BtrfsExecutor<'a> {
     /// `-r`: snapshots are point-in-time backups here, not another writable
     /// working copy -- an accidentally-writable snapshot defeats the
     /// "restore to a known-good point" purpose `@snapshots` exists for.
-    pub fn create_snapshot(&self, source_subvol_path: &str, dest_snapshot_path: &str) -> Result<(), ExecError> {
-        self.runner.run("btrfs", &["subvolume", "snapshot", "-r", source_subvol_path, dest_snapshot_path])?;
+    pub fn create_snapshot(
+        &self,
+        source_subvol_path: &str,
+        dest_snapshot_path: &str,
+    ) -> Result<(), ExecError> {
+        self.runner.run(
+            "btrfs",
+            &[
+                "subvolume",
+                "snapshot",
+                "-r",
+                source_subvol_path,
+                dest_snapshot_path,
+            ],
+        )?;
         Ok(())
     }
 
@@ -113,7 +125,12 @@ impl<'a> BtrfsExecutor<'a> {
     /// normal case, not a failure.
     pub fn list_snapshot_names(&self, snapshots_dir: &str) -> Result<Vec<String>, ExecError> {
         match self.runner.run("ls", &["-1", snapshots_dir]) {
-            Ok(output) => Ok(output.stdout.lines().map(str::to_string).filter(|l| !l.is_empty()).collect()),
+            Ok(output) => Ok(output
+                .stdout
+                .lines()
+                .map(str::to_string)
+                .filter(|l| !l.is_empty())
+                .collect()),
             Err(ExecError::NonZeroExit { .. }) => Ok(Vec::new()),
             Err(e) => Err(e),
         }
@@ -152,7 +169,8 @@ impl<'a> BtrfsExecutor<'a> {
     pub fn recompress(&self, mount_point: &str, compression: &str) -> Result<(), ExecError> {
         let (algorithm, _level) = split_compression(compression)?;
         let clevel = format!("-c{algorithm}");
-        self.runner.run("btrfs", &["filesystem", "defragment", "-r", &clevel, mount_point])?;
+        self.runner
+            .run("btrfs", &["filesystem", "defragment", "-r", &clevel, mount_point])?;
         Ok(())
     }
 
@@ -219,7 +237,9 @@ impl<'a> BtrfsExecutor<'a> {
         if self.runner.is_dry_run() {
             return Ok(BtrfsUsage::default());
         }
-        let output = self.runner.run("btrfs", &["filesystem", "usage", "--raw", mount_point])?;
+        let output = self
+            .runner
+            .run("btrfs", &["filesystem", "usage", "--raw", mount_point])?;
         Ok(parse_btrfs_usage(&output.stdout))
     }
 
@@ -308,11 +328,18 @@ mod dry_run_uuid_tests {
         let value = dry_run_fs_uuid("/dev/shr_vg/data");
         assert_eq!(value.len(), 36);
         for index in [8usize, 13, 18, 23] {
-            assert_eq!(value.as_bytes()[index], b'-', "expected dash at {index} in {value}");
+            assert_eq!(
+                value.as_bytes()[index],
+                b'-',
+                "expected dash at {index} in {value}"
+            );
         }
         for (index, byte) in value.bytes().enumerate() {
             if ![8, 13, 18, 23].contains(&index) {
-                assert!(byte.is_ascii_hexdigit(), "expected hex digit at {index} in {value}");
+                assert!(
+                    byte.is_ascii_hexdigit(),
+                    "expected hex digit at {index} in {value}"
+                );
             }
         }
     }
@@ -372,7 +399,14 @@ fn parse_btrfs_usage(text: &str) -> BtrfsUsage {
 
 /// Value of an `Overall:` section field like `    Device size:  <N>`.
 fn overall_field(text: &str, label: &str) -> Option<u64> {
-    text.lines().find_map(|l| l.trim_start().strip_prefix(label)?.split_whitespace().next()?.parse().ok())
+    text.lines().find_map(|l| {
+        l.trim_start()
+            .strip_prefix(label)?
+            .split_whitespace()
+            .next()?
+            .parse()
+            .ok()
+    })
 }
 
 /// `(used, total)` out of a `"<prefix><profile>: Size:<total>, Used:<used> (<pct>%)"`
@@ -467,7 +501,8 @@ mod btrfs_usage_tests {
     fn a_field_absent_from_the_tool_output_is_none_not_a_computed_substitute() {
         // No `Metadata,` line at all -- must not fall back to guessing it
         // from `Device allocated - Data`, or anything else.
-        let text = "Overall:\n    Device size:            21474836480\n    Device allocated:        6442450944\n\
+        let text =
+            "Overall:\n    Device size:            21474836480\n    Device allocated:        6442450944\n\
                      \n\
                      Data,single: Size:5368709120, Used:3187671040 (59.38%)\n   /dev/sdb1   5368709120\n";
         let usage = parse_btrfs_usage(text);
@@ -508,8 +543,7 @@ mod btrfs_usage_tests {
     const UNMOUNTED_FALLTHROUGH_DF: &str =
         "Filesystem       1B-blocks       Used   Available Use% Mounted on\n\
          /dev/vda4      24546095104 2105409536 22440685568   9% /\n";
-    const GENUINELY_MOUNTED_DF: &str =
-        "Filesystem     1B-blocks     Used  Available Use% Mounted on\n\
+    const GENUINELY_MOUNTED_DF: &str = "Filesystem     1B-blocks     Used  Available Use% Mounted on\n\
          /dev/dm-0      17154703360 6029312 17111711744   1% /mnt/shr_data\n";
 
     #[test]
@@ -525,7 +559,10 @@ mod btrfs_usage_tests {
     fn genuinely_mounted_target_match_returns_its_own_available_bytes() {
         // Array assembled and mounted at the same path -- must still work
         // when the "Mounted on" column genuinely matches what was asked.
-        assert_eq!(parse_df_avail(GENUINELY_MOUNTED_DF, "/mnt/shr_data"), Some(17111711744));
+        assert_eq!(
+            parse_df_avail(GENUINELY_MOUNTED_DF, "/mnt/shr_data"),
+            Some(17111711744)
+        );
     }
 }
 
@@ -541,7 +578,10 @@ mod free_bytes_tests {
     }
     impl CommandRunner for ScriptedDfRunner {
         fn run(&self, _program: &str, _args: &[&str]) -> Result<CommandOutput, ExecError> {
-            Ok(CommandOutput { stdout: self.stdout.to_string(), stderr: String::new() })
+            Ok(CommandOutput {
+                stdout: self.stdout.to_string(),
+                stderr: String::new(),
+            })
         }
         fn is_dry_run(&self) -> bool {
             false
@@ -557,7 +597,10 @@ mod free_bytes_tests {
                      /dev/vda4      24546095104 2105409536 22440685568   9% /\n",
         };
         let result = BtrfsExecutor::new(&runner).free_bytes("/mnt/shr_data").unwrap();
-        assert_eq!(result, None, "must not surface the root disk's free bytes as the group's");
+        assert_eq!(
+            result, None,
+            "must not surface the root disk's free bytes as the group's"
+        );
     }
 
     #[test]
@@ -637,31 +680,58 @@ mod scrub_status_tests {
     fn running_scrub_with_no_errors_yet() {
         let text = "UUID:             abc\nScrub started:    now\nStatus:           running\n\
                      Duration:         0:00:05\nError summary:    no errors found\n";
-        assert_eq!(parse_btrfs_scrub_status(text), BtrfsScrubStatus { running: true, error_count: 0 });
+        assert_eq!(
+            parse_btrfs_scrub_status(text),
+            BtrfsScrubStatus {
+                running: true,
+                error_count: 0
+            }
+        );
     }
 
     #[test]
     fn finished_scrub_sums_every_error_category() {
         let text = "Status:           finished\nError summary:    read=3 csum=2 verify=0\n  \
                      Corrected:      5\n  Uncorrectable:  0\n";
-        assert_eq!(parse_btrfs_scrub_status(text), BtrfsScrubStatus { running: false, error_count: 5 });
+        assert_eq!(
+            parse_btrfs_scrub_status(text),
+            BtrfsScrubStatus {
+                running: false,
+                error_count: 5
+            }
+        );
     }
 
     #[test]
     fn finished_scrub_with_no_errors_reports_zero_not_a_parse_failure() {
         let text = "Status:           finished\nError summary:    no errors found\n";
-        assert_eq!(parse_btrfs_scrub_status(text), BtrfsScrubStatus { running: false, error_count: 0 });
+        assert_eq!(
+            parse_btrfs_scrub_status(text),
+            BtrfsScrubStatus {
+                running: false,
+                error_count: 0
+            }
+        );
     }
 
     #[test]
     fn a_scrub_that_never_ran_reports_not_running_with_no_errors() {
-        assert_eq!(parse_btrfs_scrub_status("no stats available\n"), BtrfsScrubStatus::default());
+        assert_eq!(
+            parse_btrfs_scrub_status("no stats available\n"),
+            BtrfsScrubStatus::default()
+        );
     }
 
     #[test]
     fn aborted_scrub_is_not_running() {
         let text = "Status:           aborted\nError summary:    read=1\n";
-        assert_eq!(parse_btrfs_scrub_status(text), BtrfsScrubStatus { running: false, error_count: 1 });
+        assert_eq!(
+            parse_btrfs_scrub_status(text),
+            BtrfsScrubStatus {
+                running: false,
+                error_count: 1
+            }
+        );
     }
 }
 
@@ -735,8 +805,14 @@ mod recompress_tests {
     }
     impl CommandRunner for SpyRunner {
         fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
-            self.commands.lock().unwrap().push(format!("{program} {}", args.join(" ")));
-            Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+            self.commands
+                .lock()
+                .unwrap()
+                .push(format!("{program} {}", args.join(" ")));
+            Ok(CommandOutput {
+                stdout: String::new(),
+                stderr: String::new(),
+            })
         }
         fn is_dry_run(&self) -> bool {
             false
@@ -746,22 +822,30 @@ mod recompress_tests {
     #[test]
     fn recompress_passes_bare_algorithm_never_the_level() {
         let runner = SpyRunner::default();
-        BtrfsExecutor::new(&runner).recompress("/mnt/shr", "zstd:3").unwrap();
+        BtrfsExecutor::new(&runner)
+            .recompress("/mnt/shr", "zstd:3")
+            .unwrap();
         let commands = runner.commands();
-        assert!(commands.iter().any(|c| c.contains("-czstd") && !c.contains("-czstd:3")));
+        assert!(commands
+            .iter()
+            .any(|c| c.contains("-czstd") && !c.contains("-czstd:3")));
     }
 
     #[test]
     fn recompress_rejects_unknown_compression_before_running_anything() {
         let runner = SpyRunner::default();
-        assert!(BtrfsExecutor::new(&runner).recompress("/mnt/shr", "bogus").is_err());
+        assert!(BtrfsExecutor::new(&runner)
+            .recompress("/mnt/shr", "bogus")
+            .is_err());
         assert!(runner.commands().is_empty());
     }
 
     #[test]
     fn remount_compress_keeps_the_level_in_the_mount_option() {
         let runner = SpyRunner::default();
-        BtrfsExecutor::new(&runner).remount_compress("/mnt/shr", "zstd:3").unwrap();
+        BtrfsExecutor::new(&runner)
+            .remount_compress("/mnt/shr", "zstd:3")
+            .unwrap();
         let commands = runner.commands();
         assert!(commands.iter().any(|c| c.contains("remount,compress=zstd:3")));
     }

@@ -10,7 +10,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use crossterm::event::{self, Event};
-use shr_command::{build_fs_df, build_status, system_disk_aliases, FsDfReport, FsUsageInput, GroupStatus, Health, StatusReport};
+use shr_command::{
+    build_fs_df, build_status, system_disk_aliases, FsDfReport, FsUsageInput, GroupStatus, Health,
+    StatusReport,
+};
 use shr_exec::{BtrfsExecutor, CommandRunner, SystemRunner};
 use shr_inspect::{Inspector, SystemInspector};
 use shr_state::StateStore;
@@ -20,7 +23,9 @@ use shr_state::StateFile;
 
 use crate::app::{ReconcileState, ReconcileStep, ReconcileUiAction, ReplaceAction, ScrubUiAction};
 use crate::scrub::{ScrubController, Step as ScrubCtrlStep};
-use crate::wizard::{AddDiskController, ReplaceDiskController, ReplaceStep, ReplaceWizardState, Step, WizardState};
+use crate::wizard::{
+    AddDiskController, ReplaceDiskController, ReplaceStep, ReplaceWizardState, Step, WizardState,
+};
 use crate::{render, App, RefreshWorker, Snapshot, WizardAction};
 
 /// Same path `shr-cli`'s `Status` handler reads (see
@@ -66,7 +71,10 @@ struct FsUsageCache {
 
 impl FsUsageCache {
     fn new() -> Self {
-        Self { cycle: Cell::new(0), last: RefCell::new(BTreeMap::new()) }
+        Self {
+            cycle: Cell::new(0),
+            last: RefCell::new(BTreeMap::new()),
+        }
     }
 }
 
@@ -81,7 +89,8 @@ pub fn run() -> Result<()> {
     // `FsUsageCache`'s doc comment for why this is the only shape that fits
     // `RefreshWorker::spawn`'s `Fn` + `Send` + `'static` bound.
     let fs_usage_cache = FsUsageCache::new();
-    let mut refresh = RefreshWorker::spawn(move || inspect(&fs_usage_cache).map_err(|error| error.to_string()));
+    let mut refresh =
+        RefreshWorker::spawn(move || inspect(&fs_usage_cache).map_err(|error| error.to_string()));
     refresh.request();
 
     ratatui::run(|terminal| run_loop(terminal, &mut app, &mut refresh))?;
@@ -147,13 +156,19 @@ fn run_loop(
         }
 
         let manual_refresh = app.take_refresh_requested();
-        if (manual_refresh || last_refresh.elapsed() >= REFRESH_INTERVAL) && !refresh.is_in_flight()
-        {
+        if (manual_refresh || last_refresh.elapsed() >= REFRESH_INTERVAL) && !refresh.is_in_flight() {
             refresh.request();
         }
 
         if let Some(action) = app.take_wizard_action() {
-            handle_wizard_action(app, &state_store, &SYSTEM_INSPECTOR, &mut wizard_controller, &mut wizard_execute_rx, action);
+            handle_wizard_action(
+                app,
+                &state_store,
+                &SYSTEM_INSPECTOR,
+                &mut wizard_controller,
+                &mut wizard_execute_rx,
+                action,
+            );
         }
 
         if let Some(rx) = &wizard_execute_rx {
@@ -164,7 +179,13 @@ fn run_loop(
         }
 
         if let Some(action) = app.take_replace_action() {
-            handle_replace_action(app, &state_store, &mut replace_controller, &mut replace_execute_rx, action);
+            handle_replace_action(
+                app,
+                &state_store,
+                &mut replace_controller,
+                &mut replace_execute_rx,
+                action,
+            );
         }
 
         if let Some(rx) = &replace_execute_rx {
@@ -331,8 +352,12 @@ fn handle_replace_action(
             // `app.rs::handle_replace_key` only ever fires `RunPreview`
             // after both are `Some` -- these `let else` returns are
             // defence-in-depth, not the actual gate.
-            let Some(old_id) = view.selected_old.clone() else { return };
-            let Some(new_name) = view.selected_new.clone() else { return };
+            let Some(old_id) = view.selected_old.clone() else {
+                return;
+            };
+            let Some(new_name) = view.selected_new.clone() else {
+                return;
+            };
             let system_disks = system_disk_aliases(&SYSTEM_INSPECTOR).unwrap_or_default();
             let mut controller = ReplaceDiskController::new(
                 &SYSTEM_INSPECTOR,
@@ -466,7 +491,10 @@ fn handle_reconcile_action(
 
     match action {
         ReconcileUiAction::Execute => {
-            app.set_reconcile_state(ReconcileState { step: Some(ReconcileStep::Executing), ..Default::default() });
+            app.set_reconcile_state(ReconcileState {
+                step: Some(ReconcileStep::Executing),
+                ..Default::default()
+            });
 
             let store = state_store.clone();
             let (tx, rx) = std::sync::mpsc::sync_channel(1);
@@ -513,7 +541,10 @@ fn run_reconcile(runner: &dyn CommandRunner, store: Arc<StateStore>) -> Reconcil
         // reconcile because `create` has never been run. Treated as `Done`
         // with an empty `performed` list; the overlay's own "Done" text
         // covers this without inventing a separate step just for it.
-        Ok(None) => ReconcileState { step: Some(ReconcileStep::Done), ..Default::default() },
+        Ok(None) => ReconcileState {
+            step: Some(ReconcileStep::Done),
+            ..Default::default()
+        },
         // Constraint: surface the engine's own error verbatim (`e.to_string()`),
         // never reworded or swallowed -- same rule `wizard.rs`/`ScrubController`
         // already follow for their own `Step::Error` paths.
@@ -532,15 +563,29 @@ fn run_reconcile(runner: &dyn CommandRunner, store: Arc<StateStore>) -> Reconcil
 /// `shr-rs reconcile`'s terminal output recognizes the same lines here.
 fn describe_reconcile_action(action: &ReconcileAction) -> String {
     match action {
-        ReconcileAction::MemberRemoved { group, band_index, md_name, member_path } => format!(
+        ReconcileAction::MemberRemoved {
+            group,
+            band_index,
+            md_name,
+            member_path,
+        } => format!(
             "Group `{group}` band {band_index} ({md_name}): removed the old disk \
              `{member_path}` -- its replacement had finished syncing."
         ),
-        ReconcileAction::ResizeCompleted { group, band_index, md_name } => format!(
+        ReconcileAction::ResizeCompleted {
+            group,
+            band_index,
+            md_name,
+        } => format!(
             "Group `{group}` band {band_index} ({md_name}): finished growing the storage onto \
              the new space -- its RAID rebuild had completed."
         ),
-        ReconcileAction::ScrubSelfHealed { group, band_index, md_name, error_count } => format!(
+        ReconcileAction::ScrubSelfHealed {
+            group,
+            band_index,
+            md_name,
+            error_count,
+        } => format!(
             "Group `{group}` band {band_index} ({md_name}): a scheduled error check had \
              finished on its own; recorded the result ({error_count} error(s))."
         ),
@@ -585,7 +630,9 @@ fn inspect(fs_usage_cache: &FsUsageCache) -> Result<Snapshot> {
     // it fails for some other reason) must not blank the whole status
     // refresh over it -- show why instead of silently having an empty Logs
     // tab that looks the same as "no recent log activity".
-    let logs = SystemInspector.recent_log_lines(200).unwrap_or_else(|e| vec![format!("(log unavailable: {e})")]);
+    let logs = SystemInspector
+        .recent_log_lines(200)
+        .unwrap_or_else(|e| vec![format!("(log unavailable: {e})")]);
     let runner = SystemRunner::new();
     let fs_df = refresh_fs_df(&runner, &report.groups, fs_usage_cache);
     Ok(Snapshot { report, logs, fs_df })
@@ -616,7 +663,10 @@ fn refresh_fs_df(runner: &dyn CommandRunner, groups: &[GroupStatus], cache: &FsU
 /// mirrors exactly.
 fn fs_usage_map(runner: &dyn CommandRunner, groups: &[GroupStatus]) -> BTreeMap<String, FsUsageInput> {
     let btrfs = BtrfsExecutor::new(runner);
-    groups.iter().map(|g| (g.name.clone(), fs_usage_input(&btrfs, &g.mount_point))).collect()
+    groups
+        .iter()
+        .map(|g| (g.name.clone(), fs_usage_input(&btrfs, &g.mount_point)))
+        .collect()
 }
 
 fn fs_usage_input(btrfs: &BtrfsExecutor<'_>, mount_point: &str) -> FsUsageInput {
@@ -827,7 +877,9 @@ mod tests {
         impl CommandRunner for CountingRunner {
             fn run(&self, _program: &str, _args: &[&str]) -> Result<CommandOutput, ExecError> {
                 self.calls.fetch_add(1, Ordering::SeqCst);
-                Err(ExecError::Prerequisite("test double: never actually runs a command".to_string()))
+                Err(ExecError::Prerequisite(
+                    "test double: never actually runs a command".to_string(),
+                ))
             }
 
             fn is_dry_run(&self) -> bool {
@@ -862,7 +914,11 @@ mod tests {
             );
 
             refresh_fs_df(&runner, &groups, &cache); // cycle == FS_USAGE_REFRESH_EVERY_CYCLES: fetch again
-            assert_eq!(runner.calls.load(Ordering::SeqCst), 4, "the Nth cycle must fetch again");
+            assert_eq!(
+                runner.calls.load(Ordering::SeqCst),
+                4,
+                "the Nth cycle must fetch again"
+            );
         }
 
         /// Honesty requirement: a runner that can never succeed (no
@@ -910,7 +966,11 @@ mod tests {
             }
             app.handle_key(key(KeyCode::Enter));
             let action = app.take_wizard_action();
-            assert_eq!(action, Some(WizardAction::Execute), "app.rs's own gate must still fire the action");
+            assert_eq!(
+                action,
+                Some(WizardAction::Execute),
+                "app.rs's own gate must still fire the action"
+            );
 
             let (_dir, store) = unseeded_store();
             let inspector: &'static StaticInspector = Box::leak(Box::new(StaticInspector::default()));
@@ -929,12 +989,21 @@ mod tests {
             let mut wizard_controller = Some(controller);
             let mut wizard_execute_rx = None;
 
-            handle_wizard_action(&mut app, &store, inspector, &mut wizard_controller, &mut wizard_execute_rx, action.unwrap());
-
-            assert!(wizard_controller.is_none(), "Execute must take/consume the controller");
-            let rx = wizard_execute_rx.expect(
-                "A genuinely matching confirmation must be allowed to execute, not silently refused",
+            handle_wizard_action(
+                &mut app,
+                &store,
+                inspector,
+                &mut wizard_controller,
+                &mut wizard_execute_rx,
+                action.unwrap(),
             );
+
+            assert!(
+                wizard_controller.is_none(),
+                "Execute must take/consume the controller"
+            );
+            let rx = wizard_execute_rx
+                .expect("A genuinely matching confirmation must be allowed to execute, not silently refused");
             let final_state = rx
                 .recv_timeout(Duration::from_secs(5))
                 .expect("the background execution thread must run to completion and report back");
@@ -999,7 +1068,14 @@ mod tests {
             let mut wizard_controller = Some(controller);
             let mut wizard_execute_rx = None;
 
-            handle_wizard_action(&mut app, &store, inspector, &mut wizard_controller, &mut wizard_execute_rx, action);
+            handle_wizard_action(
+                &mut app,
+                &store,
+                inspector,
+                &mut wizard_controller,
+                &mut wizard_execute_rx,
+                action,
+            );
 
             assert!(
                 wizard_execute_rx.is_none(),
@@ -1040,15 +1116,17 @@ mod tests {
             let lsblk_json = r#"{"blockdevices":[
                 {"name":"vdb","size":4000000000000,"type":"disk","fstype":"ext4"}
             ]}"#;
-            let inspector = StaticInspector::from_raw(lsblk_json, "", Default::default())
-                .expect("valid lsblk fixture");
+            let inspector =
+                StaticInspector::from_raw(lsblk_json, "", Default::default()).expect("valid lsblk fixture");
             let mut by_id = ByIdIndex::empty();
             by_id.insert("vdb", "ata-USED-DISK");
             Box::leak(Box::new(inspector.with_by_id(by_id)))
         }
 
         fn has_content_blocker(blockers: &[WriteBlocker]) -> bool {
-            blockers.iter().any(|b| matches!(b, WriteBlocker::HasContent { name } if name == "vdb"))
+            blockers
+                .iter()
+                .any(|b| matches!(b, WriteBlocker::HasContent { name } if name == "vdb"))
         }
 
         /// The default posture (`force_content == false`, `open_wizard`'s
@@ -1110,11 +1188,18 @@ mod tests {
                 &mut wizard_execute_rx,
                 first_action,
             );
-            assert_eq!(app.wizard().unwrap().step(), Step::Preflight, "must still be blocked before the override");
+            assert_eq!(
+                app.wizard().unwrap().step(),
+                Step::Preflight,
+                "must still be blocked before the override"
+            );
 
             // The operator's deliberate, non-Enter override keypress.
             app.handle_key(key(KeyCode::Char('o')));
-            assert!(app.wizard().unwrap().force_content, "'o' must set the override flag");
+            assert!(
+                app.wizard().unwrap().force_content,
+                "'o' must set the override flag"
+            );
             let second_action = app
                 .take_wizard_action()
                 .expect("'o' must re-request preflight so the override is actually evaluated");
@@ -1162,7 +1247,11 @@ mod tests {
             }
             app.handle_key(key(KeyCode::Enter));
             let action = app.take_replace_action();
-            assert_eq!(action, Some(ReplaceAction::Execute), "app.rs's own gate must still fire the action");
+            assert_eq!(
+                action,
+                Some(ReplaceAction::Execute),
+                "app.rs's own gate must still fire the action"
+            );
 
             let (_dir, store) = unseeded_store();
             let inspector: &'static StaticInspector = Box::leak(Box::new(StaticInspector::default()));
@@ -1179,12 +1268,20 @@ mod tests {
             let mut replace_controller = Some(controller);
             let mut replace_execute_rx = None;
 
-            handle_replace_action(&mut app, &store, &mut replace_controller, &mut replace_execute_rx, action.unwrap());
-
-            assert!(replace_controller.is_none(), "Execute must take/consume the controller");
-            let rx = replace_execute_rx.expect(
-                "A genuinely matching confirmation must be allowed to execute, not silently refused",
+            handle_replace_action(
+                &mut app,
+                &store,
+                &mut replace_controller,
+                &mut replace_execute_rx,
+                action.unwrap(),
             );
+
+            assert!(
+                replace_controller.is_none(),
+                "Execute must take/consume the controller"
+            );
+            let rx = replace_execute_rx
+                .expect("A genuinely matching confirmation must be allowed to execute, not silently refused");
             let final_state = rx
                 .recv_timeout(Duration::from_secs(5))
                 .expect("the background execution thread must run to completion and report back");
@@ -1230,7 +1327,13 @@ mod tests {
             let mut replace_controller = Some(controller);
             let mut replace_execute_rx = None;
 
-            handle_replace_action(&mut app, &store, &mut replace_controller, &mut replace_execute_rx, action);
+            handle_replace_action(
+                &mut app,
+                &store,
+                &mut replace_controller,
+                &mut replace_execute_rx,
+                action,
+            );
 
             assert!(
                 replace_execute_rx.is_none(),
@@ -1269,7 +1372,11 @@ mod tests {
             }
             app.handle_key(key(KeyCode::Enter));
             let action = app.take_scrub_action();
-            assert_eq!(action, Some(ScrubUiAction::Confirm), "app.rs's own gate must still fire the action");
+            assert_eq!(
+                action,
+                Some(ScrubUiAction::Confirm),
+                "app.rs's own gate must still fire the action"
+            );
 
             let (_dir, store) = unseeded_store();
             let mut controller = ScrubController::new(store.clone(), Some("shr1".to_string()));
@@ -1377,11 +1484,18 @@ mod tests {
             }
 
             fn reshaping() -> Self {
-                Self { sync_action: "reshape".to_string(), ..Self::idle() }
+                Self {
+                    sync_action: "reshape".to_string(),
+                    ..Self::idle()
+                }
             }
 
             fn idle_but_failing_on(program: &'static str, stderr: &str) -> Self {
-                Self { fail_program: Some(program), fail_stderr: stderr.to_string(), ..Self::idle() }
+                Self {
+                    fail_program: Some(program),
+                    fail_stderr: stderr.to_string(),
+                    ..Self::idle()
+                }
             }
 
             fn calls(&self) -> Vec<String> {
@@ -1391,7 +1505,10 @@ mod tests {
 
         impl CommandRunner for ScriptedRunner {
             fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
-                self.recorded.lock().unwrap().push(format!("{program} {}", args.join(" ")));
+                self.recorded
+                    .lock()
+                    .unwrap()
+                    .push(format!("{program} {}", args.join(" ")));
                 if self.fail_program == Some(program) {
                     return Err(ExecError::NonZeroExit {
                         program: program.to_string(),
@@ -1401,9 +1518,15 @@ mod tests {
                     });
                 }
                 if program == "cat" {
-                    return Ok(CommandOutput { stdout: self.sync_action.clone(), stderr: String::new() });
+                    return Ok(CommandOutput {
+                        stdout: self.sync_action.clone(),
+                        stderr: String::new(),
+                    });
                 }
-                Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+                Ok(CommandOutput {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                })
             }
 
             fn is_dry_run(&self) -> bool {
@@ -1472,7 +1595,9 @@ mod tests {
         fn a_finished_reshape_runs_the_real_resize_sequence_in_order_and_persists_the_cleared_flag() {
             let dir = tempfile::tempdir().expect("tempdir");
             let store = Arc::new(StateStore::new(dir.path().join("state.toml")));
-            store.save(&seeded_state_with_resize_pending(true)).expect("seed state.toml");
+            store
+                .save(&seeded_state_with_resize_pending(true))
+                .expect("seed state.toml");
             let runner = ScriptedRunner::idle();
 
             let state = run_reconcile(&runner, store.clone());
@@ -1507,7 +1632,10 @@ mod tests {
 
             // And the clear must be PERSISTED, not just present in the
             // in-memory `ReconcileOutcome` -- reload from disk to prove it.
-            let reloaded = store.load().expect("reload").expect("state.toml must still exist");
+            let reloaded = store
+                .load()
+                .expect("reload")
+                .expect("state.toml must still exist");
             assert!(
                 !reloaded.groups[0].bands[0].resize_pending,
                 "resize_pending must be cleared in the file on disk, not just in memory"
@@ -1518,7 +1646,9 @@ mod tests {
         fn a_still_reshaping_band_is_left_alone_and_reported_as_still_pending() {
             let dir = tempfile::tempdir().expect("tempdir");
             let store = Arc::new(StateStore::new(dir.path().join("state.toml")));
-            store.save(&seeded_state_with_resize_pending(true)).expect("seed state.toml");
+            store
+                .save(&seeded_state_with_resize_pending(true))
+                .expect("seed state.toml");
             let runner = ScriptedRunner::reshaping();
 
             let state = run_reconcile(&runner, store.clone());
@@ -1538,9 +1668,15 @@ mod tests {
             // Must have stopped right after reading `sync_action` --
             // pvresize/lvextend/btrfs must never run while the reshape is
             // still in progress.
-            assert_eq!(runner.calls(), vec!["cat /sys/block/md0/md/sync_action".to_string()]);
+            assert_eq!(
+                runner.calls(),
+                vec!["cat /sys/block/md0/md/sync_action".to_string()]
+            );
 
-            let reloaded = store.load().expect("reload").expect("state.toml must still exist");
+            let reloaded = store
+                .load()
+                .expect("reload")
+                .expect("state.toml must still exist");
             assert!(
                 reloaded.groups[0].bands[0].resize_pending,
                 "nothing changed, so resize_pending must stay exactly as it was"
@@ -1551,7 +1687,9 @@ mod tests {
         fn an_engine_error_surfaces_verbatim_never_swallowed_or_reworded() {
             let dir = tempfile::tempdir().expect("tempdir");
             let store = Arc::new(StateStore::new(dir.path().join("state.toml")));
-            store.save(&seeded_state_with_resize_pending(true)).expect("seed state.toml");
+            store
+                .save(&seeded_state_with_resize_pending(true))
+                .expect("seed state.toml");
             let runner = ScriptedRunner::idle_but_failing_on(
                 "pvresize",
                 "mdadm --detail failed: /dev/md0: No such file or directory",
@@ -1572,11 +1710,17 @@ mod tests {
             // never have run.
             assert_eq!(
                 runner.calls(),
-                vec!["cat /sys/block/md0/md/sync_action".to_string(), "pvresize /dev/md0".to_string()]
+                vec![
+                    "cat /sys/block/md0/md/sync_action".to_string(),
+                    "pvresize /dev/md0".to_string()
+                ]
             );
 
             // A failed call must never persist a half-applied state.
-            let reloaded = store.load().expect("reload").expect("state.toml must still exist");
+            let reloaded = store
+                .load()
+                .expect("reload")
+                .expect("state.toml must still exist");
             assert!(
                 reloaded.groups[0].bands[0].resize_pending,
                 "a failed resize must leave resize_pending untouched, not clear it"
@@ -1601,7 +1745,11 @@ mod tests {
             app.handle_key(key(KeyCode::Char('f')));
             app.handle_key(key(KeyCode::Enter));
             let action = app.take_reconcile_action();
-            assert_eq!(action, Some(ReconcileUiAction::Execute), "app.rs's own gate must still fire the action");
+            assert_eq!(
+                action,
+                Some(ReconcileUiAction::Execute),
+                "app.rs's own gate must still fire the action"
+            );
 
             let (_dir, store) = unseeded_store();
             let mut reconcile_execute_rx = None;
@@ -1613,7 +1761,8 @@ mod tests {
                 ReconcileStep::Executing,
                 "must show Executing immediately, not block the caller"
             );
-            let rx = reconcile_execute_rx.expect("Execute must spawn a background thread and hand back its receiver");
+            let rx = reconcile_execute_rx
+                .expect("Execute must spawn a background thread and hand back its receiver");
             let final_state = rx
                 .recv_timeout(Duration::from_secs(5))
                 .expect("the background thread must run run_reconcile to completion and report back");

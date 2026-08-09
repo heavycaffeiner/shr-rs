@@ -15,12 +15,8 @@ use shr_command::{
 };
 use shr_core::{plan_initial, Disk, PlannerInput, RedundancyMode};
 use shr_exec::{CommandRunner, SystemRunner};
-use shr_inspect::{
-    resolve_disk_ref, DiskRef, Inspector, ResolvedDisk, SystemInspector, WriteBlocker,
-};
-use shr_orchestrate::{
-    CreateRequest, ExpandRequest, OrchestrationEngine, ReconcileAction, ReconcileOutcome,
-};
+use shr_inspect::{resolve_disk_ref, DiskRef, Inspector, ResolvedDisk, SystemInspector, WriteBlocker};
+use shr_orchestrate::{CreateRequest, ExpandRequest, OrchestrationEngine, ReconcileAction, ReconcileOutcome};
 use shr_state::{policy::PolicyStore, ArrayState, NotifyPolicy, StateStore};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -580,7 +576,11 @@ where
 
 fn dispatch(cli: Cli) -> Result<()> {
     match cli.command {
-        Command::Status { detail, watch, interval_secs } => {
+        Command::Status {
+            detail,
+            watch,
+            interval_secs,
+        } => {
             if watch {
                 // No defined JSON streaming contract for a redraw loop
                 // -- reject up front, before any real I/O, rather than
@@ -600,9 +600,7 @@ fn dispatch(cli: Cli) -> Result<()> {
                 // (it's not an error), and `build_status` turns `None` into
                 // an empty `groups` list rather than inventing data or
                 // failing the whole status read.
-                let state = StateStore::new(STATE_PATH)
-                    .load()
-                    .with_context(state_load_ctx)?;
+                let state = StateStore::new(STATE_PATH).load().with_context(state_load_ctx)?;
                 let report = attach_state_path(
                     build_status(&SystemInspector, state.as_ref())
                         .context("inspecting system (needs lsblk / /proc/mdstat / smartctl on Linux)")?,
@@ -631,8 +629,8 @@ fn dispatch(cli: Cli) -> Result<()> {
         }
         Command::Preflight { disks, force_content } => {
             let names = resolve_kernel_names(&disks)?;
-            let report = preflight_create(&SystemInspector, &names, force_content)
-                .context("running safety checks")?;
+            let report =
+                preflight_create(&SystemInspector, &names, force_content).context("running safety checks")?;
             // `--json` is the machine contract Cockpit's group-creation
             // wizard (and any other automated caller) consumes: it must
             // always exit 0 once preflight itself ran successfully, blockers
@@ -785,7 +783,15 @@ fn dispatch(cli: Cli) -> Result<()> {
                 );
             }
         }
-        Command::Expand { disks, name, priority, dry_run, force_content, yes, skip_scrub_check } => {
+        Command::Expand {
+            disks,
+            name,
+            priority,
+            dry_run,
+            force_content,
+            yes,
+            skip_scrub_check,
+        } => {
             let resolved = resolve_real_disks(&disks)?;
             let kernel_names: Vec<String> = resolved.iter().map(|d| d.kernel_name.clone()).collect();
             let preflight = preflight_create(&SystemInspector, &kernel_names, force_content)?;
@@ -812,11 +818,8 @@ fn dispatch(cli: Cli) -> Result<()> {
             // `engine.expand(req)` call below -- which DOES see the real
             // system -- ever runs. See `preview_expand_against`'s doc
             // comment.
-            let (preview_state, commands) = shr_orchestrate::preview_expand_against(
-                state_store.clone(),
-                preview_req,
-                Some(&sys_runner),
-            )?;
+            let (preview_state, commands) =
+                shr_orchestrate::preview_expand_against(state_store.clone(), preview_req, Some(&sys_runner))?;
 
             if dry_run {
                 if cli.json {
@@ -851,7 +854,12 @@ fn dispatch(cli: Cli) -> Result<()> {
                 anyhow!("another shr-rs create/expand/reconcile is already running (lock: {STATE_LOCK_PATH})")
             })?;
 
-            let req = ExpandRequest { name, new_disks: resolved, system_disks, skip_scrub_check };
+            let req = ExpandRequest {
+                name,
+                new_disks: resolved,
+                system_disks,
+                skip_scrub_check,
+            };
             // `expand` can run for hours (a live reshape) and gave a
             // CLI/SSH operator nothing to watch. Streaming (not buffered)
             // for the reason spelled out on the `Create` handler above --
@@ -947,7 +955,10 @@ fn dispatch(cli: Cli) -> Result<()> {
             let engine = production_engine(&sys_runner, state_store).with_progress_sink(&progress);
             match engine.reconcile()? {
                 Some(outcome) if cli.json => {
-                    println!("{}", serde_json::to_string_pretty(&reconcile_report_json(&outcome))?)
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&reconcile_report_json(&outcome))?
+                    )
                 }
                 Some(outcome) => {
                     for update in progress.updates() {
@@ -996,12 +1007,20 @@ fn dispatch(cli: Cli) -> Result<()> {
                     }
                 }
                 None if cli.json => {
-                    println!("{}", serde_json::to_string_pretty(&serde_json::json!({"error": "no active array"}))?)
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({"error": "no active array"}))?
+                    )
                 }
                 None => println!("No storage group found."),
             }
         }
-        Command::Destroy { name, zero_superblocks, dry_run, yes } => {
+        Command::Destroy {
+            name,
+            zero_superblocks,
+            dry_run,
+            yes,
+        } => {
             let state_store = Arc::new(StateStore::new(STATE_PATH));
             let sys_runner = SystemRunner::new();
             // Same reason as `Expand`: the preview replays
@@ -1018,10 +1037,13 @@ fn dispatch(cli: Cli) -> Result<()> {
 
             if dry_run {
                 if cli.json {
-                    println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                        "planned_commands": commands,
-                        "zero_superblocks": zero_superblocks,
-                    }))?);
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "planned_commands": commands,
+                            "zero_superblocks": zero_superblocks,
+                        }))?
+                    );
                 } else {
                     print!("{}", render_planned_commands_text(&commands));
                 }
@@ -1057,7 +1079,10 @@ fn dispatch(cli: Cli) -> Result<()> {
             let engine = production_engine(&sys_runner, state_store).with_confirm_sink(&AlwaysConfirmSink);
             engine.destroy(name.as_deref(), zero_superblocks)?;
             if cli.json {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({"destroyed": confirm_name}))?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({"destroyed": confirm_name}))?
+                );
             } else {
                 println!("group `{confirm_name}` destroyed");
             }
@@ -1088,7 +1113,11 @@ fn dispatch(cli: Cli) -> Result<()> {
                                 g.disks.len(),
                                 g.bands.len(),
                                 g.filesystem.mount_point,
-                                if g.expansion.in_progress { "  [expansion in progress]" } else { "" }
+                                if g.expansion.in_progress {
+                                    "  [expansion in progress]"
+                                } else {
+                                    ""
+                                }
                             );
                         }
                     }
@@ -1096,7 +1125,9 @@ fn dispatch(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Command::Fs { command: FsCmd::Scrub { action } } => {
+        Command::Fs {
+            command: FsCmd::Scrub { action },
+        } => {
             let state_store = Arc::new(StateStore::new(STATE_PATH));
             let sys_runner = SystemRunner::new();
             // Same explicit auto-approve rationale as Create/Expand's engine
@@ -1168,7 +1199,14 @@ fn dispatch(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Command::Fs { command: FsCmd::Recompress { name, compression, yes } } => {
+        Command::Fs {
+            command:
+                FsCmd::Recompress {
+                    name,
+                    compression,
+                    yes,
+                },
+        } => {
             let state_store = Arc::new(StateStore::new(STATE_PATH));
             let sys_runner = SystemRunner::new();
 
@@ -1189,10 +1227,17 @@ fn dispatch(cli: Cli) -> Result<()> {
             // same as every other gate here.
             let loaded = state_store.load().ok().flatten();
             let confirm_name = name.clone().unwrap_or_else(|| {
-                loaded.as_ref().and_then(|s| s.groups.first().map(|g| g.name.clone())).unwrap_or_default()
+                loaded
+                    .as_ref()
+                    .and_then(|s| s.groups.first().map(|g| g.name.clone()))
+                    .unwrap_or_default()
             });
             let mount_point = loaded.as_ref().and_then(|s| match &name {
-                Some(n) => s.groups.iter().find(|g| &g.name == n).map(|g| g.filesystem.mount_point.clone()),
+                Some(n) => s
+                    .groups
+                    .iter()
+                    .find(|g| &g.name == n)
+                    .map(|g| g.filesystem.mount_point.clone()),
                 None => s.groups.first().map(|g| g.filesystem.mount_point.clone()),
             });
             let planned_commands = mount_point
@@ -1237,7 +1282,12 @@ fn dispatch(cli: Cli) -> Result<()> {
                 println!("recompress started at {compression}");
             }
         }
-        Command::Fs { command: FsCmd::Snapshot { action: SnapshotCmd::Create { name, group } } } => {
+        Command::Fs {
+            command:
+                FsCmd::Snapshot {
+                    action: SnapshotCmd::Create { name, group },
+                },
+        } => {
             let state_store = Arc::new(StateStore::new(STATE_PATH));
             let sys_runner = SystemRunner::new();
             // Resolved BEFORE `state_store` is moved into the engine
@@ -1245,7 +1295,8 @@ fn dispatch(cli: Cli) -> Result<()> {
             // group name, so this is the only place left to learn it for
             // the `--json` report (see `resolve_group_name_for_report`).
             let resolved_group = resolve_group_name_for_report(&state_store, group.as_deref());
-            let engine = OrchestrationEngine::new(&sys_runner, state_store).with_confirm_sink(&AlwaysConfirmSink);
+            let engine =
+                OrchestrationEngine::new(&sys_runner, state_store).with_confirm_sink(&AlwaysConfirmSink);
             engine.snapshot_create(group.as_deref(), &name)?;
             if cli.json {
                 println!("{}", snapshot_create_report_json(&resolved_group, &name));
@@ -1254,9 +1305,7 @@ fn dispatch(cli: Cli) -> Result<()> {
             }
         }
         Command::Fs { command: FsCmd::Df } => {
-            let state = StateStore::new(STATE_PATH)
-                .load()
-                .with_context(state_load_ctx)?;
+            let state = StateStore::new(STATE_PATH).load().with_context(state_load_ctx)?;
             let report = build_status(&SystemInspector, state.as_ref())
                 .context("inspecting system (needs lsblk / /proc/mdstat / smartctl on Linux)")?;
             let sys_runner = SystemRunner::new();
@@ -1268,13 +1317,13 @@ fn dispatch(cli: Cli) -> Result<()> {
                 print!("{}", render::render_fs_df(&df));
             }
         }
-        Command::Disk { command: DiskCmd::List } => {
+        Command::Disk {
+            command: DiskCmd::List,
+        } => {
             // Read-only, same fixture `status`/`disk smart` already read --
             // no new inspector logic (its own doc comment on `DiskCmd::
             // List`).
-            let state = StateStore::new(STATE_PATH)
-                .load()
-                .with_context(state_load_ctx)?;
+            let state = StateStore::new(STATE_PATH).load().with_context(state_load_ctx)?;
             let report = build_status(&SystemInspector, state.as_ref())
                 .context("inspecting system (needs lsblk / /proc/mdstat / smartctl on Linux)")?;
             if cli.json {
@@ -1283,10 +1332,10 @@ fn dispatch(cli: Cli) -> Result<()> {
                 print!("{}", render::render_disk_list(&report));
             }
         }
-        Command::Disk { command: DiskCmd::Smart } => {
-            let state = StateStore::new(STATE_PATH)
-                .load()
-                .with_context(state_load_ctx)?;
+        Command::Disk {
+            command: DiskCmd::Smart,
+        } => {
+            let state = StateStore::new(STATE_PATH).load().with_context(state_load_ctx)?;
             let report = build_status(&SystemInspector, state.as_ref())
                 .context("inspecting system (needs lsblk / /proc/mdstat / smartctl on Linux)")?;
             let mut any_warning = false;
@@ -1306,18 +1355,25 @@ fn dispatch(cli: Cli) -> Result<()> {
                         "{}  health={}  temp={}  reallocated-sectors={}  pending-sectors={}",
                         d.name,
                         health(&d.smart.state),
-                        d.smart.temperature_c.map_or_else(|| "unknown".to_string(), |c| format!("{c}C")),
+                        d.smart
+                            .temperature_c
+                            .map_or_else(|| "unknown".to_string(), |c| format!("{c}C")),
                         count(d.smart.reallocated_sectors),
                         count(d.smart.pending_sectors)
                     );
                 }
             }
-            any_warning |= report.disks.iter().any(|d| matches!(d.smart.state, shr_command::SmartState::Warning));
+            any_warning |= report
+                .disks
+                .iter()
+                .any(|d| matches!(d.smart.state, shr_command::SmartState::Warning));
             if any_warning {
                 bail!("one or more disks report a SMART warning");
             }
         }
-        Command::Disk { command: DiskCmd::Replace { old, new, name, yes } } => {
+        Command::Disk {
+            command: DiskCmd::Replace { old, new, name, yes },
+        } => {
             // The gate, simplified: `replace_disk` has no `--dry-run`
             // preview yet (documented Stage C gap -- see the report), so
             // this can't show the exact planned commands the way
@@ -1329,7 +1385,10 @@ fn dispatch(cli: Cli) -> Result<()> {
                 bail!("refusing to replace a disk without --yes: re-run with --yes to confirm");
             }
             let new_resolved = resolve_real_disks(std::slice::from_ref(&new))?;
-            let new_disk = new_resolved.into_iter().next().context("resolving replacement disk")?;
+            let new_disk = new_resolved
+                .into_iter()
+                .next()
+                .context("resolving replacement disk")?;
             let system_disks = system_disk_aliases(&SystemInspector)?;
 
             let state_store = Arc::new(StateStore::new(STATE_PATH));
@@ -1362,10 +1421,16 @@ fn dispatch(cli: Cli) -> Result<()> {
             if cli.json {
                 println!("{}", serde_json::to_string_pretty(&state)?);
             } else {
-                println!("disk `{old}` replaced with `{}` in group `{}`", new_disk.id.as_str(), state.name);
+                println!(
+                    "disk `{old}` replaced with `{}` in group `{}`",
+                    new_disk.id.as_str(),
+                    state.name
+                );
             }
         }
-        Command::Schedule { command: ScheduleCmd::Install } => {
+        Command::Schedule {
+            command: ScheduleCmd::Install,
+        } => {
             let state = StateStore::new(STATE_PATH)
                 .load()
                 .with_context(state_load_ctx)?
@@ -1381,9 +1446,10 @@ fn dispatch(cli: Cli) -> Result<()> {
             // back to a guessed path: a generated unit with the wrong path
             // fails silently at the NEXT scheduled fire, long after this
             // command reported success, which is worse than refusing now.
-            let exe_path = std::env::current_exe()
-                .context("resolving the running shr-rs binary's own path via current_exe() \
-                          to embed in the generated systemd units")?;
+            let exe_path = std::env::current_exe().context(
+                "resolving the running shr-rs binary's own path via current_exe() \
+                          to embed in the generated systemd units",
+            )?;
             let policy = load_policy_file();
             let (installed_timers, pruned, warnings) =
                 install_schedule_units(&unit_dir, &state, &exe_path, &policy, &sys_runner)?;
@@ -1402,10 +1468,13 @@ fn dispatch(cli: Cli) -> Result<()> {
                 );
             }
         }
-        Command::Internal { command: InternalCmd::ReshapeThrottleTick } => {
+        Command::Internal {
+            command: InternalCmd::ReshapeThrottleTick,
+        } => {
             let state_store = Arc::new(StateStore::new(STATE_PATH));
             let sys_runner = SystemRunner::new();
-            let engine = OrchestrationEngine::new(&sys_runner, state_store).with_confirm_sink(&AlwaysConfirmSink);
+            let engine =
+                OrchestrationEngine::new(&sys_runner, state_store).with_confirm_sink(&AlwaysConfirmSink);
             let ticked = engine.tick_active_reshapes()?;
             if cli.json {
                 println!("{}", serde_json::json!({ "bands_ticked": ticked }));
@@ -1413,7 +1482,9 @@ fn dispatch(cli: Cli) -> Result<()> {
                 println!("ticked {ticked} reshaping band(s)");
             }
         }
-        Command::Internal { command: InternalCmd::HealthCheckTick } => {
+        Command::Internal {
+            command: InternalCmd::HealthCheckTick,
+        } => {
             // Production wiring: this is the periodic entrypoint
             // `shr-rs-health-check.timer` (installed by `schedule install`,
             // every 15 minutes) actually invokes.
@@ -1429,7 +1500,9 @@ fn dispatch(cli: Cli) -> Result<()> {
                 println!("health check complete");
             }
         }
-        Command::Internal { command: InternalCmd::SnapshotAutoRun } => {
+        Command::Internal {
+            command: InternalCmd::SnapshotAutoRun,
+        } => {
             // Production wiring: this is the periodic entrypoint
             // `shr-rs-snapshot-auto.timer` (installed by `schedule install`
             // only when `[snapshot].enabled` is `true`) actually invokes.
@@ -1440,7 +1513,10 @@ fn dispatch(cli: Cli) -> Result<()> {
             let policy = load_policy_file();
             if !policy.snapshot.enabled {
                 if cli.json {
-                    println!("{}", serde_json::json!({ "ok": true, "enabled": false, "snapshots": [] }));
+                    println!(
+                        "{}",
+                        serde_json::json!({ "ok": true, "enabled": false, "snapshots": [] })
+                    );
                 } else {
                     println!("snapshot automation is disabled in policy.toml; nothing to do");
                 }
@@ -1448,10 +1524,14 @@ fn dispatch(cli: Cli) -> Result<()> {
             }
             let state_store = Arc::new(StateStore::new(STATE_PATH));
             let sys_runner = SystemRunner::new();
-            let engine = OrchestrationEngine::new(&sys_runner, state_store).with_confirm_sink(&AlwaysConfirmSink);
+            let engine =
+                OrchestrationEngine::new(&sys_runner, state_store).with_confirm_sink(&AlwaysConfirmSink);
             let summary = engine.snapshot_auto_run(policy.snapshot.keep)?;
             if cli.json {
-                println!("{}", serde_json::json!({ "ok": true, "enabled": true, "snapshots": summary }));
+                println!(
+                    "{}",
+                    serde_json::json!({ "ok": true, "enabled": true, "snapshots": summary })
+                );
             } else if summary.is_empty() {
                 println!("no storage group found; nothing to snapshot yet");
             } else {
@@ -1598,7 +1678,9 @@ fn install_schedule_units(
         }
     }
 
-    runner.run("systemctl", &["daemon-reload"]).context("systemctl daemon-reload")?;
+    runner
+        .run("systemctl", &["daemon-reload"])
+        .context("systemctl daemon-reload")?;
     for unit in &units {
         if unit.extension().and_then(|e| e.to_str()) != Some("timer") {
             continue;
@@ -1608,8 +1690,10 @@ fn install_schedule_units(
             .run("systemctl", &["enable", "--now", unit_name])
             .with_context(|| format!("systemctl enable --now {unit_name}"))?;
     }
-    let installed_timers =
-        units.iter().filter(|u| u.extension().and_then(|e| e.to_str()) == Some("timer")).count();
+    let installed_timers = units
+        .iter()
+        .filter(|u| u.extension().and_then(|e| e.to_str()) == Some("timer"))
+        .count();
     Ok((installed_timers, pruned, warnings))
 }
 
@@ -1620,15 +1704,29 @@ fn install_schedule_units(
 /// the real-guest repro showed, omitting it while quietly acting anyway).
 fn describe_reconcile_action(action: &ReconcileAction) -> String {
     match action {
-        ReconcileAction::MemberRemoved { group, band_index, md_name, member_path } => format!(
+        ReconcileAction::MemberRemoved {
+            group,
+            band_index,
+            md_name,
+            member_path,
+        } => format!(
             "Group `{group}` band {band_index} ({md_name}): removed the old disk \
              `{member_path}` -- its replacement had finished syncing."
         ),
-        ReconcileAction::ResizeCompleted { group, band_index, md_name } => format!(
+        ReconcileAction::ResizeCompleted {
+            group,
+            band_index,
+            md_name,
+        } => format!(
             "Group `{group}` band {band_index} ({md_name}): finished growing the storage onto \
              the new space -- its RAID rebuild had completed."
         ),
-        ReconcileAction::ScrubSelfHealed { group, band_index, md_name, error_count } => format!(
+        ReconcileAction::ScrubSelfHealed {
+            group,
+            band_index,
+            md_name,
+            error_count,
+        } => format!(
             "Group `{group}` band {band_index} ({md_name}): a scheduled error check had \
              finished on its own; recorded the result ({error_count} error(s))."
         ),
@@ -1647,20 +1745,34 @@ fn reconcile_report_json(outcome: &ReconcileOutcome) -> serde_json::Value {
         .performed
         .iter()
         .map(|action| match action {
-            ReconcileAction::MemberRemoved { group, band_index, md_name, member_path } => serde_json::json!({
+            ReconcileAction::MemberRemoved {
+                group,
+                band_index,
+                md_name,
+                member_path,
+            } => serde_json::json!({
                 "kind": "member_removed",
                 "group": group,
                 "band_index": band_index,
                 "md_name": md_name,
                 "member_path": member_path,
             }),
-            ReconcileAction::ResizeCompleted { group, band_index, md_name } => serde_json::json!({
+            ReconcileAction::ResizeCompleted {
+                group,
+                band_index,
+                md_name,
+            } => serde_json::json!({
                 "kind": "resize_completed",
                 "group": group,
                 "band_index": band_index,
                 "md_name": md_name,
             }),
-            ReconcileAction::ScrubSelfHealed { group, band_index, md_name, error_count } => serde_json::json!({
+            ReconcileAction::ScrubSelfHealed {
+                group,
+                band_index,
+                md_name,
+                error_count,
+            } => serde_json::json!({
                 "kind": "scrub_self_healed",
                 "group": group,
                 "band_index": band_index,
@@ -1823,13 +1935,13 @@ fn fs_usage_map(
     groups: &[shr_command::GroupStatus],
 ) -> BTreeMap<String, shr_command::FsUsageInput> {
     let btrfs = shr_exec::BtrfsExecutor::new(runner);
-    groups.iter().map(|g| (g.name.clone(), fs_usage_input(&btrfs, &g.mount_point))).collect()
+    groups
+        .iter()
+        .map(|g| (g.name.clone(), fs_usage_input(&btrfs, &g.mount_point)))
+        .collect()
 }
 
-fn fs_usage_input(
-    btrfs: &shr_exec::BtrfsExecutor<'_>,
-    mount_point: &str,
-) -> shr_command::FsUsageInput {
+fn fs_usage_input(btrfs: &shr_exec::BtrfsExecutor<'_>, mount_point: &str) -> shr_command::FsUsageInput {
     let usage = btrfs.usage(mount_point).unwrap_or_default();
     shr_command::FsUsageInput {
         data_used_bytes: usage.data_used_bytes,
@@ -1848,7 +1960,10 @@ fn fs_usage_input(
 /// (a blank/truncated frame) rather than producing a zero-height one
 /// `render_status_watch_frame` was never asked to handle.
 fn watch_frame_meta_from(cols: u16, rows: u16) -> render::WatchFrameMeta {
-    render::WatchFrameMeta { width: cols as usize, max_height: rows.saturating_sub(1).max(1) as usize }
+    render::WatchFrameMeta {
+        width: cols as usize,
+        max_height: rows.saturating_sub(1).max(1) as usize,
+    }
 }
 
 /// `status --watch`'s redraw loop. `render_status_watch_frame` (the pure
@@ -1896,15 +2011,16 @@ fn run_status_watch(interval: Duration) -> Result<()> {
     let meta = watch_frame_meta_from(cols, rows);
     let mut first_frame = true;
     loop {
-        let state = StateStore::new(STATE_PATH)
-            .load()
-            .with_context(state_load_ctx)?;
+        let state = StateStore::new(STATE_PATH).load().with_context(state_load_ctx)?;
         let report = build_status(&SystemInspector, state.as_ref())
             .context("inspecting system (needs lsblk / /proc/mdstat / smartctl on Linux)")?;
         let frame = render::render_status_watch_frame(&report, &meta);
         if !first_frame {
-            crossterm::execute!(std::io::stdout(), crossterm::cursor::MoveUp(meta.max_height as u16))
-                .context("moving the cursor for status --watch's redraw")?;
+            crossterm::execute!(
+                std::io::stdout(),
+                crossterm::cursor::MoveUp(meta.max_height as u16)
+            )
+            .context("moving the cursor for status --watch's redraw")?;
         }
         first_frame = false;
         println!("{frame}");
@@ -1950,7 +2066,9 @@ fn require_typed_confirmation(
     std::io::stdout().flush().ok();
 
     let mut typed_line = String::new();
-    input.read_line(&mut typed_line).context("reading confirmation from stdin")?;
+    input
+        .read_line(&mut typed_line)
+        .context("reading confirmation from stdin")?;
     let typed = typed_line.trim_end_matches(['\n', '\r']);
 
     if typed != expected_name {
@@ -1962,11 +2080,7 @@ fn require_typed_confirmation(
 fn render_preflight(r: &shr_inspect::WritePreflight) -> String {
     use std::fmt::Write as _;
     let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "SHR-RS preflight: {}",
-        if r.ok { "OK" } else { "BLOCKED" }
-    );
+    let _ = writeln!(out, "SHR-RS preflight: {}", if r.ok { "OK" } else { "BLOCKED" });
     for t in &r.targets {
         let id = t.id.as_deref().unwrap_or("(no stable id)");
         let _ = writeln!(
@@ -1989,12 +2103,14 @@ fn render_preflight(r: &shr_inspect::WritePreflight) -> String {
     // callers rendering the same string. shr-inspect no longer names any
     // frontend's control, so the CLI -- the one frontend where this flag
     // actually applies -- states it here instead.
-    if r
-        .blockers
+    if r.blockers
         .iter()
         .any(|b| matches!(b, shr_inspect::WriteBlocker::HasContent { .. }))
     {
-        let _ = writeln!(out, "  (pass --force-content to reuse a disk with existing content anyway)");
+        let _ = writeln!(
+            out,
+            "  (pass --force-content to reuse a disk with existing content anyway)"
+        );
     }
     out
 }
@@ -2062,9 +2178,7 @@ fn resolve_disks(sizes: &[String], disks: &[String]) -> Result<Vec<Disk>> {
     } else if !disks.is_empty() {
         let inspector = SystemInspector;
         let lsblk = inspector.block_devices().context("running lsblk")?;
-        let by_id = inspector
-            .by_id_index()
-            .context("scanning /dev/disk/by-id")?;
+        let by_id = inspector.by_id_index().context("scanning /dev/disk/by-id")?;
         let mut resolved = Vec::new();
         for raw in disks {
             let r = DiskRef::parse(raw);
@@ -2198,13 +2312,18 @@ mod tests {
             "engine.destroy(",
         ];
         let src = include_str!("lib.rs");
-        let dispatch = src.split("mod tests").next().expect("source before the test module");
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
 
         let mut checked = 0;
         for chunk in dispatch.split("let engine = ").skip(1) {
             // A chunk spans one engine binding up to just before the next,
             // so a writer call always lands in its own binding's chunk.
-            let Some(writer) = WRITERS.iter().find(|w| chunk.contains(**w)) else { continue };
+            let Some(writer) = WRITERS.iter().find(|w| chunk.contains(**w)) else {
+                continue;
+            };
             assert!(
                 chunk.starts_with("production_engine("),
                 "a handler calling `{writer}` builds its engine inline instead of via production_engine(), \
@@ -2212,7 +2331,11 @@ mod tests {
             );
             checked += 1;
         }
-        assert_eq!(checked, WRITERS.len(), "every config-writing engine method should be dispatched exactly once");
+        assert_eq!(
+            checked,
+            WRITERS.len(),
+            "every config-writing engine method should be dispatched exactly once"
+        );
     }
 
     #[test]
@@ -2239,11 +2362,17 @@ mod tests {
         const STREAMING: [&str; 2] = ["engine.create(", "engine.expand("];
         const BUFFERED_OK: [&str; 2] = ["engine.reconcile(", "engine.replace_disk("];
         let src = include_str!("lib.rs");
-        let dispatch = src.split("mod tests").next().expect("source before the test module");
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
 
         let mut checked = 0;
         for chunk in dispatch.split("let engine = ").skip(1) {
-            let call = STREAMING.iter().chain(BUFFERED_OK.iter()).find(|w| chunk.contains(**w));
+            let call = STREAMING
+                .iter()
+                .chain(BUFFERED_OK.iter())
+                .find(|w| chunk.contains(**w));
             let Some(call) = call else { continue };
             assert!(
                 chunk.contains(".with_progress_sink(&progress)"),
@@ -2258,7 +2387,9 @@ mod tests {
         // sink type there would be checking the wrong handler. Locate each
         // call directly and read backwards to its nearest preceding binding.
         for call in STREAMING {
-            let at = dispatch.find(call).unwrap_or_else(|| panic!("{call} not found in dispatch"));
+            let at = dispatch
+                .find(call)
+                .unwrap_or_else(|| panic!("{call} not found in dispatch"));
             let (before, _) = dispatch.split_at(at);
             let bind = before
                 .rfind("let progress = ")
@@ -2291,22 +2422,22 @@ mod tests {
         // BEFORE `engine.recompress(` -- gating after the fact would let a
         // rejected/mismatched confirmation not actually stop anything.
         let src = include_str!("lib.rs");
-        let dispatch = src.split("mod tests").next().expect("source before the test module");
-        let handler_start = dispatch
-            .find("Command::Fs { command: FsCmd::Recompress")
-            .expect("FsCmd::Recompress handler arm not found");
-        let handler_end = dispatch[handler_start..]
-            .find("\n        Command::")
-            .map(|offset| handler_start + offset)
-            .unwrap_or(dispatch.len());
-        let handler = &dispatch[handler_start..handler_end];
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
+        // Hand-rolled slicing here originally, predating `find_handler`;
+        // switched over when adopting rustfmt broke the literal marker (the
+        // arm's pattern is several lines now). See `squeeze`.
+        let handler = find_handler(dispatch, "Command::Fs { command: FsCmd::Recompress");
 
-        let confirm_pos = handler.find("require_typed_confirmation(").expect(
+        let confirm_pos = handler.position("require_typed_confirmation(").expect(
             "FsCmd::Recompress's handler must call require_typed_confirmation, same as \
              create/expand/disk replace/destroy",
         );
-        let engine_call_pos =
-            handler.find("engine.recompress(").expect("engine.recompress( call not found in the handler");
+        let engine_call_pos = handler
+            .position("engine.recompress(")
+            .expect("engine.recompress( call not found in the handler");
         assert!(
             confirm_pos < engine_call_pos,
             "require_typed_confirmation must run BEFORE engine.recompress(), or a rejected/\
@@ -2334,11 +2465,19 @@ mod tests {
         // Daemon variant's actual doc comment.
         let src = include_str!("lib.rs").replace("\r\n", "\n");
         let marker = "\n    Daemon {\n";
-        let variant_pos = src.find(marker).expect("Daemon variant not found in the Command enum");
+        let variant_pos = src
+            .find(marker)
+            .expect("Daemon variant not found in the Command enum");
         let before = &src[..variant_pos];
-        let doc_lines: Vec<&str> =
-            before.lines().rev().take_while(|l| l.trim_start().starts_with("///")).collect();
-        assert!(!doc_lines.is_empty(), "Daemon variant has no doc comment directly above it");
+        let doc_lines: Vec<&str> = before
+            .lines()
+            .rev()
+            .take_while(|l| l.trim_start().starts_with("///"))
+            .collect();
+        assert!(
+            !doc_lines.is_empty(),
+            "Daemon variant has no doc comment directly above it"
+        );
         // Strip the leading `///` and joined with a space, not "\n": doc
         // comments wrap prose across lines, so a phrase like "not a
         // monitoring daemon" can legitimately straddle a line break and
@@ -2370,27 +2509,24 @@ mod tests {
         // printed at runtime (`println!` at the top of the `Daemon` arm) --
         // the two are independent strings and either could regress alone.
         let src = include_str!("lib.rs");
-        let dispatch = src.split("mod tests").next().expect("source before the test module");
-        let handler_start =
-            dispatch.find("Command::Daemon { state_path }").expect("Daemon handler arm not found");
-        let handler_end = dispatch[handler_start..]
-            .find("\n        Command::")
-            .map(|offset| handler_start + offset)
-            .unwrap_or(dispatch.len());
-        let handler = &dispatch[handler_start..handler_end];
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
+        let handler = find_handler(dispatch, "Command::Daemon { state_path }");
 
         assert!(
-            handler.to_lowercase().contains("not a monitoring daemon"),
+            handler.contains_ignoring_case("not a monitoring daemon"),
             "the startup banner must say plainly this is not a monitoring daemon. Handler:\n{handler}"
         );
         assert!(
-            handler.contains("schedule install"),
+            handler.contains_ignoring_case("schedule install"),
             "the startup banner must name `shr-rs schedule install` as what actually performs \
              periodic background work; otherwise an operator watching this loop has no path to \
              the real mechanism. Handler:\n{handler}"
         );
         assert!(
-            !handler.contains("Starting shr-rs daemon (monitoring"),
+            !handler.contains_ignoring_case("Starting shr-rs daemon (monitoring"),
             "the old misleading banner text must be gone, not merely joined by a new one. Handler:\n{handler}"
         );
     }
@@ -2478,7 +2614,10 @@ mod tests {
         let store = StateStore::new(dir.path().join("state.toml"));
         // No state.toml written at all -- an explicit name must still win,
         // never touching the (nonexistent) file.
-        assert_eq!(resolve_group_name_for_report(&store, Some("explicit")), "explicit");
+        assert_eq!(
+            resolve_group_name_for_report(&store, Some("explicit")),
+            "explicit"
+        );
     }
 
     #[test]
@@ -2502,22 +2641,158 @@ mod tests {
     /// `recompress_handler_is_gated_by_require_typed_confirmation_before_
     /// the_real_engine_call`/WRITERS/STREAMING tests above already use, so
     /// this doesn't invent a second convention.
-    fn find_handler<'a>(dispatch: &'a str, start_marker: &str) -> &'a str {
-        let start = dispatch.find(start_marker).unwrap_or_else(|| panic!("{start_marker} not found in dispatch"));
-        // CRLF-tolerant: this source file's line endings depend on how it
-        // was last saved (this Windows host has seen both LF and CRLF
-        // checkouts of the same file during the development, e.g. via
-        // concurrent edits from another process). Try both boundary forms
-        // and take whichever actually matches, so this helper doesn't
-        // silently fall back to "rest of the file" (past the intended
-        // single handler) just because of a line-ending mismatch.
-        let end = ["\r\n        Command::", "\n        Command::"]
-            .iter()
-            .filter_map(|needle| dispatch[start..].find(needle))
-            .min()
+    fn find_handler(dispatch: &str, start_marker: &str) -> Handler {
+        let squeezed = squeeze(dispatch);
+        let marker = squeeze(start_marker);
+        let start = squeezed
+            .find(&marker)
+            .unwrap_or_else(|| panic!("{start_marker} not found in dispatch"));
+        let end = squeezed[start..]
+            .find("}Command::")
             .map(|offset| start + offset)
-            .unwrap_or(dispatch.len());
-        &dispatch[start..end]
+            .unwrap_or(squeezed.len());
+        Handler(squeezed[start..end].to_string())
+    }
+
+    /// Reduce a source fragment to a form that survives being re-wrapped:
+    /// every whitespace character removed, and the trailing comma rustfmt
+    /// adds before a closing delimiter when it explodes an argument list
+    /// dropped.
+    ///
+    /// Adopting rustfmt broke all five source-scanning tests at once, and
+    /// none of them because the code they check had changed. `Command::Fs {
+    /// command: FsCmd::Scrub { action } }` became four lines, and
+    /// `f(&a, &b)` became `f(\n    &a,\n    &b,\n)`, so every literal marker
+    /// and every asserted call stopped matching. Re-pinning them to whatever
+    /// the formatter produced today would just re-arm the same trap for the
+    /// next reformat.
+    ///
+    /// Squeezing both sides is what makes these assertions about the CODE
+    /// rather than about its layout. It does also collapse spaces inside
+    /// string literals, which is harmless here: the needle is squeezed the
+    /// same way, so `println!("scrub started")` still matches itself and
+    /// nothing else in this file squeezes to the same text.
+    fn squeeze(source: &str) -> String {
+        source
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>()
+            .replace(",)", ")")
+            .replace(",]", "]")
+            .replace(",}", "}")
+    }
+
+    /// One handler arm's source, already squeezed.
+    ///
+    /// The squeezing lives behind `contains`/`arm` rather than at each call
+    /// site so the assertions can go on reading as ordinary source text
+    /// (`handler.contains("if cli.json")`) instead of every one of them
+    /// having to remember to normalize its own needle -- a rule that would
+    /// be silently wrong, not loudly wrong, the one time somebody forgot.
+    struct Handler(String);
+
+    /// So a failing assertion can still print the arm it was looking at.
+    /// Squeezed text is unpleasant to read, but it is what was actually
+    /// searched, and a message showing the pretty original would send the
+    /// reader hunting for a mismatch that is not there.
+    impl std::fmt::Display for Handler {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(&self.0)
+        }
+    }
+
+    impl Handler {
+        fn contains(&self, needle: &str) -> bool {
+            self.0.contains(&squeeze(needle))
+        }
+
+        /// For prose rather than code: the daemon banner is a sentence whose
+        /// capitalisation ("NOT a monitoring daemon") is a deliberate part of
+        /// the wording and could reasonably be re-cased without weakening
+        /// what the test is checking.
+        fn contains_ignoring_case(&self, needle: &str) -> bool {
+            self.0.to_lowercase().contains(&squeeze(&needle.to_lowercase()))
+        }
+
+        /// Where `needle` sits within this handler, for the assertions that
+        /// are about ORDER rather than presence (a gate that runs after the
+        /// thing it gates is not a gate).
+        fn position(&self, needle: &str) -> Option<usize> {
+            self.0.find(&squeeze(needle))
+        }
+
+        /// The stretch of this handler starting at `from` and ending just
+        /// before `until` (or at the end of the handler when `until` is
+        /// absent or never appears) -- for arms that hold a nested `match`,
+        /// where "somewhere in this handler" is too weak an assertion.
+        fn arm(&self, from: &str, until: Option<&str>) -> Handler {
+            let start = self
+                .0
+                .find(&squeeze(from))
+                .unwrap_or_else(|| panic!("{from} not found in this handler"));
+            let end = until
+                .and_then(|u| self.0[start..].find(&squeeze(u)))
+                .map(|offset| start + offset)
+                .unwrap_or(self.0.len());
+            Handler(self.0[start..end].to_string())
+        }
+    }
+
+    /// The source-scanning tests are only as good as this helper. If
+    /// `find_handler` ever failed to find its arm's END, every one of them
+    /// would keep passing while actually asserting against the rest of the
+    /// file -- "the JSON branch exists SOMEWHERE below here", which is
+    /// exactly the "adjacent, not the same" trap they were written to avoid.
+    /// So the helper is tested against a fixture whose arms are known.
+    #[test]
+    fn find_handler_stops_at_the_next_arm_and_ignores_how_the_source_is_wrapped() {
+        let dispatch = "
+        Command::First { a } => {
+            first_only();
+        }
+        Command::Second {
+            command: Second::Deep,
+        } => {
+            second_only(
+                &one,
+                &two,
+            );
+        }
+        Command::Third => {}
+        ";
+
+        let first = find_handler(dispatch, "Command::First { a }");
+        assert!(first.contains("first_only()"));
+        assert!(
+            !first.contains("second_only"),
+            "the arm must stop at the next Command::"
+        );
+
+        // The marker spans four lines in the source and one in the test, and
+        // the asserted call was exploded across four lines by the formatter.
+        // Both still match: that is the whole point of squeezing.
+        let second = find_handler(dispatch, "Command::Second { command: Second::Deep }");
+        assert!(second.contains("second_only(&one, &two)"));
+        assert!(!second.contains("first_only"));
+
+        // `arm` carves within a handler, and `None` means "to the end of it"
+        // -- never past it.
+        assert!(second.arm("second_only", None).contains("&two"));
+        assert!(!second.arm("second_only", None).contains("Third"));
+    }
+
+    #[test]
+    fn squeeze_drops_layout_without_merging_distinct_code() {
+        assert_eq!(squeeze("f(\n    &a,\n    &b,\n)"), squeeze("f(&a, &b)"));
+        assert_eq!(
+            squeeze("Command::Fs {\n  command: X,\n}"),
+            squeeze("Command::Fs { command: X }")
+        );
+        assert_ne!(squeeze("f(&a)"), squeeze("f(&b)"));
+        assert_ne!(
+            squeeze("println!(\"scrub started\")"),
+            squeeze("println!(\"scrub cancelled\")")
+        );
     }
 
     #[test]
@@ -2530,38 +2805,53 @@ mod tests {
         // project's ledger warns about would be a test that only checked
         // one of these two facts.
         let src = include_str!("lib.rs");
-        let dispatch = src.split("mod tests").next().expect("source before the test module");
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
         let block = find_handler(dispatch, "Command::Fs { command: FsCmd::Scrub { action } }");
 
-        let start_pos = block.find("ScrubCmd::Start { name } =>").expect("ScrubCmd::Start arm not found");
-        let start_end = block[start_pos..]
-            .find("ScrubCmd::Status")
-            .map(|o| start_pos + o)
-            .unwrap_or(block.len());
-        let start_arm = &block[start_pos..start_end];
-        assert!(start_arm.contains("if cli.json"), "ScrubCmd::Start never branches on cli.json");
+        let start_arm = block.arm("ScrubCmd::Start { name } =>", Some("ScrubCmd::Status"));
+        assert!(
+            start_arm.contains("if cli.json"),
+            "ScrubCmd::Start never branches on cli.json"
+        );
         assert!(
             start_arm.contains("scrub_action_report_json(&group, \"started\")"),
             "ScrubCmd::Start doesn't emit the JSON report"
         );
-        assert!(start_arm.contains("println!(\"scrub started\")"), "ScrubCmd::Start dropped its human text");
+        assert!(
+            start_arm.contains("println!(\"scrub started\")"),
+            "ScrubCmd::Start dropped its human text"
+        );
 
-        let cancel_pos = block.find("ScrubCmd::Cancel { name } =>").expect("ScrubCmd::Cancel arm not found");
-        let cancel_arm = &block[cancel_pos..];
-        assert!(cancel_arm.contains("if cli.json"), "ScrubCmd::Cancel never branches on cli.json");
+        let cancel_arm = block.arm("ScrubCmd::Cancel { name } =>", None);
+        assert!(
+            cancel_arm.contains("if cli.json"),
+            "ScrubCmd::Cancel never branches on cli.json"
+        );
         assert!(
             cancel_arm.contains("scrub_action_report_json(&group, \"cancelled\")"),
             "ScrubCmd::Cancel doesn't emit the JSON report"
         );
-        assert!(cancel_arm.contains("println!(\"scrub cancelled\")"), "ScrubCmd::Cancel dropped its human text");
+        assert!(
+            cancel_arm.contains("println!(\"scrub cancelled\")"),
+            "ScrubCmd::Cancel dropped its human text"
+        );
     }
 
     #[test]
     fn recompress_handler_branches_on_cli_json_without_losing_its_human_text() {
         let src = include_str!("lib.rs");
-        let dispatch = src.split("mod tests").next().expect("source before the test module");
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
         let handler = find_handler(dispatch, "Command::Fs { command: FsCmd::Recompress");
-        assert!(handler.contains("if cli.json"), "FsCmd::Recompress never branches on cli.json");
+        assert!(
+            handler.contains("if cli.json"),
+            "FsCmd::Recompress never branches on cli.json"
+        );
         assert!(
             handler.contains("recompress_report_json(&confirm_name, &compression)"),
             "FsCmd::Recompress doesn't emit the JSON report"
@@ -2575,9 +2865,15 @@ mod tests {
     #[test]
     fn snapshot_create_handler_branches_on_cli_json_without_losing_its_human_text() {
         let src = include_str!("lib.rs");
-        let dispatch = src.split("mod tests").next().expect("source before the test module");
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
         let handler = find_handler(dispatch, "Command::Fs { command: FsCmd::Snapshot");
-        assert!(handler.contains("if cli.json"), "SnapshotCmd::Create never branches on cli.json");
+        assert!(
+            handler.contains("if cli.json"),
+            "SnapshotCmd::Create never branches on cli.json"
+        );
         assert!(
             handler.contains("snapshot_create_report_json(&resolved_group, &name)"),
             "SnapshotCmd::Create doesn't emit the JSON report"
@@ -2591,9 +2887,15 @@ mod tests {
     #[test]
     fn schedule_install_handler_branches_on_cli_json_without_losing_its_human_text() {
         let src = include_str!("lib.rs");
-        let dispatch = src.split("mod tests").next().expect("source before the test module");
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
         let handler = find_handler(dispatch, "Command::Schedule { command: ScheduleCmd::Install }");
-        assert!(handler.contains("if cli.json"), "ScheduleCmd::Install never branches on cli.json");
+        assert!(
+            handler.contains("if cli.json"),
+            "ScheduleCmd::Install never branches on cli.json"
+        );
         assert!(
             handler.contains("schedule_install_report_json(installed_timers, pruned)"),
             "ScheduleCmd::Install doesn't emit the JSON report"
@@ -2647,7 +2949,10 @@ mod tests {
             Self::default()
         }
         fn failing(trigger: &str) -> Self {
-            Self { recorded: std::sync::Mutex::new(Vec::new()), fail_trigger: Some(trigger.to_string()) }
+            Self {
+                recorded: std::sync::Mutex::new(Vec::new()),
+                fail_trigger: Some(trigger.to_string()),
+            }
         }
         fn recorded(&self) -> Vec<String> {
             self.recorded.lock().unwrap().clone()
@@ -2655,7 +2960,11 @@ mod tests {
     }
 
     impl CommandRunner for ScheduleInstallTestRunner {
-        fn run(&self, program: &str, args: &[&str]) -> std::result::Result<shr_exec::CommandOutput, shr_exec::ExecError> {
+        fn run(
+            &self,
+            program: &str,
+            args: &[&str],
+        ) -> std::result::Result<shr_exec::CommandOutput, shr_exec::ExecError> {
             let cmd = format!("{program} {}", args.join(" "));
             self.recorded.lock().unwrap().push(cmd.clone());
             if self.fail_trigger.as_deref().is_some_and(|t| cmd.contains(t)) {
@@ -2666,7 +2975,10 @@ mod tests {
                     stderr: "Unit file has no installation config".to_string(),
                 });
             }
-            Ok(shr_exec::CommandOutput { stdout: String::new(), stderr: String::new() })
+            Ok(shr_exec::CommandOutput {
+                stdout: String::new(),
+                stderr: String::new(),
+            })
         }
         fn is_dry_run(&self) -> bool {
             false
@@ -2738,7 +3050,9 @@ mod tests {
         // strictly worse than the older `?`-propagate, because nothing
         // would tell the operator a stale unit's disable ever failed.
         assert!(
-            warnings.iter().any(|w| w.contains("shr-rs-scrub-gone.timer") && w.contains("disable")),
+            warnings
+                .iter()
+                .any(|w| w.contains("shr-rs-scrub-gone.timer") && w.contains("disable")),
             "a failed disable must be reported by name: {warnings:?}"
         );
 
@@ -2746,28 +3060,41 @@ mod tests {
         // shr1's own unit pair got written and its timer `enable --now`d,
         // and daemon-reload ran.
         let (shr1_service, shr1_timer) = shr_state::conf::scrub_unit_paths(&unit_dir, "shr1");
-        assert!(shr1_service.exists() && shr1_timer.exists(), "this run's own unit must still be written");
+        assert!(
+            shr1_service.exists() && shr1_timer.exists(),
+            "this run's own unit must still be written"
+        );
         // 3 timers every run always installs regardless of group count:
         // shr1's own scrub timer, plus the two global ones (throttle-tick,
         // health-check).
-        assert_eq!(installed, 3, "this run's timers must all still be counted as installed");
+        assert_eq!(
+            installed, 3,
+            "this run's timers must all still be counted as installed"
+        );
 
         let cmds = runner.recorded();
         assert!(
-            cmds.iter().any(|c| c == "systemctl disable --now shr-rs-scrub-gone.timer"),
+            cmds.iter()
+                .any(|c| c == "systemctl disable --now shr-rs-scrub-gone.timer"),
             "the failing disable must actually have been attempted: {cmds:?}"
         );
-        assert!(cmds.iter().any(|c| c == "systemctl daemon-reload"), "daemon-reload must still run: {cmds:?}");
         assert!(
-            cmds.iter().any(|c| c == "systemctl enable --now shr-rs-scrub-shr1.timer"),
+            cmds.iter().any(|c| c == "systemctl daemon-reload"),
+            "daemon-reload must still run: {cmds:?}"
+        );
+        assert!(
+            cmds.iter()
+                .any(|c| c == "systemctl enable --now shr-rs-scrub-shr1.timer"),
             "this run's own scrub timer must still be enabled: {cmds:?}"
         );
         assert!(
-            cmds.iter().any(|c| c == "systemctl enable --now shr-rs-throttle-tick.timer"),
+            cmds.iter()
+                .any(|c| c == "systemctl enable --now shr-rs-throttle-tick.timer"),
             "the throttle-tick timer must still be enabled: {cmds:?}"
         );
         assert!(
-            cmds.iter().any(|c| c == "systemctl enable --now shr-rs-health-check.timer"),
+            cmds.iter()
+                .any(|c| c == "systemctl enable --now shr-rs-health-check.timer"),
             "the health-check timer must still be enabled: {cmds:?}"
         );
     }
@@ -2792,15 +3119,22 @@ mod tests {
         let (installed, pruned, warnings) =
             install_schedule_units(&unit_dir, &current_state, &exe_path, &policy, &runner).unwrap();
 
-        assert!(!orphan_service.exists() && !orphan_timer.exists(), "orphan must be pruned");
+        assert!(
+            !orphan_service.exists() && !orphan_timer.exists(),
+            "orphan must be pruned"
+        );
         assert_eq!(pruned, 2);
-        assert_eq!(installed, 3, "shr1's scrub timer plus the two global timers (throttle-tick, health-check)");
+        assert_eq!(
+            installed, 3,
+            "shr1's scrub timer plus the two global timers (throttle-tick, health-check)"
+        );
         let (shr1_service, shr1_timer) = shr_state::conf::scrub_unit_paths(&unit_dir, "shr1");
         assert!(shr1_service.exists() && shr1_timer.exists());
 
         let cmds = runner.recorded();
         assert!(
-            cmds.iter().any(|c| c == "systemctl disable --now shr-rs-scrub-gone.timer"),
+            cmds.iter()
+                .any(|c| c == "systemctl disable --now shr-rs-scrub-gone.timer"),
             "the (successful) disable must actually have been attempted: {cmds:?}"
         );
 
@@ -2808,7 +3142,10 @@ mod tests {
         // warns would still pass the failure-side assertion above. A fully
         // healthy run (no failed disable, no unowned lookalike) must
         // produce NO warnings at all.
-        assert!(warnings.is_empty(), "a healthy run must not warn about anything: {warnings:?}");
+        assert!(
+            warnings.is_empty(),
+            "a healthy run must not warn about anything: {warnings:?}"
+        );
     }
 
     #[test]
@@ -2844,14 +3181,19 @@ mod tests {
             "the stale snapshot unit must still be pruned despite the failed disable"
         );
         assert_eq!(pruned, 2);
-        assert_eq!(installed, 3, "shr1's own timer plus the two global timers must still be installed");
+        assert_eq!(
+            installed, 3,
+            "shr1's own timer plus the two global timers must still be installed"
+        );
         let (shr1_service, shr1_timer) = shr_state::conf::scrub_unit_paths(&unit_dir, "shr1");
         assert!(shr1_service.exists() && shr1_timer.exists());
 
         // Same discriminator as the scrub-unit prune site above, proven at
         // this second call site.
         assert!(
-            warnings.iter().any(|w| w.contains("shr-rs-snapshot-auto.timer") && w.contains("disable")),
+            warnings
+                .iter()
+                .any(|w| w.contains("shr-rs-snapshot-auto.timer") && w.contains("disable")),
             "a failed disable at the snapshot prune site must also be reported: {warnings:?}"
         );
     }
@@ -2889,7 +3231,9 @@ mod tests {
         assert!(lookalike.exists(), "an unowned lookalike must never be deleted");
         assert_eq!(pruned, 0, "an unowned lookalike must not be counted as pruned");
         assert!(
-            warnings.iter().any(|w| w.contains("shr-rs-scrub-handwritten.timer") && w.contains("hand-written")),
+            warnings
+                .iter()
+                .any(|w| w.contains("shr-rs-scrub-handwritten.timer") && w.contains("hand-written")),
             "the unowned lookalike must be reported by name: {warnings:?}"
         );
     }
@@ -2897,7 +3241,10 @@ mod tests {
     #[test]
     fn daemon_handler_emits_ndjson_under_cli_json_and_keeps_its_tick_text_otherwise() {
         let src = include_str!("lib.rs");
-        let dispatch = src.split("mod tests").next().expect("source before the test module");
+        let dispatch = src
+            .split("mod tests")
+            .next()
+            .expect("source before the test module");
         let handler = find_handler(dispatch, "Command::Daemon { state_path }");
         // Startup banner gated -- must never taint an NDJSON stream (see
         // `daemon_tick_report_json`'s doc comment).
@@ -2926,7 +3273,10 @@ mod tests {
     #[test]
     fn merge_planned_commands_adds_the_array_in_call_order_without_losing_state_fields() {
         let state = json!({"mode": "shr", "layout_version": 1});
-        let commands = vec!["parted /dev/sdb mkpart primary 1MiB 100%".to_string(), "mdadm --create /dev/md0".to_string()];
+        let commands = vec![
+            "parted /dev/sdb mkpart primary 1MiB 100%".to_string(),
+            "mdadm --create /dev/md0".to_string(),
+        ];
 
         let merged = merge_planned_commands(&state, &commands).unwrap();
 
@@ -2985,8 +3335,7 @@ mod tests {
         // construction, a guarantee zero destructive commands run (see this
         // function's own doc comment).
         let mut input: &[u8] = b"definitely-not-the-group-name\n";
-        let err =
-            require_typed_confirmation("shr1", &[], false, "create", true, &mut input).unwrap_err();
+        let err = require_typed_confirmation("shr1", &[], false, "create", true, &mut input).unwrap_err();
         assert!(err.to_string().contains("cancelled"), "{err}");
     }
 
@@ -3012,8 +3361,7 @@ mod tests {
         require_typed_confirmation("shr1", &[], false, "create", true, &mut input).unwrap();
 
         let mut padded: &[u8] = b" shr1\n";
-        let err =
-            require_typed_confirmation("shr1", &[], false, "create", true, &mut padded).unwrap_err();
+        let err = require_typed_confirmation("shr1", &[], false, "create", true, &mut padded).unwrap_err();
         assert!(err.to_string().contains("cancelled"), "{err}");
     }
 
@@ -3036,7 +3384,11 @@ mod tests {
     fn status_detail_and_watch_flags_parse_with_their_defaults() {
         let cli = Cli::try_parse_from(["shr-rs", "status"]).unwrap();
         match cli.command {
-            Command::Status { detail, watch, interval_secs } => {
+            Command::Status {
+                detail,
+                watch,
+                interval_secs,
+            } => {
                 assert!(!detail);
                 assert!(!watch);
                 assert_eq!(interval_secs, 2);
@@ -3055,7 +3407,9 @@ mod tests {
 
         let cli = Cli::try_parse_from(["shr-rs", "status", "--watch", "--interval-secs", "5"]).unwrap();
         match cli.command {
-            Command::Status { watch, interval_secs, .. } => {
+            Command::Status {
+                watch, interval_secs, ..
+            } => {
                 assert!(watch);
                 assert_eq!(interval_secs, 5);
             }
@@ -3087,11 +3441,21 @@ mod tests {
     fn disk_list_subcommand_parses_alone_and_combined_with_global_json() {
         let cli = Cli::try_parse_from(["shr-rs", "disk", "list"]).unwrap();
         assert!(!cli.json);
-        assert!(matches!(cli.command, Command::Disk { command: DiskCmd::List }));
+        assert!(matches!(
+            cli.command,
+            Command::Disk {
+                command: DiskCmd::List
+            }
+        ));
 
         let cli = Cli::try_parse_from(["shr-rs", "--json", "disk", "list"]).unwrap();
         assert!(cli.json);
-        assert!(matches!(cli.command, Command::Disk { command: DiskCmd::List }));
+        assert!(matches!(
+            cli.command,
+            Command::Disk {
+                command: DiskCmd::List
+            }
+        ));
     }
 
     /// `internal snapshot-auto-tick` (the `shr-rs-snapshot-auto.timer`
@@ -3102,7 +3466,12 @@ mod tests {
     #[test]
     fn internal_snapshot_auto_tick_subcommand_parses() {
         let cli = Cli::try_parse_from(["shr-rs", "internal", "snapshot-auto-tick"]).unwrap();
-        assert!(matches!(cli.command, Command::Internal { command: InternalCmd::SnapshotAutoRun }));
+        assert!(matches!(
+            cli.command,
+            Command::Internal {
+                command: InternalCmd::SnapshotAutoRun
+            }
+        ));
     }
 
     #[test]
@@ -3114,7 +3483,11 @@ mod tests {
         // Windows dev host with no real `/var/lib/shr-rs` or `lsblk`.
         let cli = Cli {
             json: true,
-            command: Command::Status { detail: false, watch: true, interval_secs: 2 },
+            command: Command::Status {
+                detail: false,
+                watch: true,
+                interval_secs: 2,
+            },
         };
         let err = dispatch(cli).unwrap_err();
         assert!(err.to_string().contains("--json"), "{err}");
@@ -3129,7 +3502,14 @@ mod tests {
         // decision this wave had to make (brief) without needing a real
         // TTY, and without ever reaching `crossterm::terminal::size()`,
         // `StateStore`, or the inspector.
-        let cli = Cli { json: false, command: Command::Status { detail: false, watch: true, interval_secs: 2 } };
+        let cli = Cli {
+            json: false,
+            command: Command::Status {
+                detail: false,
+                watch: true,
+                interval_secs: 2,
+            },
+        };
         let err = dispatch(cli).unwrap_err();
         assert!(err.to_string().contains("real terminal"), "{err}");
     }

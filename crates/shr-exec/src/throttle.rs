@@ -140,14 +140,16 @@ impl<'a> ReshapeThrottle<'a> {
         };
 
         let confirmed_danger = m.smart_delta_reallocated.is_some_and(|v| v > 0)
-            || m.disk_temp_max.is_some_and(|t| t >= self.thresholds.max_disk_temp_c);
+            || m.disk_temp_max
+                .is_some_and(|t| t >= self.thresholds.max_disk_temp_c);
         if confirmed_danger {
             return ThrottleDecision::EmergencyBrake;
         }
 
         let over_threshold = m.cpu_load.is_some_and(|v| v > self.thresholds.max_cpu_load)
             || m.io_wait_pct.is_some_and(|v| v > self.thresholds.max_io_wait_pct)
-            || m.user_io_latency_p99_ms.is_some_and(|v| v > self.thresholds.user_io_latency_ms);
+            || m.user_io_latency_p99_ms
+                .is_some_and(|v| v > self.thresholds.user_io_latency_ms);
         let any_signal_unreadable = m.cpu_load.is_none()
             || m.io_wait_pct.is_none()
             || m.disk_temp_max.is_none()
@@ -268,7 +270,11 @@ impl<'a> ThrottleController<'a> {
     /// Falls back to the priority's initial speed if the kernel value can't
     /// be read (dry-run, or a transient read failure) -- the same value
     /// `new()` would have started from, never a fabricated "safe" guess.
-    pub fn resume(runner: &'a dyn CommandRunner, md_name: impl Into<String>, priority: ReshapePriority) -> Self {
+    pub fn resume(
+        runner: &'a dyn CommandRunner,
+        md_name: impl Into<String>,
+        priority: ReshapePriority,
+    ) -> Self {
         let md_name = md_name.into();
         let current_speed_kb =
             read_current_speed_limit_max(runner).unwrap_or_else(|| priority.initial_speed_kb());
@@ -298,7 +304,11 @@ impl<'a> ThrottleController<'a> {
             "/proc/sys/dev/raid/speed_limit_max",
             &self.current_speed_kb.to_string(),
         )?;
-        write_sysfs(self.runner, &self.sysfs_md_path("stripe_cache_size"), &STRIPE_CACHE_DEFAULT.to_string())?;
+        write_sysfs(
+            self.runner,
+            &self.sysfs_md_path("stripe_cache_size"),
+            &STRIPE_CACHE_DEFAULT.to_string(),
+        )?;
         Ok(())
     }
 
@@ -309,7 +319,10 @@ impl<'a> ThrottleController<'a> {
     /// never needs to; the floor is always <= any ceiling) but must still
     /// never go negative.
     pub fn apply(&mut self, decision: ThrottleDecision) -> Result<u64, ExecError> {
-        let hard_ceiling = self.ceiling_kb.unwrap_or(RESHAPE_SPEED_CEILING_KB).min(RESHAPE_SPEED_CEILING_KB);
+        let hard_ceiling = self
+            .ceiling_kb
+            .unwrap_or(RESHAPE_SPEED_CEILING_KB)
+            .min(RESHAPE_SPEED_CEILING_KB);
         let proposed = match decision {
             ThrottleDecision::EmergencyBrake => self.floor_kb,
             ThrottleDecision::Decrease(factor) => scale(self.current_speed_kb, factor).max(self.floor_kb),
@@ -318,7 +331,11 @@ impl<'a> ThrottleController<'a> {
         };
 
         if proposed != self.current_speed_kb {
-            write_sysfs(self.runner, "/proc/sys/dev/raid/speed_limit_max", &proposed.to_string())?;
+            write_sysfs(
+                self.runner,
+                "/proc/sys/dev/raid/speed_limit_max",
+                &proposed.to_string(),
+            )?;
         }
         self.current_speed_kb = proposed;
         Ok(proposed)
@@ -382,35 +399,51 @@ mod tests {
 
     #[test]
     fn tick_emergency_brakes_when_smart_reallocated_count_increases() {
-        let sampler = some_metrics(ThrottleMetrics { smart_delta_reallocated: Some(1), ..metrics() });
+        let sampler = some_metrics(ThrottleMetrics {
+            smart_delta_reallocated: Some(1),
+            ..metrics()
+        });
         let mut throttle = ReshapeThrottle::new(SafetyThresholds::default(), &sampler);
         assert_eq!(throttle.tick(), ThrottleDecision::EmergencyBrake);
     }
 
     #[test]
     fn tick_emergency_brakes_when_disk_temperature_hits_the_threshold() {
-        let sampler = some_metrics(ThrottleMetrics { disk_temp_max: Some(50), ..metrics() });
+        let sampler = some_metrics(ThrottleMetrics {
+            disk_temp_max: Some(50),
+            ..metrics()
+        });
         let mut throttle = ReshapeThrottle::new(SafetyThresholds::default(), &sampler);
         assert_eq!(throttle.tick(), ThrottleDecision::EmergencyBrake);
     }
 
     #[test]
     fn tick_decreases_when_cpu_load_exceeds_threshold() {
-        let sampler = some_metrics(ThrottleMetrics { cpu_load: Some(0.9), ..metrics() });
+        let sampler = some_metrics(ThrottleMetrics {
+            cpu_load: Some(0.9),
+            ..metrics()
+        });
         let mut throttle = ReshapeThrottle::new(SafetyThresholds::default(), &sampler);
         assert_eq!(throttle.tick(), ThrottleDecision::Decrease(0.7));
     }
 
     #[test]
     fn tick_decreases_when_user_io_latency_exceeds_threshold() {
-        let sampler = some_metrics(ThrottleMetrics { user_io_latency_p99_ms: Some(150), ..metrics() });
+        let sampler = some_metrics(ThrottleMetrics {
+            user_io_latency_p99_ms: Some(150),
+            ..metrics()
+        });
         let mut throttle = ReshapeThrottle::new(SafetyThresholds::default(), &sampler);
         assert_eq!(throttle.tick(), ThrottleDecision::Decrease(0.7));
     }
 
     #[test]
     fn tick_increases_when_system_is_idle() {
-        let sampler = some_metrics(ThrottleMetrics { cpu_load: Some(0.2), io_wait_pct: Some(5.0), ..metrics() });
+        let sampler = some_metrics(ThrottleMetrics {
+            cpu_load: Some(0.2),
+            io_wait_pct: Some(5.0),
+            ..metrics()
+        });
         let mut throttle = ReshapeThrottle::new(SafetyThresholds::default(), &sampler);
         assert_eq!(throttle.tick(), ThrottleDecision::Increase(1.2));
     }
@@ -444,21 +477,30 @@ mod tests {
     /// `NullMetricsSampler`'s honest "not monitoring" declaration above.
     #[test]
     fn tick_decreases_when_a_live_sampler_cannot_read_the_smart_signal() {
-        let sampler = some_metrics(ThrottleMetrics { smart_delta_reallocated: None, ..metrics() });
+        let sampler = some_metrics(ThrottleMetrics {
+            smart_delta_reallocated: None,
+            ..metrics()
+        });
         let mut throttle = ReshapeThrottle::new(SafetyThresholds::default(), &sampler);
         assert_eq!(throttle.tick(), ThrottleDecision::Decrease(0.7));
     }
 
     #[test]
     fn tick_decreases_when_a_live_sampler_cannot_read_disk_temperature() {
-        let sampler = some_metrics(ThrottleMetrics { disk_temp_max: None, ..metrics() });
+        let sampler = some_metrics(ThrottleMetrics {
+            disk_temp_max: None,
+            ..metrics()
+        });
         let mut throttle = ReshapeThrottle::new(SafetyThresholds::default(), &sampler);
         assert_eq!(throttle.tick(), ThrottleDecision::Decrease(0.7));
     }
 
     #[test]
     fn tick_decreases_when_a_live_sampler_cannot_read_cpu_load_even_if_everything_else_is_benign() {
-        let sampler = some_metrics(ThrottleMetrics { cpu_load: None, ..metrics() });
+        let sampler = some_metrics(ThrottleMetrics {
+            cpu_load: None,
+            ..metrics()
+        });
         let mut throttle = ReshapeThrottle::new(SafetyThresholds::default(), &sampler);
         assert_eq!(throttle.tick(), ThrottleDecision::Decrease(0.7));
     }
@@ -469,7 +511,10 @@ mod tests {
     /// to decelerate forever.
     #[test]
     fn a_missing_user_io_latency_signal_alone_does_not_force_a_decrease() {
-        let sampler = some_metrics(ThrottleMetrics { user_io_latency_p99_ms: None, ..metrics() });
+        let sampler = some_metrics(ThrottleMetrics {
+            user_io_latency_p99_ms: None,
+            ..metrics()
+        });
         let mut throttle = ReshapeThrottle::new(SafetyThresholds::default(), &sampler);
         assert_eq!(throttle.tick(), ThrottleDecision::Hold);
     }
@@ -504,14 +549,27 @@ mod tests {
             self.commands.lock().unwrap().clone()
         }
         fn with_cat_response(response: impl Into<String>) -> Self {
-            Self { commands: Mutex::new(Vec::new()), cat_response: Some(response.into()) }
+            Self {
+                commands: Mutex::new(Vec::new()),
+                cat_response: Some(response.into()),
+            }
         }
     }
     impl CommandRunner for SpyRunner {
         fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, Err> {
-            self.commands.lock().unwrap().push(format!("{program} {}", args.join(" ")));
-            let stdout = if program == "cat" { self.cat_response.clone().unwrap_or_default() } else { String::new() };
-            Ok(CommandOutput { stdout, stderr: String::new() })
+            self.commands
+                .lock()
+                .unwrap()
+                .push(format!("{program} {}", args.join(" ")));
+            let stdout = if program == "cat" {
+                self.cat_response.clone().unwrap_or_default()
+            } else {
+                String::new()
+            };
+            Ok(CommandOutput {
+                stdout,
+                stderr: String::new(),
+            })
         }
         fn is_dry_run(&self) -> bool {
             false
@@ -524,9 +582,13 @@ mod tests {
         let ctrl = ThrottleController::new(&runner, "md0", ReshapePriority::Background);
         ctrl.apply_initial().unwrap();
         let commands = runner.commands();
-        assert!(commands.iter().any(|c| c.contains("speed_limit_max") && c.contains("20000")));
+        assert!(commands
+            .iter()
+            .any(|c| c.contains("speed_limit_max") && c.contains("20000")));
         assert!(commands.iter().any(|c| c.contains("speed_limit_min")));
-        assert!(commands.iter().any(|c| c.contains("stripe_cache_size") && c.contains("md0")));
+        assert!(commands
+            .iter()
+            .any(|c| c.contains("stripe_cache_size") && c.contains("md0")));
     }
 
     #[test]
@@ -537,11 +599,16 @@ mod tests {
 
         let after = ctrl.apply(ThrottleDecision::EmergencyBrake).unwrap();
 
-        assert!(after < before, "emergency brake must actually reduce the speed, not just report it");
+        assert!(
+            after < before,
+            "emergency brake must actually reduce the speed, not just report it"
+        );
         assert_eq!(after, RESHAPE_SPEED_FLOOR_KB);
         let commands = runner.commands();
         assert!(
-            commands.iter().any(|c| c.contains("speed_limit_max") && c.contains(&after.to_string())),
+            commands
+                .iter()
+                .any(|c| c.contains("speed_limit_max") && c.contains(&after.to_string())),
             "the lowered speed must actually be written to the kernel parameter: {commands:?}"
         );
     }
@@ -557,7 +624,9 @@ mod tests {
         assert!(after < before);
         assert_eq!(after, (before as f64 * 0.7).round() as u64);
         let commands = runner.commands();
-        assert!(commands.iter().any(|c| c.contains("speed_limit_max") && c.contains(&after.to_string())));
+        assert!(commands
+            .iter()
+            .any(|c| c.contains("speed_limit_max") && c.contains(&after.to_string())));
     }
 
     #[test]
@@ -577,7 +646,11 @@ mod tests {
         for _ in 0..20 {
             ctrl.apply(ThrottleDecision::Increase(1.2)).unwrap();
         }
-        assert_eq!(ctrl.current_speed_kb(), 100_000, "background priority's ceiling is 100 MB/s");
+        assert_eq!(
+            ctrl.current_speed_kb(),
+            100_000,
+            "background priority's ceiling is 100 MB/s"
+        );
     }
 
     #[test]
@@ -596,7 +669,11 @@ mod tests {
         let mut ctrl = ThrottleController::new(&runner, "md0", ReshapePriority::Balanced);
         let before_count = runner.commands().len();
         ctrl.apply(ThrottleDecision::Hold).unwrap();
-        assert_eq!(runner.commands().len(), before_count, "Hold must not write speed_limit_max again");
+        assert_eq!(
+            runner.commands().len(),
+            before_count,
+            "Hold must not write speed_limit_max again"
+        );
     }
 
     #[test]
@@ -615,23 +692,38 @@ mod tests {
     fn resume_seeds_current_speed_from_the_kernels_real_speed_limit_max() {
         let runner = SpyRunner::with_cat_response("42000\n");
         let ctrl = ThrottleController::resume(&runner, "md0", ReshapePriority::Balanced);
-        assert_eq!(ctrl.current_speed_kb(), 42_000, "must read the REAL current speed, not the profile's initial one");
+        assert_eq!(
+            ctrl.current_speed_kb(),
+            42_000,
+            "must read the REAL current speed, not the profile's initial one"
+        );
     }
 
     #[test]
     fn resume_falls_back_to_the_priority_profiles_initial_speed_when_the_kernel_value_is_unreadable() {
         let runner = SpyRunner::default(); // cat returns "" -- unparseable
         let ctrl = ThrottleController::resume(&runner, "md0", ReshapePriority::Background);
-        assert_eq!(ctrl.current_speed_kb(), ReshapePriority::Background.initial_speed_kb());
+        assert_eq!(
+            ctrl.current_speed_kb(),
+            ReshapePriority::Background.initial_speed_kb()
+        );
     }
 
     #[test]
     fn null_sampler_holds_under_every_priority_profile() {
         // The engine's default when no live sampler is wired -- must never
         // silently accelerate or brake a reshape nobody asked it to monitor.
-        for priority in [ReshapePriority::Background, ReshapePriority::Balanced, ReshapePriority::Max] {
+        for priority in [
+            ReshapePriority::Background,
+            ReshapePriority::Balanced,
+            ReshapePriority::Max,
+        ] {
             let mut throttle = ReshapeThrottle::new(priority.thresholds(), &NullMetricsSampler);
-            assert_eq!(throttle.tick(), ThrottleDecision::Hold, "{priority:?} did not hold");
+            assert_eq!(
+                throttle.tick(),
+                ThrottleDecision::Hold,
+                "{priority:?} did not hold"
+            );
         }
     }
 }

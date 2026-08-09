@@ -83,14 +83,8 @@ pub fn parse_smartctl(json: &str) -> Result<SmartInfo, serde_json::Error> {
         exit_status: v.pointer("/smartctl/exit_status").and_then(Value::as_u64),
         temperature_c: v.pointer("/temperature/current").and_then(Value::as_i64),
         power_on_hours: v.pointer("/power_on_time/hours").and_then(Value::as_u64),
-        model: v
-            .get("model_name")
-            .and_then(Value::as_str)
-            .map(str::to_string),
-        serial: v
-            .get("serial_number")
-            .and_then(Value::as_str)
-            .map(str::to_string),
+        model: v.get("model_name").and_then(Value::as_str).map(str::to_string),
+        serial: v.get("serial_number").and_then(Value::as_str).map(str::to_string),
         nvme_critical_warning: v
             .pointer("/nvme_smart_health_information_log/critical_warning")
             .and_then(Value::as_u64),
@@ -102,10 +96,7 @@ pub fn parse_smartctl(json: &str) -> Result<SmartInfo, serde_json::Error> {
         uncorrectable_sectors: None,
     };
 
-    if let Some(table) = v
-        .pointer("/ata_smart_attributes/table")
-        .and_then(Value::as_array)
-    {
+    if let Some(table) = v.pointer("/ata_smart_attributes/table").and_then(Value::as_array) {
         for attr in table {
             let id = attr.get("id").and_then(Value::as_u64);
             let raw = attr.pointer("/raw/value").and_then(Value::as_u64);

@@ -12,16 +12,30 @@
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NotifyEvent {
-    ScrubErrorsFound { group: String, band_index: u8, error_count: u64 },
-    Degraded { group: String, band_index: u8 },
-    SmartWorsened { group: String, band_index: u8, reallocated_delta: u64 },
+    ScrubErrorsFound {
+        group: String,
+        band_index: u8,
+        error_count: u64,
+    },
+    Degraded {
+        group: String,
+        band_index: u8,
+    },
+    SmartWorsened {
+        group: String,
+        band_index: u8,
+        reallocated_delta: u64,
+    },
     /// `check_health()`'s per-band read of `/sys/block/<md>/md/
     /// degraded` found no such array at all (not merely reduced-redundancy
     /// -- entirely unassembled, e.g. a reboot came back without its member
     /// devices). Distinct from `Degraded`: a missing array is total loss of
     /// this band, a strictly worse state than a still-live-but-reduced one,
     /// and the operator needs to know which of the two they're looking at.
-    ArrayMissing { group: String, band_index: u8 },
+    ArrayMissing {
+        group: String,
+        band_index: u8,
+    },
 }
 
 impl NotifyEvent {
@@ -33,7 +47,11 @@ impl NotifyEvent {
     /// break the JSON structure.
     pub fn to_json(&self) -> String {
         let value = match self {
-            NotifyEvent::ScrubErrorsFound { group, band_index, error_count } => serde_json::json!({
+            NotifyEvent::ScrubErrorsFound {
+                group,
+                band_index,
+                error_count,
+            } => serde_json::json!({
                 "kind": "scrub_errors_found",
                 "group": group,
                 "band_index": band_index,
@@ -44,7 +62,11 @@ impl NotifyEvent {
                 "group": group,
                 "band_index": band_index,
             }),
-            NotifyEvent::SmartWorsened { group, band_index, reallocated_delta } => serde_json::json!({
+            NotifyEvent::SmartWorsened {
+                group,
+                band_index,
+                reallocated_delta,
+            } => serde_json::json!({
                 "kind": "smart_worsened",
                 "group": group,
                 "band_index": band_index,
@@ -65,13 +87,21 @@ impl NotifyEvent {
     /// no `RUST_LOG` needed; see that function's doc comment.
     pub fn status_line(&self) -> String {
         match self {
-            NotifyEvent::ScrubErrorsFound { group, band_index, error_count } => {
+            NotifyEvent::ScrubErrorsFound {
+                group,
+                band_index,
+                error_count,
+            } => {
                 format!("shr-rs: group `{group}` band {band_index} scrub found {error_count} error(s)")
             }
             NotifyEvent::Degraded { group, band_index } => {
                 format!("shr-rs: group `{group}` band {band_index} is DEGRADED")
             }
-            NotifyEvent::SmartWorsened { group, band_index, reallocated_delta } => {
+            NotifyEvent::SmartWorsened {
+                group,
+                band_index,
+                reallocated_delta,
+            } => {
                 format!(
                     "shr-rs: group `{group}` band {band_index} SMART reallocated sectors rose by {reallocated_delta}"
                 )
@@ -91,8 +121,11 @@ mod tests {
 
     #[test]
     fn scrub_errors_found_json_is_well_formed_even_with_a_quote_in_the_group_name() {
-        let event =
-            NotifyEvent::ScrubErrorsFound { group: "shr\"1".to_string(), band_index: 0, error_count: 3 };
+        let event = NotifyEvent::ScrubErrorsFound {
+            group: "shr\"1".to_string(),
+            band_index: 0,
+            error_count: 3,
+        };
         let parsed: serde_json::Value = serde_json::from_str(&event.to_json()).unwrap();
         assert_eq!(parsed["kind"], "scrub_errors_found");
         assert_eq!(parsed["group"], "shr\"1");
@@ -101,8 +134,15 @@ mod tests {
 
     #[test]
     fn status_lines_are_distinct_and_mention_the_group_and_band() {
-        let a = NotifyEvent::Degraded { group: "shr1".to_string(), band_index: 2 };
-        let b = NotifyEvent::SmartWorsened { group: "shr1".to_string(), band_index: 2, reallocated_delta: 5 };
+        let a = NotifyEvent::Degraded {
+            group: "shr1".to_string(),
+            band_index: 2,
+        };
+        let b = NotifyEvent::SmartWorsened {
+            group: "shr1".to_string(),
+            band_index: 2,
+            reallocated_delta: 5,
+        };
         assert_ne!(a.status_line(), b.status_line());
         assert!(a.status_line().contains("shr1"));
         assert!(a.status_line().contains('2'));

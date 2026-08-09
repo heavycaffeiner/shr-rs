@@ -1,9 +1,11 @@
 use shr_state::conf::{
-    find_orphaned_scrub_units, is_shr_rs_owned_unit, remove_owned_unit_file, scrub_unit_paths,
-    write_fstab, write_health_check_timer_unit, write_mdadm_conf, write_scrub_timer_units,
-    write_snapshot_timer_unit, write_throttle_timer_unit,
+    find_orphaned_scrub_units, is_shr_rs_owned_unit, remove_owned_unit_file, scrub_unit_paths, write_fstab,
+    write_health_check_timer_unit, write_mdadm_conf, write_scrub_timer_units, write_snapshot_timer_unit,
+    write_throttle_timer_unit,
 };
-use shr_state::{ArrayState, StateBand, StateDisk, StateExpansion, StateFile, StateFilesystem, StatePartition};
+use shr_state::{
+    ArrayState, StateBand, StateDisk, StateExpansion, StateFile, StateFilesystem, StatePartition,
+};
 use tempfile::tempdir;
 
 fn group(name: &str, disk_id: &str, bands: Vec<StateBand>, fs_uuid: Option<String>) -> ArrayState {
@@ -54,7 +56,7 @@ fn band(index: u8, md_name: &str, md_uuid: Option<&str>) -> StateBand {
         resize_pending: false,
         last_smart_reallocated: None,
         last_scrub: None,
-            scrub_in_progress: false,
+        scrub_in_progress: false,
         pending_member_removal: None,
         reshape_priority: None,
     }
@@ -95,10 +97,7 @@ fn mdadm_conf_skips_bands_without_a_real_md_uuid_yet() {
 fn fstab_line_uses_the_btrfs_uuid_and_never_a_dev_sdx_path() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("fstab");
-    let state = state_with_bands(
-        vec![],
-        Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_string()),
-    );
+    let state = state_with_bands(vec![], Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_string()));
 
     write_fstab(&path, &state).unwrap();
     let content = std::fs::read_to_string(&path).unwrap();
@@ -139,7 +138,11 @@ fn fstab_write_is_a_noop_when_the_btrfs_uuid_is_not_known_yet() {
 fn destroying_the_last_group_empties_the_fstab_managed_block_instead_of_leaving_it_stale() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("fstab");
-    std::fs::write(&path, "UUID=11111111-1111-1111-1111-111111111111 / ext4 defaults 0 1\n").unwrap();
+    std::fs::write(
+        &path,
+        "UUID=11111111-1111-1111-1111-111111111111 / ext4 defaults 0 1\n",
+    )
+    .unwrap();
 
     let with_group = state_with_bands(vec![], Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_string()));
     write_fstab(&path, &with_group).unwrap();
@@ -185,15 +188,24 @@ fn fstab_still_does_not_create_the_file_when_nothing_was_ever_written() {
 
     write_fstab(&path, &state).unwrap();
 
-    assert!(!path.exists(), "no group has ever had a known fs UUID -- the file must not be created");
+    assert!(
+        !path.exists(),
+        "no group has ever had a known fs UUID -- the file must not be created"
+    );
 }
 
 #[test]
 fn rewriting_mdadm_conf_replaces_the_existing_managed_block_instead_of_duplicating() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("mdadm.conf");
-    let first = state_with_bands(vec![band(0, "md0", Some("11111111:11111111:11111111:11111111"))], None);
-    let second = state_with_bands(vec![band(0, "md0", Some("22222222:22222222:22222222:22222222"))], None);
+    let first = state_with_bands(
+        vec![band(0, "md0", Some("11111111:11111111:11111111:11111111"))],
+        None,
+    );
+    let second = state_with_bands(
+        vec![band(0, "md0", Some("22222222:22222222:22222222:22222222"))],
+        None,
+    );
 
     write_mdadm_conf(&path, &first).unwrap();
     write_mdadm_conf(&path, &second).unwrap();
@@ -213,7 +225,10 @@ fn rewriting_mdadm_conf_preserves_unrelated_existing_content_outside_the_markers
     let dir = tempdir().unwrap();
     let path = dir.path().join("mdadm.conf");
     std::fs::write(&path, "ARRAY /dev/md9 UUID=99999999:99999999:99999999:99999999\n").unwrap();
-    let state = state_with_bands(vec![band(0, "md0", Some("11111111:11111111:11111111:11111111"))], None);
+    let state = state_with_bands(
+        vec![band(0, "md0", Some("11111111:11111111:11111111:11111111"))],
+        None,
+    );
 
     write_mdadm_conf(&path, &state).unwrap();
     let content = std::fs::read_to_string(&path).unwrap();
@@ -259,7 +274,10 @@ fn mismatched_managed_markers_in_an_existing_file_return_an_error_not_a_silent_o
     // begin marker to EOF?) could silently destroy content someone else
     // owns; refuse instead.
     std::fs::write(&path, "# >>> shr-rs managed >>>\nARRAY /dev/md0 UUID=x\n").unwrap();
-    let state = state_with_bands(vec![band(0, "md0", Some("11111111:11111111:11111111:11111111"))], None);
+    let state = state_with_bands(
+        vec![band(0, "md0", Some("11111111:11111111:11111111:11111111"))],
+        None,
+    );
 
     let err = write_mdadm_conf(&path, &state)
         .expect_err("mismatched markers must be reported, not silently resolved");
@@ -370,13 +388,19 @@ fn test_exe_path() -> &'static std::path::Path {
 #[test]
 fn write_scrub_timer_units_writes_a_service_and_timer_named_after_the_group() {
     let dir = tempdir().unwrap();
-    let state = state_with_bands(vec![band(0, "md0", Some("aaaaaaaa:aaaaaaaa:aaaaaaaa:aaaaaaaa"))], None);
+    let state = state_with_bands(
+        vec![band(0, "md0", Some("aaaaaaaa:aaaaaaaa:aaaaaaaa:aaaaaaaa"))],
+        None,
+    );
 
     let written = write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
     assert_eq!(written.len(), 2, "{written:?}");
 
     let service = std::fs::read_to_string(dir.path().join("shr-rs-scrub-default.service")).unwrap();
-    assert!(service.contains("ExecStart=/opt/shr-rs/bin/shr-rs fs scrub start --name default"), "{service}");
+    assert!(
+        service.contains("ExecStart=/opt/shr-rs/bin/shr-rs fs scrub start --name default"),
+        "{service}"
+    );
     assert!(!service.contains("/usr/bin/shr-rs"), "{service}");
     let timer = std::fs::read_to_string(dir.path().join("shr-rs-scrub-default.timer")).unwrap();
     assert!(timer.contains("OnCalendar=weekly"), "{timer}");
@@ -401,10 +425,15 @@ fn write_scrub_timer_units_sanitizes_unsafe_characters_in_the_group_name() {
 
     let written = write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
     assert!(
-        written.iter().all(|p| !p.to_string_lossy().contains('/') || p.starts_with(dir.path())),
+        written
+            .iter()
+            .all(|p| !p.to_string_lossy().contains('/') || p.starts_with(dir.path())),
         "{written:?}"
     );
-    assert!(dir.path().join("shr-rs-scrub-my_group_2.service").exists(), "{written:?}");
+    assert!(
+        dir.path().join("shr-rs-scrub-my_group_2.service").exists(),
+        "{written:?}"
+    );
 }
 
 /// The exact multi-group correctness trap `write_mdadm_conf`/`write_fstab`
@@ -423,7 +452,11 @@ fn write_scrub_timer_units_never_overwrites_another_groups_units_across_four_gro
             group(
                 &format!("shr{i}"),
                 &format!("ata-DISK-{i}"),
-                vec![band(0, &format!("md{i}"), Some(&format!("{i}{i}{i}{i}{i}{i}{i}{i}:11111111:22222222:33333333")))],
+                vec![band(
+                    0,
+                    &format!("md{i}"),
+                    Some(&format!("{i}{i}{i}{i}{i}{i}{i}{i}:11111111:22222222:33333333")),
+                )],
                 None,
             )
         })
@@ -442,8 +475,14 @@ fn write_scrub_timer_units_never_overwrites_another_groups_units_across_four_gro
     for i in 0..4 {
         let service_path = dir.path().join(format!("shr-rs-scrub-shr{i}.service"));
         let timer_path = dir.path().join(format!("shr-rs-scrub-shr{i}.timer"));
-        assert!(service_path.exists(), "group shr{i}'s service must survive every later group's registration");
-        assert!(timer_path.exists(), "group shr{i}'s timer must survive every later group's registration");
+        assert!(
+            service_path.exists(),
+            "group shr{i}'s service must survive every later group's registration"
+        );
+        assert!(
+            timer_path.exists(),
+            "group shr{i}'s timer must survive every later group's registration"
+        );
         let service = std::fs::read_to_string(&service_path).unwrap();
         assert!(service.contains(&format!("--name shr{i}")), "{service}");
     }
@@ -458,7 +497,11 @@ fn write_scrub_timer_units_is_idempotent_on_rewrite() {
     write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
 
     let service = std::fs::read_to_string(dir.path().join("shr-rs-scrub-default.service")).unwrap();
-    assert_eq!(service.matches("ExecStart=").count(), 1, "rewriting must replace, not duplicate: {service}");
+    assert_eq!(
+        service.matches("ExecStart=").count(),
+        1,
+        "rewriting must replace, not duplicate: {service}"
+    );
 }
 
 #[test]
@@ -468,7 +511,10 @@ fn write_throttle_timer_unit_writes_one_global_service_and_timer() {
     assert_eq!(written.len(), 2, "{written:?}");
 
     let service = std::fs::read_to_string(dir.path().join("shr-rs-throttle-tick.service")).unwrap();
-    assert!(service.contains("ExecStart=/opt/shr-rs/bin/shr-rs internal reshape-throttle-tick"), "{service}");
+    assert!(
+        service.contains("ExecStart=/opt/shr-rs/bin/shr-rs internal reshape-throttle-tick"),
+        "{service}"
+    );
     assert!(!service.contains("/usr/bin/shr-rs"), "{service}");
     let timer = std::fs::read_to_string(dir.path().join("shr-rs-throttle-tick.timer")).unwrap();
     assert!(timer.contains("OnCalendar=*:0/2"), "{timer}");
@@ -481,7 +527,10 @@ fn write_health_check_timer_unit_writes_one_global_service_and_timer() {
     assert_eq!(written.len(), 2, "{written:?}");
 
     let service = std::fs::read_to_string(dir.path().join("shr-rs-health-check.service")).unwrap();
-    assert!(service.contains("ExecStart=/opt/shr-rs/bin/shr-rs internal health-check-tick"), "{service}");
+    assert!(
+        service.contains("ExecStart=/opt/shr-rs/bin/shr-rs internal health-check-tick"),
+        "{service}"
+    );
     assert!(!service.contains("/usr/bin/shr-rs"), "{service}");
     let timer = std::fs::read_to_string(dir.path().join("shr-rs-health-check.timer")).unwrap();
     assert!(timer.contains("OnCalendar=*:0/15"), "{timer}");
@@ -496,7 +545,10 @@ fn write_snapshot_timer_unit_writes_one_global_service_and_timer_using_the_confi
     assert_eq!(written.len(), 2, "{written:?}");
 
     let service = std::fs::read_to_string(dir.path().join("shr-rs-snapshot-auto.service")).unwrap();
-    assert!(service.contains("ExecStart=/opt/shr-rs/bin/shr-rs internal snapshot-auto-tick"), "{service}");
+    assert!(
+        service.contains("ExecStart=/opt/shr-rs/bin/shr-rs internal snapshot-auto-tick"),
+        "{service}"
+    );
     assert!(!service.contains("/usr/bin/shr-rs"), "{service}");
     let timer = std::fs::read_to_string(dir.path().join("shr-rs-snapshot-auto.timer")).unwrap();
     // The policy's `schedule` value flows straight into `OnCalendar=` --
@@ -541,11 +593,21 @@ fn every_generated_unit_kind_is_recognized_as_shr_rs_owned() {
 fn is_shr_rs_owned_unit_fails_closed_for_a_hand_written_file_and_a_missing_one() {
     let dir = tempdir().unwrap();
     let hand_written = dir.path().join("shr-rs-scrub-somegroup.service");
-    std::fs::write(&hand_written, "[Unit]\nDescription=an operator wrote this by hand\n").unwrap();
-    assert!(!is_shr_rs_owned_unit(&hand_written), "no marker present -- must not claim ownership");
+    std::fs::write(
+        &hand_written,
+        "[Unit]\nDescription=an operator wrote this by hand\n",
+    )
+    .unwrap();
+    assert!(
+        !is_shr_rs_owned_unit(&hand_written),
+        "no marker present -- must not claim ownership"
+    );
 
     let missing = dir.path().join("does-not-exist.service");
-    assert!(!is_shr_rs_owned_unit(&missing), "a missing file must not be reported as owned");
+    assert!(
+        !is_shr_rs_owned_unit(&missing),
+        "a missing file must not be reported as owned"
+    );
 }
 
 /// TDD (the test that would have caught the real-guest orphan): three
@@ -603,7 +665,11 @@ fn find_orphaned_scrub_units_is_empty_when_the_unit_directory_does_not_exist_yet
     let state = state_with_bands(vec![band(0, "md0", None)], None);
 
     let orphans = find_orphaned_scrub_units(&never_installed_dir, &state).unwrap();
-    assert_eq!(orphans, Default::default(), "a host that never ran `schedule install` has nothing to prune");
+    assert_eq!(
+        orphans,
+        Default::default(),
+        "a host that never ran `schedule install` has nothing to prune"
+    );
 }
 
 #[test]
@@ -614,14 +680,26 @@ fn remove_owned_unit_file_deletes_ours_but_refuses_a_hand_written_lookalike() {
     write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
     assert!(ours_service.exists());
 
-    assert!(remove_owned_unit_file(&ours_service).unwrap(), "must report a real deletion");
+    assert!(
+        remove_owned_unit_file(&ours_service).unwrap(),
+        "must report a real deletion"
+    );
     assert!(!ours_service.exists(), "our own unit must actually be gone");
 
     let hand_written = dir.path().join("shr-rs-scrub-someone-elses.service");
     std::fs::write(&hand_written, "[Unit]\nDescription=not ours\n").unwrap();
-    assert!(!remove_owned_unit_file(&hand_written).unwrap(), "must refuse to report deleting a lookalike");
-    assert!(hand_written.exists(), "a hand-written lookalike must never actually be deleted");
+    assert!(
+        !remove_owned_unit_file(&hand_written).unwrap(),
+        "must refuse to report deleting a lookalike"
+    );
+    assert!(
+        hand_written.exists(),
+        "a hand-written lookalike must never actually be deleted"
+    );
 
     let missing = dir.path().join("nothing-here.service");
-    assert!(!remove_owned_unit_file(&missing).unwrap(), "a missing file is a no-op, not an error");
+    assert!(
+        !remove_owned_unit_file(&missing).unwrap(),
+        "a missing file is a no-op, not an error"
+    );
 }

@@ -1,0 +1,14 @@
+# Stable-only options: `rust-toolchain.toml` pins the stable channel, so
+# anything gated on nightly (`wrap_comments`, `comment_width`, `imports_granularity`)
+# would be silently ignored rather than applied, and is deliberately not listed.
+#
+# 110, not rustfmt's default 100. This codebase was hand-formatted for its
+# first two releases and settled on a wall a little past 100: of 38k lines,
+# 616 exceed 100 characters but only 165 exceed 110. Adopting the default
+# would therefore rewrap several hundred lines that were already deliberate,
+# for no gain in readability.
+#
+# Doc comments are left exactly as written. Comment reflow is a nightly
+# feature, so on stable rustfmt never touches the prose -- which matters here,
+# where the comments carry most of the reasoning behind the code.
+max_width = 110

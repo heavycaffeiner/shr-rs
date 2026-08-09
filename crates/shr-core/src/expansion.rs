@@ -85,10 +85,7 @@ fn validate_snapshot(s: &LayoutSnapshot) -> Result<(), PlanError> {
     let mut disk_size: HashMap<&DiskId, u64> = HashMap::new();
     for d in &s.disks {
         if disk_size.insert(&d.id, d.size_bytes).is_some() {
-            return Err(PlanError::InvalidSnapshot(format!(
-                "duplicate disk id {}",
-                d.id
-            )));
+            return Err(PlanError::InvalidSnapshot(format!("duplicate disk id {}", d.id)));
         }
     }
 
@@ -166,9 +163,7 @@ fn validate_snapshot(s: &LayoutSnapshot) -> Result<(), PlanError> {
                     // this check even though the disk cannot actually offer that
                     // much usable space. Saturating: a disk smaller than the
                     // reserves alone must not underflow to a huge usable value.
-                    let usable = sz
-                        .saturating_sub(s.reserved_head)
-                        .saturating_sub(s.reserved_tail);
+                    let usable = sz.saturating_sub(s.reserved_head).saturating_sub(s.reserved_tail);
                     if usable < b.end() {
                         return Err(PlanError::InvalidSnapshot(format!(
                             "disk {} (size {}, usable {} after {} reserved_head + {} reserved_tail) \
@@ -199,10 +194,7 @@ fn validate_snapshot(s: &LayoutSnapshot) -> Result<(), PlanError> {
 /// use it partially. Refusing beats emitting an overlapping/unsafe plan; a
 /// future planner may relax this. Never emits a plan that shrinks, downgrades,
 /// re-slices, or overlaps existing bands.
-pub fn plan_expansion(
-    current: &LayoutSnapshot,
-    new_disks: &[Disk],
-) -> Result<ExpansionPlan, PlanError> {
+pub fn plan_expansion(current: &LayoutSnapshot, new_disks: &[Disk]) -> Result<ExpansionPlan, PlanError> {
     validate_snapshot(current)?;
 
     // New disks must carry fresh, unique ids — not duplicated among themselves
@@ -309,9 +301,7 @@ pub fn plan_expansion(
                 current_top
             )));
         }
-        steps.push(ExpansionStep::CreateBand {
-            band: (*nb).clone(),
-        });
+        steps.push(ExpansionStep::CreateBand { band: (*nb).clone() });
     }
 
     // 4. Surface stranded capacity so the dry-run/UI can show it.
@@ -330,9 +320,7 @@ pub fn plan_expansion(
     let structural = steps.iter().any(|s| {
         matches!(
             s,
-            ExpansionStep::LevelUp { .. }
-                | ExpansionStep::GrowBand { .. }
-                | ExpansionStep::CreateBand { .. }
+            ExpansionStep::LevelUp { .. } | ExpansionStep::GrowBand { .. } | ExpansionStep::CreateBand { .. }
         )
     });
     let target_layout_version = if structural {

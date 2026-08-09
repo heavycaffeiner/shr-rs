@@ -1,12 +1,10 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{backend::TestBackend, Terminal};
 use shr_command::{
-    report::MemberStatus, ArrayStatus, DiskStatus, GroupBandStatus, GroupStatus, Health,
-    SmartState, SmartSummary, StatusReport, SyncSummary,
+    report::MemberStatus, ArrayStatus, DiskStatus, GroupBandStatus, GroupStatus, Health, SmartState,
+    SmartSummary, StatusReport, SyncSummary,
 };
-use shr_tui::{
-    array_needs_attention, render, wizard::Step, App, RefreshWorker, Snapshot, Tab, WizardAction,
-};
+use shr_tui::{array_needs_attention, render, wizard::Step, App, RefreshWorker, Snapshot, Tab, WizardAction};
 use std::{
     sync::mpsc,
     time::{Duration, Instant},
@@ -78,7 +76,11 @@ fn sample_report_with_groups() -> StatusReport {
         active_disks: Some(4),
         members: vec!["vdc1".into(), "vdd1".into(), "vde1".into(), "vdf1".into()],
         member_states: vec![],
-        sync: Some(SyncSummary { action: "reshape".into(), percent: Some(17.3), finish_min: Some(240.0) }),
+        sync: Some(SyncSummary {
+            action: "reshape".into(),
+            percent: Some(17.3),
+            finish_min: Some(240.0),
+        }),
     });
     report.groups = vec![
         GroupStatus {
@@ -126,7 +128,12 @@ fn sample_report_with_groups() -> StatusReport {
             compression: "zstd:3".into(),
             usable_bytes: 16_000_000_000_000,
             resize_pending: true,
-            disks: vec!["ata-DISK4".into(), "ata-DISK5".into(), "ata-DISK6".into(), "ata-DISK7".into()],
+            disks: vec![
+                "ata-DISK4".into(),
+                "ata-DISK5".into(),
+                "ata-DISK6".into(),
+                "ata-DISK7".into(),
+            ],
             bands: vec![GroupBandStatus {
                 index: 0,
                 level: "raid5".into(),
@@ -272,14 +279,23 @@ fn groups_bands_fs_and_logs_tabs_render_live_data() {
 
     fn render_current(terminal: &mut Terminal<TestBackend>, app: &shr_tui::App) -> String {
         terminal.draw(|frame| render(frame, app)).unwrap();
-        terminal.backend().buffer().content().iter().map(|cell| cell.symbol()).collect::<String>()
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>()
     }
 
     // Both groups are visible on the Groups tab, not just the first one.
     app.handle_key(key(KeyCode::Char('4')));
     let groups = render_current(&mut terminal, &app);
     assert!(groups.contains("shr1"), "first group must be visible: {groups}");
-    assert!(groups.contains("shr2-hetero"), "second group must be visible -- this is the whole point of a multi-group fixture: {groups}");
+    assert!(
+        groups.contains("shr2-hetero"),
+        "second group must be visible -- this is the whole point of a multi-group fixture: {groups}"
+    );
     assert!(groups.contains("expansion unfinished"));
 
     // The Bands tab shows the live reshape percent for md1's band,
@@ -287,7 +303,10 @@ fn groups_bands_fs_and_logs_tabs_render_live_data() {
     app.handle_key(key(KeyCode::Char('5')));
     let bands = render_current(&mut terminal, &app);
     assert!(bands.contains("md1"));
-    assert!(bands.contains("17.3%"), "band md1's live reshape percent must be cross-referenced from arrays: {bands}");
+    assert!(
+        bands.contains("17.3%"),
+        "band md1's live reshape percent must be cross-referenced from arrays: {bands}"
+    );
     assert!(bands.contains("md0"));
 
     // The FS tab shows per-group filesystem info, including a group
@@ -301,7 +320,10 @@ fn groups_bands_fs_and_logs_tabs_render_live_data() {
     // The Logs tab shows the fetched kernel log lines.
     app.handle_key(key(KeyCode::Char('7')));
     let logs = render_current(&mut terminal, &app);
-    assert!(logs.contains("reshape started"), "log tab must show fetched log lines: {logs}");
+    assert!(
+        logs.contains("reshape started"),
+        "log tab must show fetched log lines: {logs}"
+    );
 }
 
 /// The TUI's Arrays tab used to render `array.members.join(", ")` --
@@ -362,8 +384,13 @@ fn logs_tab_shows_a_placeholder_instead_of_a_blank_pane_when_there_are_no_lines(
     app.handle_key(key(KeyCode::Char('7')));
 
     terminal.draw(|frame| render(frame, &app)).unwrap();
-    let content: String =
-        terminal.backend().buffer().content().iter().map(|cell| cell.symbol()).collect();
+    let content: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
     assert!(content.contains("no recent kernel log"));
 }
 
@@ -498,7 +525,10 @@ mod add_disk_wizard {
         app.handle_key(key(KeyCode::Char('a')));
         app.handle_key(key(KeyCode::Enter));
 
-        assert!(app.take_wizard_action().is_none(), "constraint 1: nothing to preview yet");
+        assert!(
+            app.take_wizard_action().is_none(),
+            "constraint 1: nothing to preview yet"
+        );
         assert_eq!(app.wizard().unwrap().step(), Step::SelectDisks);
     }
 
@@ -512,7 +542,10 @@ mod add_disk_wizard {
 
         app.handle_key(key(KeyCode::Enter));
         assert_eq!(app.take_wizard_action(), Some(WizardAction::RunPreflight));
-        assert!(app.take_wizard_action().is_none(), "the action must be consumed, not repeated");
+        assert!(
+            app.take_wizard_action().is_none(),
+            "the action must be consumed, not repeated"
+        );
     }
 
     /// The TUI Add Disk wizard must not let the operator select the
@@ -543,7 +576,11 @@ mod add_disk_wizard {
         // brief explicitly rules out skipping it, which would be confusing.
         assert_eq!(app.wizard().unwrap().cursor, 0);
         app.handle_key(key(KeyCode::Down));
-        assert_eq!(app.wizard().unwrap().cursor, 1, "cursor must be able to move past the system disk row");
+        assert_eq!(
+            app.wizard().unwrap().cursor,
+            1,
+            "cursor must be able to move past the system disk row"
+        );
 
         // The non-system disk at cursor 1 ("vdb") must remain selectable.
         app.handle_key(key(KeyCode::Char(' ')));
@@ -573,7 +610,10 @@ mod add_disk_wizard {
             app.handle_key(key(KeyCode::Char(ch)));
         }
         app.handle_key(key(KeyCode::Enter));
-        assert!(app.take_wizard_action().is_none(), "constraint 5: partial match must not confirm");
+        assert!(
+            app.take_wizard_action().is_none(),
+            "constraint 5: partial match must not confirm"
+        );
 
         app.handle_key(key(KeyCode::Char('1')));
         assert_eq!(app.wizard().unwrap().confirmation_input, "shr1");
@@ -601,11 +641,17 @@ mod add_disk_wizard {
         // Simulate runtime.rs reporting a blocked preflight (the only real
         // way `App` reaches `Step::Preflight` -- it never calls
         // `preflight_create` itself).
-        app.set_wizard_state(shr_tui::wizard::WizardState { step: Some(Step::Preflight), ..Default::default() });
+        app.set_wizard_state(shr_tui::wizard::WizardState {
+            step: Some(Step::Preflight),
+            ..Default::default()
+        });
         assert!(!app.wizard().unwrap().force_content, "must be off by default");
 
         app.handle_key(key(KeyCode::Char('o')));
-        assert!(app.wizard().unwrap().force_content, "'o' must set the override flag");
+        assert!(
+            app.wizard().unwrap().force_content,
+            "'o' must set the override flag"
+        );
         assert_eq!(
             app.take_wizard_action(),
             Some(WizardAction::RunPreflight),
@@ -620,7 +666,10 @@ mod add_disk_wizard {
     fn plain_enter_does_not_set_force_content_at_the_preflight_step() {
         let mut app = App::new(single_group_report());
         app.handle_key(key(KeyCode::Char('a')));
-        app.set_wizard_state(shr_tui::wizard::WizardState { step: Some(Step::Preflight), ..Default::default() });
+        app.set_wizard_state(shr_tui::wizard::WizardState {
+            step: Some(Step::Preflight),
+            ..Default::default()
+        });
 
         app.handle_key(key(KeyCode::Enter));
         assert!(!app.wizard().unwrap().force_content);
@@ -631,7 +680,10 @@ mod add_disk_wizard {
     fn backspace_edits_the_confirmation_text() {
         let mut app = App::new(single_group_report());
         app.handle_key(key(KeyCode::Char('a')));
-        app.set_wizard_state(shr_tui::wizard::WizardState { step: Some(Step::Confirm), ..Default::default() });
+        app.set_wizard_state(shr_tui::wizard::WizardState {
+            step: Some(Step::Confirm),
+            ..Default::default()
+        });
 
         app.handle_key(key(KeyCode::Char('x')));
         app.handle_key(key(KeyCode::Char('y')));
@@ -643,12 +695,18 @@ mod add_disk_wizard {
     fn esc_closes_the_wizard_from_any_step_without_requesting_execute() {
         let mut app = App::new(single_group_report());
         app.handle_key(key(KeyCode::Char('a')));
-        app.set_wizard_state(shr_tui::wizard::WizardState { step: Some(Step::Confirm), ..Default::default() });
+        app.set_wizard_state(shr_tui::wizard::WizardState {
+            step: Some(Step::Confirm),
+            ..Default::default()
+        });
         app.handle_key(key(KeyCode::Esc));
 
         assert!(app.wizard().is_none());
         assert!(app.take_wizard_action().is_none());
-        assert!(!app.should_quit(), "Esc while the wizard is open must close the wizard, not quit the TUI");
+        assert!(
+            !app.should_quit(),
+            "Esc while the wizard is open must close the wizard, not quit the TUI"
+        );
     }
 
     /// `Step::Executing` means a background thread is running the
@@ -674,7 +732,10 @@ mod add_disk_wizard {
             "Esc must not abandon an in-flight destructive operation"
         );
         assert_eq!(app.wizard().unwrap().step(), Step::Executing);
-        assert!(app.error().is_some(), "must say why Esc did nothing, not silently ignore it");
+        assert!(
+            app.error().is_some(),
+            "must say why Esc did nothing, not silently ignore it"
+        );
     }
 
     /// The second half: even with Esc refused during `Executing`, a result
@@ -686,7 +747,10 @@ mod add_disk_wizard {
     fn a_late_arriving_result_after_the_wizard_is_gone_is_not_silently_dropped() {
         let mut app = App::new(single_group_report());
         app.handle_key(key(KeyCode::Char('a')));
-        app.set_wizard_state(shr_tui::wizard::WizardState { step: Some(Step::Confirm), ..Default::default() });
+        app.set_wizard_state(shr_tui::wizard::WizardState {
+            step: Some(Step::Confirm),
+            ..Default::default()
+        });
         app.handle_key(key(KeyCode::Esc)); // Confirm still allows Esc to close.
         assert!(app.wizard().is_none());
 
@@ -712,7 +776,10 @@ mod add_disk_wizard {
     fn a_late_arriving_success_after_the_wizard_is_gone_still_names_the_group() {
         let mut app = App::new(single_group_report());
         app.handle_key(key(KeyCode::Char('a')));
-        app.set_wizard_state(shr_tui::wizard::WizardState { step: Some(Step::Confirm), ..Default::default() });
+        app.set_wizard_state(shr_tui::wizard::WizardState {
+            step: Some(Step::Confirm),
+            ..Default::default()
+        });
         app.handle_key(key(KeyCode::Esc));
         assert!(app.wizard().is_none());
 
@@ -738,7 +805,9 @@ mod add_disk_wizard {
             ..Default::default()
         });
 
-        let msg = app.error().expect("A late success must not vanish silently either");
+        let msg = app
+            .error()
+            .expect("A late success must not vanish silently either");
         assert!(msg.contains("shr1"), "{msg}");
         // Not the layout version: that is an internal on-disk revision
         // number and no longer reaches any user-facing surface.
@@ -752,7 +821,11 @@ mod add_disk_wizard {
         app.handle_key(key(KeyCode::Char('a')));
 
         app.handle_key(key(KeyCode::Char('4'))); // would normally jump to the Groups tab
-        assert_eq!(app.tab(), Tab::Dashboard, "wizard key handling must consume the key, not fall through");
+        assert_eq!(
+            app.tab(),
+            Tab::Dashboard,
+            "wizard key handling must consume the key, not fall through"
+        );
     }
 }
 
@@ -775,10 +848,7 @@ fn refresh_worker_never_blocks_or_stacks_probes() {
     assert!(worker.request());
     assert!(before.elapsed() < Duration::from_millis(50));
     started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
-    assert!(
-        !worker.request(),
-        "an in-flight inspection must be coalesced"
-    );
+    assert!(!worker.request(), "an in-flight inspection must be coalesced");
 
     release_tx.send(()).unwrap();
     let result = loop {
@@ -848,9 +918,18 @@ mod disk_and_group_detail {
         app.handle_key(key(KeyCode::Char('2')));
 
         let text = render_tab(&app, 160, 20);
-        assert!(text.contains("1200h"), "known power-on-hours must render on the Disks tab: {text}");
-        assert!(text.contains("1 pending sector"), "known pending-sector count must render: {text}");
-        assert!(text.contains("SYSTEM DISK"), "the system-disk marker must render without opening a wizard: {text}");
+        assert!(
+            text.contains("1200h"),
+            "known power-on-hours must render on the Disks tab: {text}"
+        );
+        assert!(
+            text.contains("1 pending sector"),
+            "known pending-sector count must render: {text}"
+        );
+        assert!(
+            text.contains("SYSTEM DISK"),
+            "the system-disk marker must render without opening a wizard: {text}"
+        );
     }
 
     /// Known-value case via real navigation (`4` key): a group whose
@@ -860,14 +939,31 @@ mod disk_and_group_detail {
     fn groups_tab_shows_fault_tolerance_for_a_band_with_live_healthy_members_via_real_navigation() {
         let mut report = sample_report_with_groups();
         report.groups[0].bands[0].member_states = vec![
-            MemberStatus { name: "vda1".into(), role: Some(0), faulty: false, spare: false, write_mostly: false, replacement: false },
-            MemberStatus { name: "vdb1".into(), role: Some(1), faulty: false, spare: false, write_mostly: false, replacement: false },
+            MemberStatus {
+                name: "vda1".into(),
+                role: Some(0),
+                faulty: false,
+                spare: false,
+                write_mostly: false,
+                replacement: false,
+            },
+            MemberStatus {
+                name: "vdb1".into(),
+                role: Some(1),
+                faulty: false,
+                spare: false,
+                write_mostly: false,
+                replacement: false,
+            },
         ];
         let mut app = App::new(report);
         app.handle_key(key(KeyCode::Char('4')));
 
         let text = render_tab(&app, 160, 20);
-        assert!(text.contains("tolerates 1-disk loss"), "a fully-healthy SHR band must show the nominal tolerance: {text}");
+        assert!(
+            text.contains("tolerates 1-disk loss"),
+            "a fully-healthy SHR band must show the nominal tolerance: {text}"
+        );
     }
 
     /// Honesty requirement via real navigation: `sample_report_with_
@@ -879,6 +975,9 @@ mod disk_and_group_detail {
         app.handle_key(key(KeyCode::Char('4')));
 
         let text = render_tab(&app, 160, 20);
-        assert!(text.contains("no live member data"), "missing live member data must say so: {text}");
+        assert!(
+            text.contains("no live member data"),
+            "missing live member data must say so: {text}"
+        );
     }
 }

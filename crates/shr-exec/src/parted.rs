@@ -16,12 +16,7 @@ impl<'a> PartedExecutor<'a> {
     }
 
     /// Add partition given start and end byte offsets
-    pub fn add_partition(
-        &self,
-        dev_path: &str,
-        start_bytes: u64,
-        end_bytes: u64,
-    ) -> Result<(), ExecError> {
+    pub fn add_partition(&self, dev_path: &str, start_bytes: u64, end_bytes: u64) -> Result<(), ExecError> {
         let start = format!("{}B", start_bytes);
         let end = format!("{}B", end_bytes);
         self.runner
@@ -149,7 +144,11 @@ pub fn partition_dev_path(dev_path: &str, part_num: u32) -> String {
     let path = std::path::Path::new(dev_path);
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or(dev_path);
 
-    if name.starts_with("ata-") || name.starts_with("wwn-") || name.starts_with("nvme-") || name.starts_with("scsi-") {
+    if name.starts_with("ata-")
+        || name.starts_with("wwn-")
+        || name.starts_with("nvme-")
+        || name.starts_with("scsi-")
+    {
         format!("{}-part{}", dev_path, part_num)
     } else if name.chars().last().is_some_and(|c| c.is_ascii_digit()) {
         format!("{}p{}", dev_path, part_num)

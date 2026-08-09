@@ -17,7 +17,6 @@ pub use parted::{partition_dev_path, PartedExecutor};
 pub use safety::SafetyGuard;
 pub use throttle::{
     MetricsSampler, NullMetricsSampler, ReshapePriority, ReshapeThrottle, SafetyThresholds,
-    ThrottleController, ThrottleDecision, ThrottleMetrics, RESHAPE_SPEED_CEILING_KB,
-    RESHAPE_SPEED_FLOOR_KB, RESHAPE_SPEED_INITIAL_KB, STRIPE_CACHE_DEFAULT,
+    ThrottleController, ThrottleDecision, ThrottleMetrics, RESHAPE_SPEED_CEILING_KB, RESHAPE_SPEED_FLOOR_KB,
+    RESHAPE_SPEED_INITIAL_KB, STRIPE_CACHE_DEFAULT,
 };
-

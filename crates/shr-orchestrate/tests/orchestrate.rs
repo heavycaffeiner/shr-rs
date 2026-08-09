@@ -1,21 +1,18 @@
-use shr_command::{
-    AlwaysConfirmSink, AlwaysRejectConfirmSink, RecordingConfirmSink, RecordingProgressSink,
-};
+use shr_command::{AlwaysConfirmSink, AlwaysRejectConfirmSink, RecordingConfirmSink, RecordingProgressSink};
 use shr_core::{DiskId, ExpansionStep, RaidLevel, RedundancyMode, RedundantBand};
 use shr_exec::{
-    CommandOutput, CommandRunner, DryRunRunner, ExecError, MetricsSampler, ReshapePriority,
-    ReshapeThrottle, ThrottleDecision, ThrottleMetrics, RESHAPE_SPEED_FLOOR_KB,
-    RESHAPE_SPEED_INITIAL_KB,
+    CommandOutput, CommandRunner, DryRunRunner, ExecError, MetricsSampler, ReshapePriority, ReshapeThrottle,
+    ThrottleDecision, ThrottleMetrics, RESHAPE_SPEED_FLOOR_KB, RESHAPE_SPEED_INITIAL_KB,
 };
 use shr_inspect::{resolve_disk_ref, ByIdIndex, DiskRef, ResolvedDisk};
 use shr_orchestrate::{
-    preview_destroy, CreateRequest, ExpandRequest, OrchestrationEngine, OrchestrateError,
-    ReconcileAction, AUTO_SNAPSHOT_PREFIX,
+    preview_destroy, CreateRequest, ExpandRequest, OrchestrateError, OrchestrationEngine, ReconcileAction,
+    AUTO_SNAPSHOT_PREFIX,
 };
 use shr_state::conf::{scrub_unit_paths, write_scrub_timer_units};
 use shr_state::{
-    ArrayState, NotifyPolicy, ScrubOutcome, StateBand, StateCheckpoint, StateDisk, StateExpansion,
-    StateFile, StateFilesystem, StatePartition, StatePendingDisk, StateScrubResult, StateStore,
+    ArrayState, NotifyPolicy, ScrubOutcome, StateBand, StateCheckpoint, StateDisk, StateExpansion, StateFile,
+    StateFilesystem, StatePartition, StatePendingDisk, StateScrubResult, StateStore,
 };
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -269,7 +266,10 @@ impl FailingRunner {
     }
 
     fn failing_once_on(trigger: impl Into<String>) -> Self {
-        Self { fail_once_trigger: Some(trigger.into()), ..Self::healthy() }
+        Self {
+            fail_once_trigger: Some(trigger.into()),
+            ..Self::healthy()
+        }
     }
 
     fn failing_once_and_forever(once: impl Into<String>, forever: impl Into<String>) -> Self {
@@ -281,11 +281,17 @@ impl FailingRunner {
     }
 
     fn without_btrfs() -> Self {
-        Self { filesystems_content: "nodev\tsysfs\next4\n".to_string(), ..Self::healthy() }
+        Self {
+            filesystems_content: "nodev\tsysfs\next4\n".to_string(),
+            ..Self::healthy()
+        }
     }
 
     fn degraded_band(md_name: impl Into<String>) -> Self {
-        Self { degraded_only_for: Some(md_name.into()), ..Self::healthy() }
+        Self {
+            degraded_only_for: Some(md_name.into()),
+            ..Self::healthy()
+        }
     }
 
     /// `md_name` is degraded (like `degraded_band`), but the failed
@@ -305,7 +311,10 @@ impl FailingRunner {
     /// never calls `readlink`), so it's safe to set right away. Callers
     /// must set the mdstat content via `set_mdstat_content` AFTER seeding,
     /// once the band's real (allocated) `md_name` is known.
-    fn degraded_by_a_different_member(md_name: impl Into<String>, old_kernel_name: impl Into<String>) -> Self {
+    fn degraded_by_a_different_member(
+        md_name: impl Into<String>,
+        old_kernel_name: impl Into<String>,
+    ) -> Self {
         Self {
             degraded_only_for: Some(md_name.into()),
             readlink_kernel_name: Some(old_kernel_name.into()),
@@ -383,7 +392,9 @@ impl FailingRunner {
             .map(|line| {
                 if line.starts_with("md") && line.contains(" : ") {
                     line.split_whitespace()
-                        .filter(|tok| *tok != kernel_name.as_str() && !tok.starts_with(&format!("{kernel_name}[")))
+                        .filter(|tok| {
+                            *tok != kernel_name.as_str() && !tok.starts_with(&format!("{kernel_name}["))
+                        })
                         .collect::<Vec<_>>()
                         .join(" ")
                 } else {
@@ -403,7 +414,10 @@ impl FailingRunner {
     }
 
     fn reshaping() -> Self {
-        Self { sync_action_response: "reshape".to_string(), ..Self::healthy() }
+        Self {
+            sync_action_response: "reshape".to_string(),
+            ..Self::healthy()
+        }
     }
 
     /// A reshaping array on a host where every `LiveMetricsSampler`
@@ -436,7 +450,10 @@ impl FailingRunner {
     }
 
     fn export_fails_after_grow() -> Self {
-        Self { fail_mdadm_export_after_grow: true, ..Self::healthy() }
+        Self {
+            fail_mdadm_export_after_grow: true,
+            ..Self::healthy()
+        }
     }
 
     /// Simulate a host where `/dev/mdN` already exists for every number in
@@ -452,13 +469,19 @@ impl FailingRunner {
             ));
         }
         content.push_str("unused devices: <none>\n");
-        Self { mdstat_content: Mutex::new(content), ..Self::healthy() }
+        Self {
+            mdstat_content: Mutex::new(content),
+            ..Self::healthy()
+        }
     }
 
     /// Simulate a host where LVM volume group `vg_name` already
     /// exists, independent of anything `state.toml` knows about.
     fn vg_already_exists(vg_name: impl Into<String>) -> Self {
-        Self { existing_vg_name: Some(vg_name.into()), ..Self::healthy() }
+        Self {
+            existing_vg_name: Some(vg_name.into()),
+            ..Self::healthy()
+        }
     }
 
     /// Simulate a host where logical volume `vg_name`/`lv_name`
@@ -485,7 +508,10 @@ impl FailingRunner {
     /// partitions, stops it, verifies the stop, and SUCCEEDS end to end --
     /// not merely rolls back cleanly.
     fn holder_array_of_own_partitions(holder_md: &str, holder_member: &str) -> Self {
-        Self { mdstat_content: Mutex::new(single_member_mdstat(holder_md, holder_member)), ..Self::healthy() }
+        Self {
+            mdstat_content: Mutex::new(single_member_mdstat(holder_md, holder_member)),
+            ..Self::healthy()
+        }
     }
 
     /// Like `holder_array_of_own_partitions`, but the holder array ALSO has
@@ -502,7 +528,10 @@ impl FailingRunner {
              {target_member}[0]\n      1000000 blocks super 1.2 [2/2] [UU]\n\
              unused devices: <none>\n"
         );
-        Self { mdstat_content: Mutex::new(content), ..Self::healthy() }
+        Self {
+            mdstat_content: Mutex::new(content),
+            ..Self::healthy()
+        }
     }
 
     /// Like `holder_array_of_own_partitions`, but `mdadm --stop` "succeeds"
@@ -575,12 +604,18 @@ impl CommandRunner for FailingRunner {
         if cmd_str.starts_with("mdadm --grow") {
             *self.grow_seen.lock().unwrap() = true;
             if let Some(md_arg) = args.iter().find(|a| a.starts_with("/dev/md")) {
-                self.grown_mds.lock().unwrap().insert(md_arg.trim_start_matches("/dev/").to_string());
+                self.grown_mds
+                    .lock()
+                    .unwrap()
+                    .insert(md_arg.trim_start_matches("/dev/").to_string());
             }
         }
         if cmd_str.starts_with("mdadm") && cmd_str.contains("--replace") && cmd_str.contains("--with") {
             if let Some(md_arg) = args.first().filter(|a| a.starts_with("/dev/md")) {
-                self.replacing_mds.lock().unwrap().insert(md_arg.trim_start_matches("/dev/").to_string());
+                self.replacing_mds
+                    .lock()
+                    .unwrap()
+                    .insert(md_arg.trim_start_matches("/dev/").to_string());
             }
         }
         if cmd_str.starts_with("sh -c echo check >") && cmd_str.contains("/md/sync_action") {
@@ -633,7 +668,10 @@ impl CommandRunner for FailingRunner {
         // exit code.
         if cmd_str.starts_with("mdadm --stop") && !self.stop_does_not_take_effect {
             if let Some(path) = args.last() {
-                self.stopped_mds.lock().unwrap().insert(path.trim_start_matches("/dev/").to_string());
+                self.stopped_mds
+                    .lock()
+                    .unwrap()
+                    .insert(path.trim_start_matches("/dev/").to_string());
             }
         }
 
@@ -645,7 +683,10 @@ impl CommandRunner for FailingRunner {
             if let Some(path) = args.iter().find(|a| a.starts_with("/dev/disk/by-id/")) {
                 let id = path.trim_start_matches("/dev/disk/by-id/");
                 return match self.by_id_kernel_names.get(id) {
-                    Some(kernel) => Ok(CommandOutput { stdout: format!("/dev/{kernel}\n"), stderr: String::new() }),
+                    Some(kernel) => Ok(CommandOutput {
+                        stdout: format!("/dev/{kernel}\n"),
+                        stderr: String::new(),
+                    }),
                     None => Err(simulated_failure(program)),
                 };
             }
@@ -654,7 +695,10 @@ impl CommandRunner for FailingRunner {
             // ONLY `readlink_kernel_name` (a dangling by-partuuid symlink,
             // i.e. the disk physically gone) makes this fail.
             return match &self.readlink_kernel_name {
-                Some(name) => Ok(CommandOutput { stdout: format!("/dev/{name}\n"), stderr: String::new() }),
+                Some(name) => Ok(CommandOutput {
+                    stdout: format!("/dev/{name}\n"),
+                    stderr: String::new(),
+                }),
                 None => Err(simulated_failure(program)),
             };
         }
@@ -668,18 +712,20 @@ impl CommandRunner for FailingRunner {
         if program == "vgs" {
             let requested = args.last().copied().unwrap_or("");
             return match &self.existing_vg_name {
-                Some(name) if name == requested => {
-                    Ok(CommandOutput { stdout: format!("  {name}\n"), stderr: String::new() })
-                }
+                Some(name) if name == requested => Ok(CommandOutput {
+                    stdout: format!("  {name}\n"),
+                    stderr: String::new(),
+                }),
                 _ => Err(simulated_failure(program)),
             };
         }
         if program == "lvs" {
             let requested = args.last().copied().unwrap_or("");
             return match &self.existing_lv_target {
-                Some(target) if target == requested => {
-                    Ok(CommandOutput { stdout: format!("  {target}\n"), stderr: String::new() })
-                }
+                Some(target) if target == requested => Ok(CommandOutput {
+                    stdout: format!("  {target}\n"),
+                    stderr: String::new(),
+                }),
                 _ => Err(simulated_failure(program)),
             };
         }
@@ -740,9 +786,7 @@ impl CommandRunner for FailingRunner {
                         program: program.to_string(),
                         exit_code: 32,
                         stdout: String::new(),
-                        stderr: format!(
-                            "mount: {mount_point}: special device {dev_path} does not exist.\n"
-                        ),
+                        stderr: format!("mount: {mount_point}: special device {dev_path} does not exist.\n"),
                     });
                 }
             }
@@ -770,7 +814,11 @@ impl CommandRunner for FailingRunner {
         // match. Scoped by substring the same way `degraded_only_for` is.
         if program == "cat" && args.iter().any(|a| a.ends_with("/md/degraded")) {
             if let Some(target) = &self.degraded_array_missing_for {
-                let path = args.iter().find(|a| a.ends_with("/md/degraded")).copied().unwrap_or("");
+                let path = args
+                    .iter()
+                    .find(|a| a.ends_with("/md/degraded"))
+                    .copied()
+                    .unwrap_or("");
                 if path.contains(target.as_str()) {
                     return Err(ExecError::NonZeroExit {
                         program: program.to_string(),
@@ -798,7 +846,11 @@ impl CommandRunner for FailingRunner {
         } else if program == "smartctl" {
             self.smartctl_response.clone()
         } else if program == "cat" && args.iter().any(|a| a.ends_with("/md/degraded")) {
-            let path = args.iter().find(|a| a.ends_with("/md/degraded")).copied().unwrap_or("");
+            let path = args
+                .iter()
+                .find(|a| a.ends_with("/md/degraded"))
+                .copied()
+                .unwrap_or("");
             match (&self.degraded_unparseable_for, &self.degraded_only_for) {
                 (Some(target), _) if path.contains(target.as_str()) => "not-a-number\n".to_string(),
                 (_, Some(target)) if path.contains(target.as_str()) => "1\n".to_string(),
@@ -814,8 +866,14 @@ impl CommandRunner for FailingRunner {
         } else if program == "ls" {
             self.ls_response.clone()
         } else if program == "cat" && args.iter().any(|a| a.ends_with("/md/sync_action")) {
-            let path = args.iter().find(|a| a.ends_with("/md/sync_action")).copied().unwrap_or("");
-            let md_name = path.trim_start_matches("/sys/block/").trim_end_matches("/md/sync_action");
+            let path = args
+                .iter()
+                .find(|a| a.ends_with("/md/sync_action"))
+                .copied()
+                .unwrap_or("");
+            let md_name = path
+                .trim_start_matches("/sys/block/")
+                .trim_end_matches("/md/sync_action");
             if self.scrubbing_mds.lock().unwrap().contains(md_name) {
                 "check".to_string()
             } else if (self.grown_mds.lock().unwrap().contains(md_name)
@@ -839,7 +897,10 @@ impl CommandRunner for FailingRunner {
         } else {
             String::new()
         };
-        Ok(CommandOutput { stdout, stderr: String::new() })
+        Ok(CommandOutput {
+            stdout,
+            stderr: String::new(),
+        })
     }
 
     fn is_dry_run(&self) -> bool {
@@ -939,7 +1000,10 @@ fn create_dry_run_never_creates_the_mount_point_directory_on_disk() {
 
     engine.create(req).unwrap();
 
-    assert!(!mount_point.exists(), "dry-run must never create the mount point directory on disk");
+    assert!(
+        !mount_point.exists(),
+        "dry-run must never create the mount point directory on disk"
+    );
 }
 
 /// `create()`'s mount-point directory, `create_snapshot_now`'s scratch
@@ -977,7 +1041,9 @@ fn directory_creation_for_mount_points_goes_through_the_runner_not_raw_fs() {
     engine.snapshot_create(None, "manual-check").unwrap();
     let snapshot_cmds = &runner.get_recorded()[mark..];
     assert!(
-        snapshot_cmds.iter().any(|c| c == "mkdir -p /run/shr-rs/snapshot-mount-default"),
+        snapshot_cmds
+            .iter()
+            .any(|c| c == "mkdir -p /run/shr-rs/snapshot-mount-default"),
         "create_snapshot_now's scratch mount directory creation must be recorded by the runner: \
          {snapshot_cmds:?}"
     );
@@ -989,8 +1055,10 @@ fn directory_creation_for_mount_points_goes_through_the_runner_not_raw_fs() {
     let auto_mark = runner.get_recorded().len();
     engine.snapshot_auto_run(7).unwrap();
     let auto_cmds = &runner.get_recorded()[auto_mark..];
-    let mkdir_count =
-        auto_cmds.iter().filter(|c| c.as_str() == "mkdir -p /run/shr-rs/snapshot-mount-default").count();
+    let mkdir_count = auto_cmds
+        .iter()
+        .filter(|c| c.as_str() == "mkdir -p /run/shr-rs/snapshot-mount-default")
+        .count();
     assert_eq!(
         mkdir_count, 2,
         "expected one mkdir from create_snapshot_now and one from prune_group_snapshots: {auto_cmds:?}"
@@ -1085,7 +1153,10 @@ fn create_rejects_a_disk_with_no_usable_capacity_in_this_layout() {
 
 fn looks_like_real_md_uuid(v: &str) -> bool {
     let groups: Vec<&str> = v.split(':').collect();
-    groups.len() == 4 && groups.iter().all(|g| g.len() == 8 && g.chars().all(|c| c.is_ascii_hexdigit()))
+    groups.len() == 4
+        && groups
+            .iter()
+            .all(|g| g.len() == 8 && g.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 fn looks_like_real_fs_uuid(v: &str) -> bool {
@@ -1142,11 +1213,19 @@ fn create_via_static_inspector_resolution_uses_real_by_id_and_metadata() {
 
     let state = engine.create(create_req(resolved)).unwrap();
 
-    let sdb = state.disks.iter().find(|d| d.id == "ata-WDC_WD40EFPX_WD-SERIAL-B").unwrap();
+    let sdb = state
+        .disks
+        .iter()
+        .find(|d| d.id == "ata-WDC_WD40EFPX_WD-SERIAL-B")
+        .unwrap();
     assert_eq!(sdb.serial.as_deref(), Some("WD-SERIAL-B"));
     assert_eq!(sdb.model.as_deref(), Some("WD Red Plus"));
 
-    let sdd = state.disks.iter().find(|d| d.id == "ata-ST4000VN006_ST-SERIAL-D").unwrap();
+    let sdd = state
+        .disks
+        .iter()
+        .find(|d| d.id == "ata-ST4000VN006_ST-SERIAL-D")
+        .unwrap();
     assert_eq!(sdd.serial.as_deref(), Some("ST-SERIAL-D"));
     assert_eq!(sdd.model.as_deref(), Some("Seagate IronWolf"));
 }
@@ -1166,7 +1245,11 @@ fn create_partitions_only_on_actual_band_members_heterogeneous() {
 
     let state = engine.create(create_req(hetero_disks())).unwrap();
 
-    assert_eq!(state.bands.len(), 2, "expected band0 (4 members) + band1 (2 members)");
+    assert_eq!(
+        state.bands.len(),
+        2,
+        "expected band0 (4 members) + band1 (2 members)"
+    );
     assert_eq!(state.bands[0].level, "raid5");
     assert_eq!(state.bands[0].member_partitions.len(), 4);
     assert_eq!(state.bands[1].level, "raid1");
@@ -1176,7 +1259,12 @@ fn create_partitions_only_on_actual_band_members_heterogeneous() {
     // only) -- band1 needs 4TB+ of usable length to have 2 members at all.
     for id in ["ata-3TB-A", "ata-3TB-B"] {
         let d = state.disks.iter().find(|d| d.id == id).unwrap();
-        assert_eq!(d.partitions.len(), 1, "{id} should only host band0, got {:?}", d.partitions);
+        assert_eq!(
+            d.partitions.len(),
+            1,
+            "{id} should only host band0, got {:?}",
+            d.partitions
+        );
         assert_eq!(d.partitions[0].band_index, 0);
     }
     // The 4TB and 6TB disks host both bands (the 6TB disk's remaining 2TB
@@ -1195,8 +1283,14 @@ fn create_partitions_only_on_actual_band_members_heterogeneous() {
     let mkpart_count = cmds.iter().filter(|c| c.contains("mkpart")).count();
     assert_eq!(mkpart_count, 6, "expected 6 mkpart calls, got: {cmds:?}");
     for id in ["ata-3TB-A", "ata-3TB-B"] {
-        let count = cmds.iter().filter(|c| c.contains("mkpart") && c.contains(id)).count();
-        assert_eq!(count, 1, "{id} should appear in exactly one mkpart command, got {count}");
+        let count = cmds
+            .iter()
+            .filter(|c| c.contains("mkpart") && c.contains(id))
+            .count();
+        assert_eq!(
+            count, 1,
+            "{id} should appear in exactly one mkpart command, got {count}"
+        );
     }
 }
 
@@ -1242,8 +1336,10 @@ fn mkpart_end_bytes(cmds: &[String], disk_id: &str, index: usize) -> u64 {
 }
 
 fn mkpart_args(cmds: &[String], disk_id: &str, index: usize) -> (u64, u64) {
-    let matching: Vec<&String> =
-        cmds.iter().filter(|c| c.contains("mkpart") && c.contains(disk_id)).collect();
+    let matching: Vec<&String> = cmds
+        .iter()
+        .filter(|c| c.contains("mkpart") && c.contains(disk_id))
+        .collect();
     let cmd = matching
         .get(index)
         .unwrap_or_else(|| panic!("no mkpart command #{index} for {disk_id} in {cmds:?}"));
@@ -1268,10 +1364,11 @@ fn create_partition_offsets_match_planner_reserved_head_and_alignment() {
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let disks = hetero_disks();
-    let core_disks: Vec<shr_core::Disk> =
-        disks.iter().map(shr_inspect::ResolvedDisk::to_planner_disk).collect();
-    let plan = shr_core::plan_initial(&shr_core::PlannerInput::new(core_disks, RedundancyMode::Shr))
-        .unwrap();
+    let core_disks: Vec<shr_core::Disk> = disks
+        .iter()
+        .map(shr_inspect::ResolvedDisk::to_planner_disk)
+        .collect();
+    let plan = shr_core::plan_initial(&shr_core::PlannerInput::new(core_disks, RedundancyMode::Shr)).unwrap();
 
     let state = engine.create(create_req(disks)).unwrap();
 
@@ -1294,11 +1391,10 @@ fn create_partition_offsets_match_planner_reserved_head_and_alignment() {
                 .partitions
                 .iter()
                 .find(|p| p.band_index == band.band_index())
-                .unwrap_or_else(|| {
-                    panic!("{member_id} has no partition for band {}", band.band_index())
-                });
+                .unwrap_or_else(|| panic!("{member_id} has no partition for band {}", band.band_index()));
             assert_eq!(
-                part.offset_bytes, expected_start,
+                part.offset_bytes,
+                expected_start,
                 "band {} offset mismatch for {member_id}",
                 band.band_index()
             );
@@ -1338,7 +1434,12 @@ fn expand_req(new_disks: Vec<ResolvedDisk>) -> ExpandRequest {
     // `skip_scrub_check: true` -- an earlier fix is exercised by its own dedicated
     // tests; every other test using this helper is testing something else
     // and shouldn't need a fabricated scrub history just to call expand().
-    ExpandRequest { name: None, new_disks, system_disks: vec!["sda".to_string()], skip_scrub_check: true }
+    ExpandRequest {
+        name: None,
+        new_disks,
+        system_disks: vec!["sda".to_string()],
+        skip_scrub_check: true,
+    }
 }
 
 /// Seed a real array via `create()` on `runner`, persist it, and return an
@@ -1372,17 +1473,33 @@ fn expand_grows_existing_band_at_the_same_level() {
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     let state = engine.expand(expand_req(vec![new_disk])).unwrap();
 
-    assert_eq!(state.bands.len(), 1, "same-level growth must not create a new band");
+    assert_eq!(
+        state.bands.len(),
+        1,
+        "same-level growth must not create a new band"
+    );
     assert_eq!(state.bands[0].level, "raid5");
     assert_eq!(state.bands[0].member_partitions.len(), 4);
-    assert!(state.disks.iter().any(|d| d.id == "ata-DISK4" && d.partitions.len() == 1));
+    assert!(state
+        .disks
+        .iter()
+        .any(|d| d.id == "ata-DISK4" && d.partitions.len() == 1));
     assert!(!state.expansion.in_progress);
 
     let cmds = runner.get_recorded();
-    assert!(cmds.iter().any(|c| c.contains("mdadm --add /dev/md0")), "{cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.contains("mdadm --add /dev/md0")),
+        "{cmds:?}"
+    );
     // D6: --backup-file always present, and no --level= for a same-level grow.
-    let grow = cmds.iter().find(|c| c.starts_with("mdadm --grow")).expect("no grow command");
-    assert_eq!(grow, "mdadm --grow /dev/md0 --raid-devices=4 --backup-file=/var/lib/shr-rs/backup-md0.bak");
+    let grow = cmds
+        .iter()
+        .find(|c| c.starts_with("mdadm --grow"))
+        .expect("no grow command");
+    assert_eq!(
+        grow,
+        "mdadm --grow /dev/md0 --raid-devices=4 --backup-file=/var/lib/shr-rs/backup-md0.bak"
+    );
     assert!(cmds.iter().any(|c| c == "pvresize /dev/md0"), "{cmds:?}");
     assert!(cmds.iter().any(|c| c.contains("lvextend")), "{cmds:?}");
     assert!(cmds.iter().any(|c| c.contains("resize max")), "{cmds:?}");
@@ -1415,7 +1532,10 @@ fn expand_removes_a_stale_backup_file_before_growing() {
         .position(|c| c == "rm -f /var/lib/shr-rs/backup-md0.bak")
         .unwrap_or_else(|| panic!("no removal of the stale backup file: {cmds:?}"));
     let grow_pos = cmds.iter().position(|c| c.starts_with("mdadm --grow")).unwrap();
-    assert!(rm_pos < grow_pos, "stale backup file must be cleared BEFORE growing: {cmds:?}");
+    assert!(
+        rm_pos < grow_pos,
+        "stale backup file must be cleared BEFORE growing: {cmds:?}"
+    );
     assert!(cmds.iter().any(|c| c == "mkdir -p /var/lib/shr-rs"), "{cmds:?}");
 }
 
@@ -1431,8 +1551,10 @@ fn expand_does_not_remove_a_backup_file_that_does_not_exist() {
     // the `reverify_targets` by-id existence probe for the disk being
     // added, which would abort the whole expand() before ever reaching
     // `prepare_backup_file`.
-    let runner =
-        FailingRunner { fail_forever_trigger: Some("test -e /var/lib/shr-rs".to_string()), ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        fail_forever_trigger: Some("test -e /var/lib/shr-rs".to_string()),
+        ..FailingRunner::healthy()
+    };
     let engine = seeded_engine(&runner, state_store, three_disks());
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
@@ -1440,11 +1562,19 @@ fn expand_does_not_remove_a_backup_file_that_does_not_exist() {
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.starts_with("rm -f") && c.contains("backup-")),
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("rm -f") && c.contains("backup-")),
         "must not remove a backup file that was never found to exist: {cmds:?}"
     );
-    let grow = cmds.iter().find(|c| c.starts_with("mdadm --grow")).expect("no grow command");
-    assert_eq!(grow, "mdadm --grow /dev/md0 --raid-devices=4 --backup-file=/var/lib/shr-rs/backup-md0.bak");
+    let grow = cmds
+        .iter()
+        .find(|c| c.starts_with("mdadm --grow"))
+        .expect("no grow command");
+    assert_eq!(
+        grow,
+        "mdadm --grow /dev/md0 --raid-devices=4 --backup-file=/var/lib/shr-rs/backup-md0.bak"
+    );
 }
 
 #[test]
@@ -1464,7 +1594,9 @@ fn expand_grow_never_overwrites_a_known_good_md_uuid_with_none_on_a_failed_rerea
     let engine = seeded_engine(&runner, state_store, three_disks());
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
-    let state = engine.expand(expand_req(vec![new_disk])).expect("a failed re-read must not fail expand()");
+    let state = engine
+        .expand(expand_req(vec![new_disk]))
+        .expect("a failed re-read must not fail expand()");
 
     assert!(
         state.bands[0].md_uuid.is_some(),
@@ -1518,9 +1650,15 @@ fn expand_grow_defers_lvm_and_btrfs_resize_while_a_reshape_is_still_running() {
     let engine = seeded_engine(&runner, state_store, three_disks());
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
-    let state = engine.expand(expand_req(vec![new_disk])).expect("a running reshape must not fail expand()");
+    let state = engine
+        .expand(expand_req(vec![new_disk]))
+        .expect("a running reshape must not fail expand()");
 
-    assert_eq!(state.bands[0].member_partitions.len(), 4, "the real member count must still be recorded");
+    assert_eq!(
+        state.bands[0].member_partitions.len(),
+        4,
+        "the real member count must still be recorded"
+    );
     assert!(!state.expansion.in_progress);
     assert!(
         state.bands[0].resize_pending,
@@ -1529,9 +1667,18 @@ fn expand_grow_defers_lvm_and_btrfs_resize_while_a_reshape_is_still_running() {
 
     let cmds = runner.get_recorded();
     assert!(cmds.iter().any(|c| c.starts_with("mdadm --grow")), "{cmds:?}");
-    assert!(!cmds.iter().any(|c| c == "pvresize /dev/md0"), "pvresize must be skipped mid-reshape: {cmds:?}");
-    assert!(!cmds.iter().any(|c| c.contains("lvextend")), "lvextend must be skipped mid-reshape: {cmds:?}");
-    assert!(!cmds.iter().any(|c| c.contains("resize max")), "btrfs resize must be skipped mid-reshape: {cmds:?}");
+    assert!(
+        !cmds.iter().any(|c| c == "pvresize /dev/md0"),
+        "pvresize must be skipped mid-reshape: {cmds:?}"
+    );
+    assert!(
+        !cmds.iter().any(|c| c.contains("lvextend")),
+        "lvextend must be skipped mid-reshape: {cmds:?}"
+    );
+    assert!(
+        !cmds.iter().any(|c| c.contains("resize max")),
+        "btrfs resize must be skipped mid-reshape: {cmds:?}"
+    );
 }
 
 /// A `MetricsSampler` test double that always reports the same fixed sample
@@ -1568,16 +1715,24 @@ fn expand_reshape_throttle_emergency_brakes_the_moment_smart_reallocated_rises()
     let created = create_engine.create(create_req(three_disks())).unwrap();
     state_store.save(&StateFile::new(vec![created])).unwrap();
 
-    let danger = FixedMetricsSampler(ThrottleMetrics { smart_delta_reallocated: Some(1), ..benign_metrics() });
+    let danger = FixedMetricsSampler(ThrottleMetrics {
+        smart_delta_reallocated: Some(1),
+        ..benign_metrics()
+    });
     let engine = OrchestrationEngine::new(&runner, state_store)
         .with_confirm_sink(&ALWAYS_CONFIRM)
         .with_metrics_sampler(&danger);
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
-    engine.expand(expand_req(vec![new_disk])).expect("a reshaping array must still expand successfully");
+    engine
+        .expand(expand_req(vec![new_disk]))
+        .expect("a reshaping array must still expand successfully");
 
     let cmds = runner.get_recorded();
-    let grow_pos = cmds.iter().position(|c| c.starts_with("mdadm --grow")).expect("no grow command");
+    let grow_pos = cmds
+        .iter()
+        .position(|c| c.starts_with("mdadm --grow"))
+        .expect("no grow command");
     let speed_writes: Vec<&String> = cmds[grow_pos..]
         .iter()
         .filter(|c| c.contains("speed_limit_max"))
@@ -1587,8 +1742,15 @@ fn expand_reshape_throttle_emergency_brakes_the_moment_smart_reallocated_rises()
     // danger tick overriding it down to the floor -- proving the decision
     // actually changed the kernel parameter a second time, not merely that
     // a `ThrottleDecision::EmergencyBrake` was computed and discarded.
-    assert_eq!(speed_writes.len(), 2, "expected an initial write plus one overriding brake: {cmds:?}");
-    assert!(speed_writes[0].contains(&RESHAPE_SPEED_INITIAL_KB.to_string()), "{speed_writes:?}");
+    assert_eq!(
+        speed_writes.len(),
+        2,
+        "expected an initial write plus one overriding brake: {cmds:?}"
+    );
+    assert!(
+        speed_writes[0].contains(&RESHAPE_SPEED_INITIAL_KB.to_string()),
+        "{speed_writes:?}"
+    );
     assert!(
         speed_writes[1].contains(&RESHAPE_SPEED_FLOOR_KB.to_string()),
         "an emergency brake must actually write the floor speed to speed_limit_max, not just log \
@@ -1623,7 +1785,10 @@ fn expand_reshape_throttle_with_no_sampler_override_uses_a_real_live_sampler_by_
     engine.expand(expand_req(vec![new_disk])).unwrap();
 
     let cmds = runner.get_recorded();
-    assert!(cmds.iter().any(|c| c == "cat /proc/loadavg"), "no live CPU-load read: {cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c == "cat /proc/loadavg"),
+        "no live CPU-load read: {cmds:?}"
+    );
     assert!(
         cmds.iter().any(|c| c.as_str() == "cat /proc/stat"),
         // Only one call here: this mock's /proc/stat is unscripted (empty),
@@ -1633,17 +1798,25 @@ fn expand_reshape_throttle_with_no_sampler_override_uses_a_real_live_sampler_by_
         // assertion is that a real read was ATTEMPTED at all.
         "no live IO-wait read attempt: {cmds:?}"
     );
-    assert!(cmds.iter().any(|c| c.starts_with("smartctl")), "no live SMART read: {cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.starts_with("smartctl")),
+        "no live SMART read: {cmds:?}"
+    );
 
-    let speed_max_writes: Vec<&String> =
-        cmds.iter().filter(|c| c.contains("speed_limit_max") && c.contains("/proc/sys/dev/raid")).collect();
+    let speed_max_writes: Vec<&String> = cmds
+        .iter()
+        .filter(|c| c.contains("speed_limit_max") && c.contains("/proc/sys/dev/raid"))
+        .collect();
     assert_eq!(
         speed_max_writes.len(),
         2,
         "unreadable telemetry must decelerate on top of apply_initial's write, never hold at \
          (or silently exceed) the initial speed as if everything were confirmed healthy: {cmds:?}"
     );
-    assert!(speed_max_writes[0].contains(&RESHAPE_SPEED_INITIAL_KB.to_string()), "{speed_max_writes:?}");
+    assert!(
+        speed_max_writes[0].contains(&RESHAPE_SPEED_INITIAL_KB.to_string()),
+        "{speed_max_writes:?}"
+    );
     let decelerated: u64 = (RESHAPE_SPEED_INITIAL_KB as f64 * 0.7).round() as u64;
     assert!(
         speed_max_writes[1].contains(&decelerated.to_string()),
@@ -1677,14 +1850,19 @@ fn expand_reshape_throttle_holds_when_the_live_sampler_reads_a_healthy_system_wi
     engine.expand(expand_req(vec![new_disk])).unwrap();
 
     let cmds = runner.get_recorded();
-    let speed_max_writes: Vec<&String> =
-        cmds.iter().filter(|c| c.contains("speed_limit_max") && c.contains("/proc/sys/dev/raid")).collect();
+    let speed_max_writes: Vec<&String> = cmds
+        .iter()
+        .filter(|c| c.contains("speed_limit_max") && c.contains("/proc/sys/dev/raid"))
+        .collect();
     assert_eq!(
         speed_max_writes.len(),
         1,
         "a healthy, fully-readable system with a known SMART baseline must hold, not decelerate: {cmds:?}"
     );
-    assert!(speed_max_writes[0].contains(&RESHAPE_SPEED_INITIAL_KB.to_string()), "{speed_max_writes:?}");
+    assert!(
+        speed_max_writes[0].contains(&RESHAPE_SPEED_INITIAL_KB.to_string()),
+        "{speed_max_writes:?}"
+    );
 
     let saved = state_store.load().unwrap().unwrap();
     assert_eq!(
@@ -1719,7 +1897,8 @@ fn tick_active_reshapes_seeds_from_the_kernels_real_current_speed_and_applies_a_
         "must read the REAL current speed before deciding, not assume the initial one: {cmds:?}"
     );
     assert!(
-        cmds.iter().any(|c| c.starts_with("sh -c") && c.contains("speed_limit_max")),
+        cmds.iter()
+            .any(|c| c.starts_with("sh -c") && c.contains("speed_limit_max")),
         "a fresh decision must actually be applied to the kernel parameter: {cmds:?}"
     );
 }
@@ -1738,7 +1917,10 @@ fn tick_active_reshapes_ignores_bands_that_are_not_reshaping() {
     let ticked = engine.tick_active_reshapes().unwrap();
     assert_eq!(ticked, 0, "an idle band must not be throttled");
     assert!(
-        !runner.get_recorded().iter().any(|c| c.contains("speed_limit_max")),
+        !runner
+            .get_recorded()
+            .iter()
+            .any(|c| c.contains("speed_limit_max")),
         "an idle band's kernel parameters must never be touched"
     );
 }
@@ -1762,7 +1944,8 @@ fn expand_reshape_throttle_honors_a_non_default_priority_profile() {
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter().any(|c| c.contains("speed_limit_max") && c.contains("20000")),
+        cmds.iter()
+            .any(|c| c.contains("speed_limit_max") && c.contains("20000")),
         "background priority's 20 MB/s initial speed must actually be written: {cmds:?}"
     );
 }
@@ -1788,8 +1971,8 @@ fn tick_active_reshapes_uses_the_bands_own_persisted_priority_not_the_engines_de
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::reshaping();
-    let engine = seeded_engine(&runner, state_store.clone(), three_disks())
-        .with_priority(ReshapePriority::Background);
+    let engine =
+        seeded_engine(&runner, state_store.clone(), three_disks()).with_priority(ReshapePriority::Background);
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     engine.expand(expand_req(vec![new_disk])).unwrap();
     let mark = runner.get_recorded().len();
@@ -1832,8 +2015,8 @@ fn tick_active_reshapes_uses_the_bands_own_persisted_priority_for_decision_thres
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::reshaping();
-    let engine = seeded_engine(&runner, state_store.clone(), three_disks())
-        .with_priority(ReshapePriority::Max);
+    let engine =
+        seeded_engine(&runner, state_store.clone(), three_disks()).with_priority(ReshapePriority::Max);
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     engine.expand(expand_req(vec![new_disk])).unwrap();
     let mark = runner.get_recorded().len();
@@ -1889,8 +2072,14 @@ fn reconcile_is_a_noop_while_the_reshape_is_still_running() {
     engine.expand(expand_req(vec![new_disk])).unwrap();
     let mark = runner.get_recorded().len();
 
-    let outcome = engine.reconcile().unwrap().expect("an active array must be found");
-    assert!(outcome.state.groups[0].bands[0].resize_pending, "still reshaping -- must remain pending");
+    let outcome = engine
+        .reconcile()
+        .unwrap()
+        .expect("an active array must be found");
+    assert!(
+        outcome.state.groups[0].bands[0].resize_pending,
+        "still reshaping -- must remain pending"
+    );
     // A resize that's still genuinely pending must not be reported as
     // something reconcile DID -- `performed` stays empty until the reshape
     // actually finishes.
@@ -1901,7 +2090,12 @@ fn reconcile_is_a_noop_while_the_reshape_is_still_running() {
     );
 
     let cmds = &runner.get_recorded()[mark..];
-    assert!(!cmds.iter().any(|c| c.contains("pvresize") || c.contains("lvextend") || c.contains("resize max")), "{cmds:?}");
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| c.contains("pvresize") || c.contains("lvextend") || c.contains("resize max")),
+        "{cmds:?}"
+    );
 }
 
 #[test]
@@ -1920,7 +2114,10 @@ fn reconcile_completes_a_deferred_resize_once_the_reshape_finishes() {
 
     runner.finish_reshape();
     let mark = runner.get_recorded().len();
-    let outcome = engine.reconcile().unwrap().expect("an active array must be found");
+    let outcome = engine
+        .reconcile()
+        .unwrap()
+        .expect("an active array must be found");
 
     assert!(
         !outcome.state.groups[0].bands[0].resize_pending,
@@ -1989,11 +2186,17 @@ fn expand_promotes_raid1_to_raid5_with_backup_file() {
     let state = engine.expand(expand_req(vec![new_disk])).unwrap();
 
     assert_eq!(state.bands.len(), 1);
-    assert_eq!(state.bands[0].level, "raid5", "RAID1(2) + 1 disk must promote to RAID5(3)");
+    assert_eq!(
+        state.bands[0].level, "raid5",
+        "RAID1(2) + 1 disk must promote to RAID5(3)"
+    );
     assert_eq!(state.bands[0].member_partitions.len(), 3);
 
     let cmds = runner.get_recorded();
-    let grow = cmds.iter().find(|c| c.starts_with("mdadm --grow")).expect("no grow command");
+    let grow = cmds
+        .iter()
+        .find(|c| c.starts_with("mdadm --grow"))
+        .expect("no grow command");
     assert_eq!(
         grow,
         "mdadm --grow /dev/md0 --level=raid5 --raid-devices=3 --backup-file=/var/lib/shr-rs/backup-md0.bak"
@@ -2013,12 +2216,24 @@ fn expand_level_up_with_a_larger_disk_leaves_its_remainder_unusable() {
     let new_disk = resolved_disk("ata-6TB", "sdd", 6_000_000_000_000);
     let state = engine.expand(expand_req(vec![new_disk])).unwrap();
 
-    assert_eq!(state.bands.len(), 1, "MarkUnusable must not create a band: {:?}", state.bands);
+    assert_eq!(
+        state.bands.len(),
+        1,
+        "MarkUnusable must not create a band: {:?}",
+        state.bands
+    );
     let disk6tb = state.disks.iter().find(|d| d.id == "ata-6TB").unwrap();
-    assert_eq!(disk6tb.partitions.len(), 1, "only the 4TB portion should be partitioned");
+    assert_eq!(
+        disk6tb.partitions.len(),
+        1,
+        "only the 4TB portion should be partitioned"
+    );
 
     let cmds = runner.get_recorded();
-    assert!(!cmds.iter().any(|c| c.contains("md1")), "no second array should ever be created: {cmds:?}");
+    assert!(
+        !cmds.iter().any(|c| c.contains("md1")),
+        "no second array should ever be created: {cmds:?}"
+    );
 }
 
 #[test]
@@ -2049,8 +2264,14 @@ fn expand_creates_new_band_for_two_larger_disks() {
 
     let all = runner.get_recorded();
     let cmds = &all[mark..];
-    assert!(cmds.iter().any(|c| c.contains("mdadm --create /dev/md1")), "{cmds:?}");
-    assert!(cmds.iter().any(|c| c.contains("pvcreate") && c.contains("md1")), "{cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.contains("mdadm --create /dev/md1")),
+        "{cmds:?}"
+    );
+    assert!(
+        cmds.iter().any(|c| c.contains("pvcreate") && c.contains("md1")),
+        "{cmds:?}"
+    );
     // The VG already exists (from the original create()) -- must extend it,
     // never create a second one.
     assert!(cmds.iter().any(|c| c == "vgextend shr_vg /dev/md1"), "{cmds:?}");
@@ -2058,8 +2279,7 @@ fn expand_creates_new_band_for_two_larger_disks() {
 }
 
 #[test]
-fn expand_resumes_a_crashed_multi_step_plan_from_the_persisted_checkpoint_without_replaying_finished_steps(
-) {
+fn expand_resumes_a_crashed_multi_step_plan_from_the_persisted_checkpoint_without_replaying_finished_steps() {
     // Hand-build a "crashed mid-plan" state.toml -- step 0 (GrowBand on
     // band0) already committed for real (exactly what `execute_grow` would
     // have persisted before a crash), step 1 (CreateBand for a new band1)
@@ -2096,8 +2316,12 @@ fn expand_resumes_a_crashed_multi_step_plan_from_the_persisted_checkpoint_withou
 
     // Apply step 0's real effect to the fixture by hand: band0 now has 5
     // members, and the two new disks each carry one band0 partition.
-    state.bands[0].member_partitions.push("part-new1-band0".to_string());
-    state.bands[0].member_partitions.push("part-new2-band0".to_string());
+    state.bands[0]
+        .member_partitions
+        .push("part-new1-band0".to_string());
+    state.bands[0]
+        .member_partitions
+        .push("part-new2-band0".to_string());
     for (id, kernel) in [("ata-NEW1", "sde"), ("ata-NEW2", "sdf")] {
         state.disks.push(StateDisk {
             id: id.to_string(),
@@ -2157,7 +2381,10 @@ fn expand_resumes_a_crashed_multi_step_plan_from_the_persisted_checkpoint_withou
     assert_eq!(result.bands.len(), 2, "{:?}", result.bands);
     assert!(!result.expansion.in_progress);
     assert!(result.expansion.checkpoint.is_none());
-    assert!(result.expansion.plan.is_empty(), "a finished expansion must not leave a stale plan behind");
+    assert!(
+        result.expansion.plan.is_empty(),
+        "a finished expansion must not leave a stale plan behind"
+    );
     assert!(result.expansion.new_disks.is_empty());
     assert_eq!(result.layout_version, 2);
     let band1_result = result.bands.iter().find(|b| b.index == 1).unwrap();
@@ -2166,10 +2393,19 @@ fn expand_resumes_a_crashed_multi_step_plan_from_the_persisted_checkpoint_withou
 
     let cmds = &runner.get_recorded()[mark..];
     // step 0 (GrowBand on band0) must NOT be replayed.
-    assert!(!cmds.iter().any(|c| c.contains("mdadm --add /dev/md0")), "step 0 was replayed: {cmds:?}");
-    assert!(!cmds.iter().any(|c| c.starts_with("mdadm --grow /dev/md0")), "step 0 was replayed: {cmds:?}");
+    assert!(
+        !cmds.iter().any(|c| c.contains("mdadm --add /dev/md0")),
+        "step 0 was replayed: {cmds:?}"
+    );
+    assert!(
+        !cmds.iter().any(|c| c.starts_with("mdadm --grow /dev/md0")),
+        "step 0 was replayed: {cmds:?}"
+    );
     // step 1 (CreateBand) must actually run.
-    assert!(cmds.iter().any(|c| c.contains("mdadm --create /dev/md1")), "{cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.contains("mdadm --create /dev/md1")),
+        "{cmds:?}"
+    );
     assert!(cmds.iter().any(|c| c == "vgextend shr_vg /dev/md1"), "{cmds:?}");
 }
 
@@ -2196,7 +2432,9 @@ fn expand_is_blocked_when_the_array_is_degraded() {
     let all = runner.get_recorded();
     let cmds = &all[mark..];
     assert!(
-        !cmds.iter().any(|c| c.contains("mkpart") || c.contains("mdadm --add") || c.contains("mdadm --grow")),
+        !cmds
+            .iter()
+            .any(|c| c.contains("mkpart") || c.contains("mdadm --add") || c.contains("mdadm --grow")),
         "{cmds:?}"
     );
 }
@@ -2218,7 +2456,11 @@ fn expand_refuses_when_an_expansion_is_already_in_progress() {
     let err = expand_engine.expand(expand_req(vec![new_disk])).unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     let after = runner.get_recorded();
-    assert_eq!(&after[mark..], &[] as &[String], "must not touch anything: {after:?}");
+    assert_eq!(
+        &after[mark..],
+        &[] as &[String],
+        "must not touch anything: {after:?}"
+    );
 }
 
 #[test]
@@ -2279,7 +2521,10 @@ fn expand_allows_a_disk_that_only_shares_a_substring_with_a_system_disk() {
         system_disks: vec!["loop1".to_string()],
         skip_scrub_check: true,
     };
-    assert!(engine.expand(req).is_ok(), "loop10 must not be treated as the system disk loop1");
+    assert!(
+        engine.expand(req).is_ok(),
+        "loop10 must not be treated as the system disk loop1"
+    );
 }
 
 // --- an earlier review findings (Step 4+5 review) ---
@@ -2301,12 +2546,17 @@ fn expand_rejects_a_disk_that_the_plan_would_not_use() {
     let tiny = resolved_disk("ata-TINY", "sde", 2 * 1024 * 1024 * 1024);
     let err = engine.expand(expand_req(vec![tiny])).unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
-    assert!(format!("{err}").contains("ata-TINY"), "error should name the unused disk: {err}");
+    assert!(
+        format!("{err}").contains("ata-TINY"),
+        "error should name the unused disk: {err}"
+    );
 
     let all = runner.get_recorded();
     let cmds = &all[mark..];
     assert!(
-        !cmds.iter().any(|c| c.contains("mkpart") || c.contains("mdadm --add") || c.contains("mdadm --grow")),
+        !cmds
+            .iter()
+            .any(|c| c.contains("mkpart") || c.contains("mdadm --add") || c.contains("mdadm --grow")),
         "{cmds:?}"
     );
 }
@@ -2376,13 +2626,22 @@ fn expand_add_member_failure_rolls_back_the_partition() {
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     let err = engine.expand(expand_req(vec![new_disk])).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Exec(_)), "original error must be preserved: {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Exec(_)),
+        "original error must be preserved: {err:?}"
+    );
 
     let all = runner.get_recorded();
     let cmds = &all[mark..];
-    assert_eq!(cmds.iter().filter(|c| c.contains("mkpart")).count(), 1, "{cmds:?}");
     assert_eq!(
-        cmds.iter().filter(|c| c.contains("parted") && c.contains(" rm ")).count(),
+        cmds.iter().filter(|c| c.contains("mkpart")).count(),
+        1,
+        "{cmds:?}"
+    );
+    assert_eq!(
+        cmds.iter()
+            .filter(|c| c.contains("parted") && c.contains(" rm "))
+            .count(),
         1,
         "{cmds:?}"
     );
@@ -2403,13 +2662,19 @@ fn expand_grow_failure_detaches_the_spare_and_removes_the_partition() {
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     let err = engine.expand(expand_req(vec![new_disk])).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Exec(_)), "original error must be preserved: {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Exec(_)),
+        "original error must be preserved: {err:?}"
+    );
 
     let all = runner.get_recorded();
     let cmds = &all[mark..];
     assert!(cmds.iter().any(|c| c.contains("mdadm --add")), "{cmds:?}");
     assert!(cmds.iter().any(|c| c.contains("mdadm --remove")), "{cmds:?}");
-    assert!(cmds.iter().any(|c| c.contains("parted") && c.contains(" rm ")), "{cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.contains("parted") && c.contains(" rm ")),
+        "{cmds:?}"
+    );
 }
 
 #[test]
@@ -2462,11 +2727,16 @@ fn create_checks_prerequisites_before_any_destructive_command() {
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let err = engine.create(create_req(three_disks())).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Exec(_)), "expected Exec error, got {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Exec(_)),
+        "expected Exec error, got {err:?}"
+    );
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.contains("mklabel") || c.contains("mkpart") || c.contains("--create")),
+        !cmds
+            .iter()
+            .any(|c| c.contains("mklabel") || c.contains("mkpart") || c.contains("--create")),
         "no destructive command should run before prerequisite checks pass: {cmds:?}"
     );
 }
@@ -2487,8 +2757,14 @@ fn create_blocks_when_btrfs_is_unsupported_before_any_partitioning() {
     );
 
     let cmds = runner.get_recorded();
-    assert!(!cmds.iter().any(|c| c.contains("mkpart")), "no partition before the btrfs check: {cmds:?}");
-    assert!(!cmds.iter().any(|c| c.contains("mdadm --create")), "no mdadm array before the btrfs check: {cmds:?}");
+    assert!(
+        !cmds.iter().any(|c| c.contains("mkpart")),
+        "no partition before the btrfs check: {cmds:?}"
+    );
+    assert!(
+        !cmds.iter().any(|c| c.contains("mdadm --create")),
+        "no mdadm array before the btrfs check: {cmds:?}"
+    );
 }
 
 #[test]
@@ -2502,13 +2778,25 @@ fn mdadm_create_failure_rolls_back_the_partitions_just_created() {
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let err = engine.create(create_req(three_disks())).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Exec(_)), "original error must be preserved: {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Exec(_)),
+        "original error must be preserved: {err:?}"
+    );
 
     let cmds = runner.get_recorded();
     assert_eq!(cmds.iter().filter(|c| c.contains("mkpart")).count(), 3);
-    let rm_count = cmds.iter().filter(|c| c.contains("parted") && c.contains(" rm ")).count();
-    assert_eq!(rm_count, 3, "expected rollback to remove all 3 partitions: {cmds:?}");
-    assert!(!cmds.iter().any(|c| c.contains("vgcreate")), "must not proceed to LVM after mdadm failed");
+    let rm_count = cmds
+        .iter()
+        .filter(|c| c.contains("parted") && c.contains(" rm "))
+        .count();
+    assert_eq!(
+        rm_count, 3,
+        "expected rollback to remove all 3 partitions: {cmds:?}"
+    );
+    assert!(
+        !cmds.iter().any(|c| c.contains("vgcreate")),
+        "must not proceed to LVM after mdadm failed"
+    );
 }
 
 #[test]
@@ -2519,11 +2807,17 @@ fn vgcreate_failure_rolls_back_mdadm_array_and_partitions() {
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let err = engine.create(create_req(three_disks())).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Exec(_)), "original error must be preserved: {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Exec(_)),
+        "original error must be preserved: {err:?}"
+    );
 
     let cmds = runner.get_recorded();
     assert_eq!(cmds.iter().filter(|c| c.contains("mdadm --create")).count(), 1);
-    assert!(cmds.iter().any(|c| c.contains("mdadm --stop")), "rollback must stop the array: {cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.contains("mdadm --stop")),
+        "rollback must stop the array: {cmds:?}"
+    );
     // `create()` now ALSO zeroes each new member partition's
     // residual superblock right before `mdadm --create` (3 calls), on top
     // of rollback's own 3 (TeardownArray zeroing the array it just made) --
@@ -2534,8 +2828,14 @@ fn vgcreate_failure_rolls_back_mdadm_array_and_partitions() {
         "expected 3 pre-create zero-superblock calls plus 3 rollback \
          TeardownArray zero-superblock calls: {cmds:?}"
     );
-    let rm_count = cmds.iter().filter(|c| c.contains("parted") && c.contains(" rm ")).count();
-    assert_eq!(rm_count, 3, "rollback must also remove the underlying partitions: {cmds:?}");
+    let rm_count = cmds
+        .iter()
+        .filter(|c| c.contains("parted") && c.contains(" rm "))
+        .count();
+    assert_eq!(
+        rm_count, 3,
+        "rollback must also remove the underlying partitions: {cmds:?}"
+    );
 }
 
 #[test]
@@ -2561,7 +2861,10 @@ fn create_zeroes_residual_superblocks_on_new_partitions_before_mdadm_create() {
     let cmds = runner.get_recorded();
     let zero_idx = cmds.iter().position(|c| c.contains("--zero-superblock"));
     let create_idx = cmds.iter().position(|c| c.contains("mdadm --create"));
-    assert!(zero_idx.is_some(), "expected a --zero-superblock call on the new member partitions: {cmds:?}");
+    assert!(
+        zero_idx.is_some(),
+        "expected a --zero-superblock call on the new member partitions: {cmds:?}"
+    );
     assert!(create_idx.is_some(), "expected mdadm --create to run: {cmds:?}");
     assert!(
         zero_idx.unwrap() < create_idx.unwrap(),
@@ -2597,7 +2900,9 @@ fn disk2_first_partition_kernel_name() -> String {
 /// (band0).
 fn partition_kernel_name(id: &str, part_num: u32) -> String {
     let probe = FailingRunner::healthy();
-    let disk_path = shr_inspect::resolve_disk_path(&DiskId::new(id)).display().to_string();
+    let disk_path = shr_inspect::resolve_disk_path(&DiskId::new(id))
+        .display()
+        .to_string();
     let path = shr_exec::PartedExecutor::new(&probe).partition_path_for_read(&disk_path, part_num);
     path.rsplit('/').next().unwrap().to_string()
 }
@@ -2628,7 +2933,9 @@ fn create_stops_a_self_contained_holder_before_mdadm_create_then_succeeds() {
     let runner = FailingRunner::holder_array_of_own_partitions("md7", &holder_member);
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
-    let state = engine.create(create_req(three_disks())).expect("create must succeed, not merely roll back");
+    let state = engine
+        .create(create_req(three_disks()))
+        .expect("create must succeed, not merely roll back");
     assert_eq!(state.bands.len(), 1);
 
     let cmds = runner.get_recorded();
@@ -2650,8 +2957,10 @@ fn create_stops_a_self_contained_holder_before_mdadm_create_then_succeeds() {
     );
     // The stop must be re-verified against live mdstat, not just issued --
     // i.e. `cat /proc/mdstat` runs again after `mdadm --stop`.
-    let mdstat_calls_after_stop =
-        cmds[stop_idx..].iter().filter(|c| c.as_str() == "cat /proc/mdstat").count();
+    let mdstat_calls_after_stop = cmds[stop_idx..]
+        .iter()
+        .filter(|c| c.as_str() == "cat /proc/mdstat")
+        .count();
     assert!(
         mdstat_calls_after_stop >= 1,
         "expected a live /proc/mdstat re-read after the stop, not just trusting its exit code: {cmds:?}"
@@ -2686,9 +2995,14 @@ fn create_refuses_to_stop_a_holder_that_also_spans_a_disk_outside_this_request()
         OrchestrateError::Rollback { source, failures } => {
             assert!(matches!(*source, OrchestrateError::Validation(_)), "{source:?}");
             let source_msg = source.to_string();
-            assert!(source_msg.contains("md9") && source_msg.contains("sdz1"), "{source_msg}");
             assert!(
-                failures.iter().any(|f| f.contains("md9") && f.contains("will not stop")),
+                source_msg.contains("md9") && source_msg.contains("sdz1"),
+                "{source_msg}"
+            );
+            assert!(
+                failures
+                    .iter()
+                    .any(|f| f.contains("md9") && f.contains("will not stop")),
                 "rollback must ALSO refuse to stop the foreign-spanning array, not silently \
                  stop what the forward path just refused: {failures:?}"
             );
@@ -2701,7 +3015,9 @@ fn create_refuses_to_stop_a_holder_that_also_spans_a_disk_outside_this_request()
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.starts_with("mdadm --stop") && c.contains("md9")),
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("mdadm --stop") && c.contains("md9")),
         "must never actually stop the foreign-spanning array, in either direction: {cmds:?}"
     );
     assert!(
@@ -2793,8 +3109,10 @@ fn expand_grow_stops_a_self_contained_holder_before_mdadm_add_then_succeeds() {
     );
     // The stop must be re-verified against live mdstat, not just
     // issued.
-    let mdstat_calls_after_stop =
-        cmds[stop_idx..].iter().filter(|c| c.as_str() == "cat /proc/mdstat").count();
+    let mdstat_calls_after_stop = cmds[stop_idx..]
+        .iter()
+        .filter(|c| c.as_str() == "cat /proc/mdstat")
+        .count();
     assert!(
         mdstat_calls_after_stop >= 1,
         "expected a live /proc/mdstat re-read after the stop: {cmds:?}"
@@ -2821,9 +3139,14 @@ fn expand_grow_refuses_to_stop_a_holder_that_also_spans_a_disk_outside_this_requ
         OrchestrateError::Rollback { source, failures } => {
             assert!(matches!(*source, OrchestrateError::Validation(_)), "{source:?}");
             let source_msg = source.to_string();
-            assert!(source_msg.contains("md9") && source_msg.contains("sdz1"), "{source_msg}");
             assert!(
-                failures.iter().any(|f| f.contains("md9") && f.contains("will not stop")),
+                source_msg.contains("md9") && source_msg.contains("sdz1"),
+                "{source_msg}"
+            );
+            assert!(
+                failures
+                    .iter()
+                    .any(|f| f.contains("md9") && f.contains("will not stop")),
                 "rollback must ALSO refuse to stop the foreign-spanning array: {failures:?}"
             );
         }
@@ -2835,7 +3158,9 @@ fn expand_grow_refuses_to_stop_a_holder_that_also_spans_a_disk_outside_this_requ
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.starts_with("mdadm --stop") && c.contains("md9")),
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("mdadm --stop") && c.contains("md9")),
         "must never actually stop the foreign-spanning array, in either direction: {cmds:?}"
     );
     assert!(
@@ -2904,8 +3229,10 @@ fn expand_create_band_stops_a_self_contained_holder_before_mdadm_create_then_suc
         stop_idx < zero_idx && zero_idx < create_idx,
         "order must be stop -> zero -> create, not any other order: {cmds:?}"
     );
-    let mdstat_calls_after_stop =
-        cmds[stop_idx..].iter().filter(|c| c.as_str() == "cat /proc/mdstat").count();
+    let mdstat_calls_after_stop = cmds[stop_idx..]
+        .iter()
+        .filter(|c| c.as_str() == "cat /proc/mdstat")
+        .count();
     assert!(
         mdstat_calls_after_stop >= 1,
         "expected a live /proc/mdstat re-read after the stop: {cmds:?}"
@@ -2914,7 +3241,10 @@ fn expand_create_band_stops_a_self_contained_holder_before_mdadm_create_then_suc
     // have touched md9 -- confirms the fix is scoped to band1's own check,
     // not a coincidental side effect of some other guard.
     let grow_pos = cmds.iter().position(|c| c.starts_with("mdadm --grow")).unwrap();
-    assert!(grow_pos < stop_idx, "band0's grow must run before band1's holder is stopped: {cmds:?}");
+    assert!(
+        grow_pos < stop_idx,
+        "band0's grow must run before band1's holder is stopped: {cmds:?}"
+    );
 }
 
 #[test]
@@ -2931,7 +3261,10 @@ fn expand_create_band_refuses_to_stop_a_holder_that_also_spans_a_disk_outside_th
         "Personalities : [raid1]\nmd9 : active raid1 sdz2[2] {member_b}[1] {member_a}[0]\n      \
          1000000 blocks super 1.2 [3/3] [UUU]\nunused devices: <none>\n"
     );
-    let runner = FailingRunner { mdstat_content: Mutex::new(content), ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        mdstat_content: Mutex::new(content),
+        ..FailingRunner::healthy()
+    };
     let engine = seeded_engine(&runner, state_store, three_disks());
     let mark = runner.get_recorded().len();
 
@@ -2950,16 +3283,23 @@ fn expand_create_band_refuses_to_stop_a_holder_that_also_spans_a_disk_outside_th
              own rollback), got {other:?}"
         ),
     };
-    assert!(source_msg.contains("md9") && source_msg.contains("sdz2"), "{source_msg}");
     assert!(
-        failures.iter().any(|f| f.contains("md9") && f.contains("will not stop")),
+        source_msg.contains("md9") && source_msg.contains("sdz2"),
+        "{source_msg}"
+    );
+    assert!(
+        failures
+            .iter()
+            .any(|f| f.contains("md9") && f.contains("will not stop")),
         "rollback must ALSO refuse to stop the foreign-spanning array: {failures:?}"
     );
 
     let all = runner.get_recorded();
     let cmds = &all[mark..];
     assert!(
-        !cmds.iter().any(|c| c.starts_with("mdadm --stop") && c.contains("md9")),
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("mdadm --stop") && c.contains("md9")),
         "must never actually stop the foreign-spanning array, in either direction: {cmds:?}"
     );
     // band0's GrowBand step never calls `mdadm --create` (only band1's
@@ -2986,15 +3326,23 @@ fn create_rejects_a_colliding_vg_name_before_any_destructive_command() {
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let err = engine.create(create_req(three_disks())).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Validation(_)), "expected Validation error, got {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Validation(_)),
+        "expected Validation error, got {err:?}"
+    );
     assert!(err.to_string().contains("shr_vg"), "{err}");
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.contains("mklabel") || c.contains("mkpart") || c.contains("mdadm --create")),
+        !cmds
+            .iter()
+            .any(|c| c.contains("mklabel") || c.contains("mkpart") || c.contains("mdadm --create")),
         "no destructive command should run before the VG-collision guard: {cmds:?}"
     );
-    assert!(cmds.iter().any(|c| c.starts_with("vgs")), "expected a live vgs check: {cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.starts_with("vgs")),
+        "expected a live vgs check: {cmds:?}"
+    );
 }
 
 #[test]
@@ -3010,11 +3358,16 @@ fn create_rejects_a_colliding_lv_name_before_any_destructive_command() {
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let err = engine.create(create_req(three_disks())).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Validation(_)), "expected Validation error, got {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Validation(_)),
+        "expected Validation error, got {err:?}"
+    );
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.contains("mklabel") || c.contains("mkpart") || c.contains("mdadm --create")),
+        !cmds
+            .iter()
+            .any(|c| c.contains("mklabel") || c.contains("mkpart") || c.contains("mdadm --create")),
         "no destructive command should run before the LV-collision guard: {cmds:?}"
     );
 }
@@ -3057,8 +3410,15 @@ fn rollback_failure_is_reported_without_losing_the_original_error() {
                 source_msg.contains("vgcreate"),
                 "source must specifically be the vgcreate failure, not a rollback failure: {source_msg}"
             );
-            assert_eq!(failures.len(), 3, "expected all 3 partition-removal rollback failures: {failures:?}");
-            assert!(failures.iter().all(|f| f.contains("remove partition")), "{failures:?}");
+            assert_eq!(
+                failures.len(),
+                3,
+                "expected all 3 partition-removal rollback failures: {failures:?}"
+            );
+            assert!(
+                failures.iter().all(|f| f.contains("remove partition")),
+                "{failures:?}"
+            );
         }
         other => panic!("expected OrchestrateError::Rollback, got {other:?}"),
     }
@@ -3094,12 +3454,19 @@ fn create_rejects_a_duplicate_group_name() {
     engine.create(create_req_named("shr1", three_disks())).unwrap();
     let mark = runner.get_recorded().len();
 
-    let err = engine.create(create_req_named("shr1", other_two_disks())).unwrap_err();
+    let err = engine
+        .create(create_req_named("shr1", other_two_disks()))
+        .unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("shr1"));
 
     let all = runner.get_recorded();
-    assert_eq!(&all[mark..], &[] as &[String], "must not touch anything: {:?}", &all[mark..]);
+    assert_eq!(
+        &all[mark..],
+        &[] as &[String],
+        "must not touch anything: {:?}",
+        &all[mark..]
+    );
 }
 
 #[test]
@@ -3122,7 +3489,12 @@ fn create_rejects_a_disk_that_already_belongs_to_another_group() {
     assert!(format!("{err}").contains("ata-DISK1"));
 
     let all = runner.get_recorded();
-    assert_eq!(&all[mark..], &[] as &[String], "must not touch anything: {:?}", &all[mark..]);
+    assert_eq!(
+        &all[mark..],
+        &[] as &[String],
+        "must not touch anything: {:?}",
+        &all[mark..]
+    );
 }
 
 #[test]
@@ -3133,7 +3505,9 @@ fn expand_rejects_a_disk_that_already_belongs_to_another_group() {
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     engine.create(create_req_named("shr1", three_disks())).unwrap();
-    engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
     let mark = runner.get_recorded().len();
 
     // ata-OTHER1 already belongs to shr2 -- trying to add it to shr1 via
@@ -3151,7 +3525,12 @@ fn expand_rejects_a_disk_that_already_belongs_to_another_group() {
     assert!(format!("{err}").contains("ata-OTHER1"));
 
     let all = runner.get_recorded();
-    assert_eq!(&all[mark..], &[] as &[String], "must not touch anything: {:?}", &all[mark..]);
+    assert_eq!(
+        &all[mark..],
+        &[] as &[String],
+        "must not touch anything: {:?}",
+        &all[mark..]
+    );
 }
 
 /// A `StateFile` with one throwaway group whose bands occupy exactly the
@@ -3264,8 +3643,15 @@ fn expand_creating_a_new_band_does_not_allocate_an_md_name_the_host_already_has(
     ];
     let state = engine.expand(expand_req(new_disks)).unwrap();
 
-    let new_band = state.bands.iter().find(|b| b.index == 1).expect("a new band must have been created");
-    assert_ne!(new_band.md_name, "md1", "must not collide with the host's pre-existing md1");
+    let new_band = state
+        .bands
+        .iter()
+        .find(|b| b.index == 1)
+        .expect("a new band must have been created");
+    assert_ne!(
+        new_band.md_name, "md1",
+        "must not collide with the host's pre-existing md1"
+    );
     assert_eq!(new_band.md_name, "md2");
 }
 
@@ -3278,18 +3664,22 @@ fn two_groups_created_independently_never_receive_the_same_md_name() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
-    let engine =
-        OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
+    let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let shr1 = engine.create(create_req_named("shr1", three_disks())).unwrap();
     assert_eq!(shr1.bands[0].md_name, "md0");
 
-    let shr2 = engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    let shr2 = engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
     assert_ne!(
         shr1.bands[0].md_name, shr2.bands[0].md_name,
         "two independently-created groups' band0 must never collide on /dev/mdN"
     );
-    assert_eq!(shr2.bands[0].md_name, "md1", "the next free md number after shr1's md0");
+    assert_eq!(
+        shr2.bands[0].md_name, "md1",
+        "the next free md number after shr1's md0"
+    );
 
     let persisted = state_store.load().unwrap().unwrap();
     assert_eq!(persisted.groups.len(), 2);
@@ -3335,14 +3725,20 @@ fn expand_creating_a_new_band_never_collides_with_another_groups_md_name() {
         .unwrap();
 
     assert_eq!(expanded.bands.len(), 2, "{:?}", expanded.bands);
-    let new_band =
-        expanded.bands.iter().find(|b| b.index == 1).expect("a new band must have been created");
+    let new_band = expanded
+        .bands
+        .iter()
+        .find(|b| b.index == 1)
+        .expect("a new band must have been created");
     assert!(
         !shr2_md_names.contains(&new_band.md_name),
         "shr1's newly-created band got md name `{}`, which collides with shr2's: {shr2_md_names:?}",
         new_band.md_name
     );
-    assert_eq!(new_band.md_name, "md3", "next free after md0 (shr1 band0), md1/md2 (shr2)");
+    assert_eq!(
+        new_band.md_name, "md3",
+        "next free after md0 (shr1 band0), md1/md2 (shr2)"
+    );
 }
 
 #[test]
@@ -3356,7 +3752,9 @@ fn expand_requires_a_name_when_multiple_groups_exist() {
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     engine.create(create_req_named("shr1", three_disks())).unwrap();
-    engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
     let mark = runner.get_recorded().len();
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
@@ -3372,7 +3770,12 @@ fn expand_requires_a_name_when_multiple_groups_exist() {
     assert!(format!("{err}").contains("--name"));
 
     let all = runner.get_recorded();
-    assert_eq!(&all[mark..], &[] as &[String], "must not touch anything: {:?}", &all[mark..]);
+    assert_eq!(
+        &all[mark..],
+        &[] as &[String],
+        "must not touch anything: {:?}",
+        &all[mark..]
+    );
 }
 
 #[test]
@@ -3380,11 +3783,12 @@ fn expand_can_target_a_specific_group_leaving_the_other_group_unaffected() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
-    let engine =
-        OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
+    let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
 
     engine.create(create_req_named("shr1", three_disks())).unwrap();
-    let shr2_before = engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    let shr2_before = engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     let expanded = engine
@@ -3396,11 +3800,18 @@ fn expand_can_target_a_specific_group_leaving_the_other_group_unaffected() {
         })
         .unwrap();
     assert_eq!(expanded.name, "shr1");
-    assert_eq!(expanded.bands[0].member_partitions.len(), 4, "shr1 must have grown");
+    assert_eq!(
+        expanded.bands[0].member_partitions.len(),
+        4,
+        "shr1 must have grown"
+    );
 
     let persisted = state_store.load().unwrap().unwrap();
     let shr2_after = persisted.find("shr2").expect("shr2 must still exist");
-    assert_eq!(*shr2_after, shr2_before, "expanding shr1 must not touch shr2 at all");
+    assert_eq!(
+        *shr2_after, shr2_before,
+        "expanding shr1 must not touch shr2 at all"
+    );
 }
 
 #[test]
@@ -3415,8 +3826,9 @@ fn creating_a_second_group_leaves_the_first_groups_mdadm_conf_and_fstab_entries_
     let runner = FailingRunner::healthy();
     let mdadm_conf = dir.path().join("mdadm.conf");
     let fstab = dir.path().join("fstab");
-    let engine =
-        OrchestrationEngine::new(&runner, state_store).with_conf_paths(&mdadm_conf, &fstab).with_confirm_sink(&ALWAYS_CONFIRM);
+    let engine = OrchestrationEngine::new(&runner, state_store)
+        .with_conf_paths(&mdadm_conf, &fstab)
+        .with_confirm_sink(&ALWAYS_CONFIRM);
 
     let shr1 = engine.create(create_req_named("shr1", three_disks())).unwrap();
     let mdadm_conf_after_first = std::fs::read_to_string(&mdadm_conf).unwrap();
@@ -3424,7 +3836,9 @@ fn creating_a_second_group_leaves_the_first_groups_mdadm_conf_and_fstab_entries_
     let fstab_after_first = std::fs::read_to_string(&fstab).unwrap();
     assert!(fstab_after_first.contains(&shr1.filesystem.mount_point));
 
-    engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
 
     let mdadm_conf_after_second = std::fs::read_to_string(&mdadm_conf).unwrap();
     assert!(
@@ -3491,19 +3905,28 @@ fn confirm_reject_blocks_create_before_any_destructive_command() {
     let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&confirm);
 
     let err = engine.create(create_req(three_disks())).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Rejected(_)), "expected Rejected, got {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Rejected(_)),
+        "expected Rejected, got {err:?}"
+    );
 
     let cmds = runner.get_recorded();
     assert!(
         cmds.iter().all(|c| !is_destructive(c)),
         "a rejected create must not issue any destructive command, got: {cmds:?}"
     );
-    assert!(!state_store.exists(), "a rejected create must not persist any state");
+    assert!(
+        !state_store.exists(),
+        "a rejected create must not persist any state"
+    );
 
     let requests = confirm.requests();
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].operation, "create");
-    assert!(requests[0].irreversible, "create is never cleanly undoable past its point of no return");
+    assert!(
+        requests[0].irreversible,
+        "create is never cleanly undoable past its point of no return"
+    );
 }
 
 #[test]
@@ -3536,7 +3959,10 @@ fn default_engine_without_a_confirm_sink_now_fails_closed() {
     let engine = OrchestrationEngine::new(&runner, state_store.clone());
 
     let err = engine.create(create_req(three_disks())).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Rejected(_)), "expected Rejected, got {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Rejected(_)),
+        "expected Rejected, got {err:?}"
+    );
     assert!(
         runner.get_recorded().iter().all(|c| !is_destructive(c)),
         "the default (no confirm sink wired) must not issue any destructive command"
@@ -3578,7 +4004,10 @@ fn dry_run_never_invokes_confirm_sink() {
     let state = engine.create(create_req(three_disks())).unwrap();
 
     assert_eq!(state.disks.len(), 3);
-    assert!(confirm.requests().is_empty(), "dry-run must never call ConfirmSink");
+    assert!(
+        confirm.requests().is_empty(),
+        "dry-run must never call ConfirmSink"
+    );
 }
 
 #[test]
@@ -3587,13 +4016,15 @@ fn confirm_reject_blocks_expand_before_any_destructive_command() {
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
     let confirm = RecordingConfirmSink::rejecting();
-    let engine =
-        seeded_engine(&runner, state_store, three_disks()).with_confirm_sink(&confirm);
+    let engine = seeded_engine(&runner, state_store, three_disks()).with_confirm_sink(&confirm);
 
     let cmds_before = runner.get_recorded().len();
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     let err = engine.expand(expand_req(vec![new_disk])).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Rejected(_)), "expected Rejected, got {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Rejected(_)),
+        "expected Rejected, got {err:?}"
+    );
 
     let all_cmds = runner.get_recorded();
     let new_cmds = &all_cmds[cmds_before..];
@@ -3614,7 +4045,9 @@ fn create_reports_progress_stages_in_order() {
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
     let progress = RecordingProgressSink::new();
-    let engine = OrchestrationEngine::new(&runner, state_store).with_progress_sink(&progress).with_confirm_sink(&ALWAYS_CONFIRM);
+    let engine = OrchestrationEngine::new(&runner, state_store)
+        .with_progress_sink(&progress)
+        .with_confirm_sink(&ALWAYS_CONFIRM);
 
     engine.create(create_req(three_disks())).unwrap();
 
@@ -3662,7 +4095,11 @@ fn expand_reports_progress_per_step_and_a_final_done() {
 // ---------------------------------------------------------------------
 
 fn fresh_completed_scrub() -> StateScrubResult {
-    StateScrubResult { finished_at: chrono::Utc::now().to_rfc3339(), outcome: ScrubOutcome::Completed, error_count: 0 }
+    StateScrubResult {
+        finished_at: chrono::Utc::now().to_rfc3339(),
+        outcome: ScrubOutcome::Completed,
+        error_count: 0,
+    }
 }
 
 /// Overwrite every band's `last_scrub` in the persisted state for `group`
@@ -3687,13 +4124,20 @@ fn scrub_start_writes_check_to_every_band_and_starts_btrfs_scrub() {
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter().any(|c| c == "sh -c echo check > /sys/block/md0/md/sync_action"),
+        cmds.iter()
+            .any(|c| c == "sh -c echo check > /sys/block/md0/md/sync_action"),
         "{cmds:?}"
     );
-    assert!(cmds.iter().any(|c| c.starts_with("btrfs scrub start")), "{cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.starts_with("btrfs scrub start")),
+        "{cmds:?}"
+    );
 
     let saved = state_store.load().unwrap().unwrap();
-    assert!(saved.groups[0].bands[0].scrub_in_progress, "must record that a scrub was started here");
+    assert!(
+        saved.groups[0].bands[0].scrub_in_progress,
+        "must record that a scrub was started here"
+    );
 }
 
 #[test]
@@ -3707,7 +4151,10 @@ fn scrub_start_is_blocked_when_a_band_is_degraded() {
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("degraded"), "{err}");
     assert!(
-        !runner.get_recorded().iter().any(|c| c.contains("sync_action") && c.contains("check")),
+        !runner
+            .get_recorded()
+            .iter()
+            .any(|c| c.contains("sync_action") && c.contains("check")),
         "must never issue the scrub write once blocked"
     );
 }
@@ -3777,8 +4224,10 @@ fn expand_reports_a_currently_running_btrfs_scrub_clearly_instead_of_e19s_stale_
     // of it.
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
-    let runner =
-        FailingRunner { btrfs_scrub_status_response: "Status:           running\n".to_string(), ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        btrfs_scrub_status_response: "Status:           running\n".to_string(),
+        ..FailingRunner::healthy()
+    };
     let engine = seeded_engine(&runner, state_store, three_disks());
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
@@ -3803,11 +4252,15 @@ fn scrub_cancel_writes_idle_and_clears_scrub_in_progress_even_when_degraded() {
     engine.scrub_start(None).unwrap();
 
     let degraded_runner = FailingRunner::degraded_band("md0");
-    let engine2 = OrchestrationEngine::new(&degraded_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
+    let engine2 =
+        OrchestrationEngine::new(&degraded_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
     engine2.scrub_cancel(None).unwrap();
 
     assert!(
-        degraded_runner.get_recorded().iter().any(|c| c == "sh -c echo idle > /sys/block/md0/md/sync_action"),
+        degraded_runner
+            .get_recorded()
+            .iter()
+            .any(|c| c == "sh -c echo idle > /sys/block/md0/md/sync_action"),
         "{:?}",
         degraded_runner.get_recorded()
     );
@@ -3827,8 +4280,10 @@ fn scrub_cancel_treats_an_already_finished_btrfs_scrub_as_success_and_still_pers
     // saved even though mdadm's own cancel HAD already landed.
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
-    let runner =
-        FailingRunner { btrfs_scrub_cancel_reports_not_running: true, ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        btrfs_scrub_cancel_reports_not_running: true,
+        ..FailingRunner::healthy()
+    };
     let engine = seeded_engine(&runner, state_store.clone(), three_disks());
     engine.scrub_start(None).unwrap();
 
@@ -3889,7 +4344,10 @@ fn scrub_cancel_surfaces_a_genuine_btrfs_failure_and_leaves_scrub_in_progress_tr
     engine.scrub_start(None).unwrap();
 
     let err = engine.scrub_cancel(None).unwrap_err();
-    assert!(matches!(err, OrchestrateError::Validation(_)), "expected a reported failure, got {err:?}");
+    assert!(
+        matches!(err, OrchestrateError::Validation(_)),
+        "expected a reported failure, got {err:?}"
+    );
     assert!(format!("{err}").contains("btrfs cancel"), "{err}");
 
     let saved = state_store.load().unwrap().unwrap();
@@ -3934,15 +4392,24 @@ fn scrub_cancel_persists_state_and_reports_a_read_back_failure_on_one_band() {
     let err = engine2.scrub_cancel(None).unwrap_err();
 
     // Half 2: the read-back failure must be reported, not silently dropped.
-    assert!(matches!(err, OrchestrateError::Validation(_)), "expected a reported failure, got {err:?}");
-    assert!(format!("{err}").contains("md1"), "read-back failure must name the band: {err}");
+    assert!(
+        matches!(err, OrchestrateError::Validation(_)),
+        "expected a reported failure, got {err:?}"
+    );
+    assert!(
+        format!("{err}").contains("md1"),
+        "read-back failure must name the band: {err}"
+    );
 
     // Half 1: state.toml must be written regardless of the read-back
     // failure -- band 0's genuine cancel confirmed by a successful read,
     // band 1 fail-safe (an unreadable signal is treated as still running,
     // per the rule, not as "safe to clear").
     let saved = state_store.load().unwrap().unwrap();
-    assert!(!saved.groups[0].bands[0].scrub_in_progress, "band 0's cancel was confirmed by a successful read");
+    assert!(
+        !saved.groups[0].bands[0].scrub_in_progress,
+        "band 0's cancel was confirmed by a successful read"
+    );
     assert!(
         saved.groups[0].bands[1].scrub_in_progress,
         "band 1's unreadable signal must fail safe to \"still running\", not false"
@@ -3971,7 +4438,10 @@ fn scrub_status_persists_the_result_once_every_band_and_btrfs_finish() {
     assert!(!done.running);
 
     let saved = state_store.load().unwrap().unwrap();
-    let last_scrub = saved.groups[0].bands[0].last_scrub.as_ref().expect("must persist a result once finished");
+    let last_scrub = saved.groups[0].bands[0]
+        .last_scrub
+        .as_ref()
+        .expect("must persist a result once finished");
     assert_eq!(last_scrub.outcome, ScrubOutcome::Completed);
     assert_eq!(last_scrub.error_count, 0);
     assert!(!saved.groups[0].bands[0].scrub_in_progress);
@@ -4000,7 +4470,10 @@ fn reconcile_self_heals_a_stale_scrub_in_progress_flag_left_by_a_scheduled_scrub
     // the scheduled-scrub timer leaves behind.
     runner.finish_scrub();
 
-    let outcome = engine.reconcile().unwrap().expect("an active array must be found");
+    let outcome = engine
+        .reconcile()
+        .unwrap()
+        .expect("an active array must be found");
     assert!(
         !outcome.state.groups[0].bands[0].scrub_in_progress,
         "reconcile() must self-heal the stale flag once the real scrub has finished"
@@ -4020,8 +4493,14 @@ fn reconcile_self_heals_a_stale_scrub_in_progress_flag_left_by_a_scheduled_scrub
         outcome.performed
     );
     let saved = state_store.load().unwrap().unwrap();
-    assert!(!saved.groups[0].bands[0].scrub_in_progress, "the self-heal must be persisted, not just returned");
-    let last_scrub = saved.groups[0].bands[0].last_scrub.as_ref().expect("reconcile must also record the result");
+    assert!(
+        !saved.groups[0].bands[0].scrub_in_progress,
+        "the self-heal must be persisted, not just returned"
+    );
+    let last_scrub = saved.groups[0].bands[0]
+        .last_scrub
+        .as_ref()
+        .expect("reconcile must also record the result");
     assert_eq!(last_scrub.outcome, ScrubOutcome::Completed);
 }
 
@@ -4042,7 +4521,9 @@ fn reconcile_does_not_probe_scrub_status_for_a_group_that_was_never_scrubbed() {
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.contains("sync_action") || c.contains("scrub status") || c.contains("mismatch_cnt")),
+        !cmds
+            .iter()
+            .any(|c| c.contains("sync_action") || c.contains("scrub status") || c.contains("mismatch_cnt")),
         "must not probe scrub status for a group that was never scrubbed: {cmds:?}"
     );
 }
@@ -4051,16 +4532,25 @@ fn reconcile_does_not_probe_scrub_status_for_a_group_that_was_never_scrubbed() {
 fn scrub_status_reports_the_real_error_count_from_mismatch_cnt() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
-    let runner = FailingRunner { mismatch_cnt_response: "7\n".to_string(), ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        mismatch_cnt_response: "7\n".to_string(),
+        ..FailingRunner::healthy()
+    };
     let engine = seeded_engine(&runner, state_store.clone(), three_disks());
     engine.scrub_start(None).unwrap();
     runner.finish_scrub();
 
     let report = engine.scrub_status(None).unwrap();
-    assert_eq!(report.error_count, 7, "mdadm's mismatch_cnt must surface as the scrub's error count");
+    assert_eq!(
+        report.error_count, 7,
+        "mdadm's mismatch_cnt must surface as the scrub's error count"
+    );
 
     let saved = state_store.load().unwrap().unwrap();
-    assert_eq!(saved.groups[0].bands[0].last_scrub.as_ref().unwrap().error_count, 7);
+    assert_eq!(
+        saved.groups[0].bands[0].last_scrub.as_ref().unwrap().error_count,
+        7
+    );
 }
 
 // ---------------------------------------------------------------------
@@ -4080,12 +4570,17 @@ fn scrub_status_reports_success_and_persists_the_result_even_when_webhook_delive
         fail_forever_trigger: Some("curl".to_string()),
         ..FailingRunner::healthy()
     };
-    let engine = seeded_engine(&runner, state_store.clone(), three_disks())
-        .with_notify_policy(NotifyPolicy { webhook_url: Some("https://dead.example.com".to_string()), systemd_notify: false });
+    let engine =
+        seeded_engine(&runner, state_store.clone(), three_disks()).with_notify_policy(NotifyPolicy {
+            webhook_url: Some("https://dead.example.com".to_string()),
+            systemd_notify: false,
+        });
     engine.scrub_start(None).unwrap();
     runner.finish_scrub();
 
-    let report = engine.scrub_status(None).expect("a dead webhook must not fail the scrub status call");
+    let report = engine
+        .scrub_status(None)
+        .expect("a dead webhook must not fail the scrub status call");
     assert_eq!(report.error_count, 7);
 
     let saved = state_store.load().unwrap().unwrap();
@@ -4096,14 +4591,20 @@ fn scrub_status_reports_success_and_persists_the_result_even_when_webhook_delive
     );
 
     let cmds = runner.get_recorded();
-    assert!(cmds.iter().any(|c| c.starts_with("curl ")), "must still have attempted delivery: {cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.starts_with("curl ")),
+        "must still have attempted delivery: {cmds:?}"
+    );
 }
 
 #[test]
 fn scrub_status_posts_a_webhook_when_errors_are_found() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
-    let runner = FailingRunner { mismatch_cnt_response: "3\n".to_string(), ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        mismatch_cnt_response: "3\n".to_string(),
+        ..FailingRunner::healthy()
+    };
     let engine = seeded_engine(&runner, state_store, three_disks()).with_notify_policy(NotifyPolicy {
         webhook_url: Some("https://hooks.example.com/x".to_string()),
         systemd_notify: false,
@@ -4138,7 +4639,12 @@ fn scrub_status_does_not_notify_when_no_errors_were_found() {
     engine.scrub_status(None).unwrap();
 
     let cmds = runner.get_recorded();
-    assert!(!cmds.iter().any(|c| c.starts_with("curl ") || c.starts_with("systemd-notify")), "{cmds:?}");
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("curl ") || c.starts_with("systemd-notify")),
+        "{cmds:?}"
+    );
 }
 
 #[test]
@@ -4155,10 +4661,14 @@ fn check_health_reports_a_degraded_band_via_systemd_notify_by_default() {
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter().any(|c| c.starts_with("systemd-notify --status=") && c.contains("DEGRADED")),
+        cmds.iter()
+            .any(|c| c.starts_with("systemd-notify --status=") && c.contains("DEGRADED")),
         "{cmds:?}"
     );
-    assert!(!cmds.iter().any(|c| c.starts_with("curl ")), "no webhook configured -- must not attempt one: {cmds:?}");
+    assert!(
+        !cmds.iter().any(|c| c.starts_with("curl ")),
+        "no webhook configured -- must not attempt one: {cmds:?}"
+    );
 }
 
 /// `systemd-notify --status=...` never reaches `journalctl -u
@@ -4261,8 +4771,14 @@ fn check_health_emits_a_tracing_warn_event_with_the_status_line_when_systemd_not
         engine.check_health().unwrap();
     });
 
-    assert!(output.contains("DEGRADED"), "expected the status line in the tracing output, got: {output}");
-    assert!(output.contains("WARN"), "expected a WARN-level event (visible without RUST_LOG), got: {output}");
+    assert!(
+        output.contains("DEGRADED"),
+        "expected the status line in the tracing output, got: {output}"
+    );
+    assert!(
+        output.contains("WARN"),
+        "expected a WARN-level event (visible without RUST_LOG), got: {output}"
+    );
 }
 
 #[test]
@@ -4274,14 +4790,19 @@ fn check_health_emits_no_tracing_event_when_systemd_notify_is_disabled() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::degraded_band("md0");
-    let engine = seeded_engine(&runner, state_store, three_disks())
-        .with_notify_policy(NotifyPolicy { webhook_url: None, systemd_notify: false });
+    let engine = seeded_engine(&runner, state_store, three_disks()).with_notify_policy(NotifyPolicy {
+        webhook_url: None,
+        systemd_notify: false,
+    });
 
     let output = capture_tracing(|| {
         engine.check_health().unwrap();
     });
 
-    assert!(output.trim().is_empty(), "systemd_notify=false must emit nothing to the journal, got: {output}");
+    assert!(
+        output.trim().is_empty(),
+        "systemd_notify=false must emit nothing to the journal, got: {output}"
+    );
 }
 
 #[test]
@@ -4293,13 +4814,20 @@ fn check_health_never_fails_even_when_webhook_delivery_fails() {
         fail_forever_trigger: Some("curl".to_string()),
         ..FailingRunner::healthy()
     };
-    let engine = seeded_engine(&runner, state_store, three_disks())
-        .with_notify_policy(NotifyPolicy { webhook_url: Some("https://dead.example.com".to_string()), systemd_notify: true });
+    let engine = seeded_engine(&runner, state_store, three_disks()).with_notify_policy(NotifyPolicy {
+        webhook_url: Some("https://dead.example.com".to_string()),
+        systemd_notify: true,
+    });
 
-    engine.check_health().expect("a dead webhook must not fail check_health");
+    engine
+        .check_health()
+        .expect("a dead webhook must not fail check_health");
 
     let cmds = runner.get_recorded();
-    assert!(cmds.iter().any(|c| c.starts_with("curl ")), "must still have attempted webhook delivery: {cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c.starts_with("curl ")),
+        "must still have attempted webhook delivery: {cmds:?}"
+    );
     assert!(
         cmds.iter().any(|c| c.starts_with("systemd-notify")),
         "the OTHER channel must still fire even though webhook delivery failed: {cmds:?}"
@@ -4316,10 +4844,11 @@ fn check_health_fires_smart_worsened_and_persists_the_new_total_when_reallocated
             .to_string(),
         ..FailingRunner::healthy()
     };
-    let engine = seeded_engine(&runner, state_store.clone(), three_disks()).with_notify_policy(NotifyPolicy {
-        webhook_url: Some("https://hooks.example.com/x".to_string()),
-        systemd_notify: false,
-    });
+    let engine =
+        seeded_engine(&runner, state_store.clone(), three_disks()).with_notify_policy(NotifyPolicy {
+            webhook_url: Some("https://hooks.example.com/x".to_string()),
+            systemd_notify: false,
+        });
 
     // Seed a prior reading of 0 so this run's smartctl-reported total of
     // (5 per disk * 3 member disks =) 15 computes a real, positive delta.
@@ -4331,7 +4860,9 @@ fn check_health_fires_smart_worsened_and_persists_the_new_total_when_reallocated
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter().any(|c| c.starts_with("curl ") && c.contains("smart_worsened") && c.contains("\"reallocated_delta\":15")),
+        cmds.iter().any(|c| c.starts_with("curl ")
+            && c.contains("smart_worsened")
+            && c.contains("\"reallocated_delta\":15")),
         "{cmds:?}"
     );
     let saved = state_store.load().unwrap().unwrap();
@@ -4347,14 +4878,18 @@ fn check_health_does_not_notify_a_healthy_unchanged_array() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
-    let engine = seeded_engine(&runner, state_store, three_disks())
-        .with_notify_policy(NotifyPolicy { webhook_url: Some("https://hooks.example.com/x".to_string()), systemd_notify: true });
+    let engine = seeded_engine(&runner, state_store, three_disks()).with_notify_policy(NotifyPolicy {
+        webhook_url: Some("https://hooks.example.com/x".to_string()),
+        systemd_notify: true,
+    });
 
     engine.check_health().unwrap();
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.starts_with("curl ") || c.starts_with("systemd-notify")),
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("curl ") || c.starts_with("systemd-notify")),
         "a healthy, unchanged array must not notify anything: {cmds:?}"
     );
 }
@@ -4379,11 +4914,14 @@ fn check_health_notifies_array_missing_instead_of_aborting_when_the_array_is_not
     };
     let engine = seeded_engine(&runner, state_store, three_disks());
 
-    engine.check_health().expect("a missing array must not abort the whole health-check tick");
+    engine
+        .check_health()
+        .expect("a missing array must not abort the whole health-check tick");
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter().any(|c| c.starts_with("systemd-notify --status=") && c.contains("no live mdadm array")),
+        cmds.iter()
+            .any(|c| c.starts_with("systemd-notify --status=") && c.contains("no live mdadm array")),
         "a vanished array is the worst case worth alerting on -- must notify, not stay silent: {cmds:?}"
     );
 }
@@ -4405,13 +4943,18 @@ fn check_health_still_reaches_a_later_groups_genuinely_degraded_band_after_one_g
     };
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
     engine.create(create_req_named("shr1", three_disks())).unwrap();
-    engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
 
-    engine.check_health().expect("one group's missing array must not abort the tick for the rest");
+    engine
+        .check_health()
+        .expect("one group's missing array must not abort the tick for the rest");
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter().any(|c| c.starts_with("systemd-notify --status=") && c.contains("no live mdadm array")),
+        cmds.iter()
+            .any(|c| c.starts_with("systemd-notify --status=") && c.contains("no live mdadm array")),
         "shr1's missing array must still notify: {cmds:?}"
     );
     assert!(
@@ -4440,17 +4983,24 @@ fn unparseable_degraded_is_not_reported_as_array_missing() {
     };
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
     engine.create(create_req_named("shr1", three_disks())).unwrap();
-    engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
 
-    engine.check_health().expect("an unparseable-but-assembled band must not abort the tick either");
+    engine
+        .check_health()
+        .expect("an unparseable-but-assembled band must not abort the tick either");
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.starts_with("systemd-notify --status=") && c.contains("no live mdadm array")),
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("systemd-notify --status=") && c.contains("no live mdadm array")),
         "unparseable degraded content is NOT evidence the array is missing -- must not claim it is: {cmds:?}"
     );
     assert!(
-        cmds.iter().any(|c| c.starts_with("systemd-notify --status=") && c.contains("DEGRADED")),
+        cmds.iter()
+            .any(|c| c.starts_with("systemd-notify --status=") && c.contains("DEGRADED")),
         "shr2's genuinely degraded band must still be reached: {cmds:?}"
     );
 }
@@ -4601,7 +5151,9 @@ fn recompress_issues_the_expected_command_when_healthy() {
     // must NOT be appended, real btrfs-progs v6.12 rejects `-czstd:9`.
     let recorded = runner.get_recorded();
     assert!(
-        recorded.iter().any(|c| c.starts_with("btrfs filesystem defragment -r -czstd ")),
+        recorded
+            .iter()
+            .any(|c| c.starts_with("btrfs filesystem defragment -r -czstd ")),
         "{recorded:?}"
     );
     assert!(
@@ -4610,7 +5162,10 @@ fn recompress_issues_the_expected_command_when_healthy() {
     );
     // The level lives in the remount, issued before defragment so the
     // rewritten extents actually pick it up.
-    assert!(recorded.iter().any(|c| c.contains("remount,compress=zstd:9")), "{recorded:?}");
+    assert!(
+        recorded.iter().any(|c| c.contains("remount,compress=zstd:9")),
+        "{recorded:?}"
+    );
 
     let state = state_store.load().unwrap().unwrap();
     assert_eq!(state.groups[0].filesystem.compression, "zstd:9");
@@ -4638,10 +5193,16 @@ fn recompress_rejects_an_invalid_compression_string_before_touching_anything() {
 
     let err = engine.recompress(None, "bogus").unwrap_err();
     assert!(matches!(err, OrchestrateError::Exec(_)), "{err:?}");
-    assert!(!runner.get_recorded().iter().any(|c| c.contains("defragment") || c.contains("remount")));
+    assert!(!runner
+        .get_recorded()
+        .iter()
+        .any(|c| c.contains("defragment") || c.contains("remount")));
 
     let state = state_store.load().unwrap().unwrap();
-    assert_eq!(state.groups[0].filesystem.compression, "zstd:3", "must not be updated on rejection");
+    assert_eq!(
+        state.groups[0].filesystem.compression, "zstd:3",
+        "must not be updated on rejection"
+    );
 }
 
 #[test]
@@ -4677,24 +5238,42 @@ fn create_builds_the_at_and_at_snapshots_subvolumes_and_ends_up_mounted_on_at() 
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter().any(|c| c == &format!("btrfs subvolume create {mount_point}/@")),
+        cmds.iter()
+            .any(|c| c == &format!("btrfs subvolume create {mount_point}/@")),
         "{cmds:?}"
     );
     assert!(
-        cmds.iter().any(|c| c == &format!("btrfs subvolume create {mount_point}/@snapshots")),
+        cmds.iter()
+            .any(|c| c == &format!("btrfs subvolume create {mount_point}/@snapshots")),
         "{cmds:?}"
     );
 
     let mount_cmds: Vec<&String> = cmds.iter().filter(|c| c.starts_with("mount ")).collect();
-    assert_eq!(mount_cmds.len(), 2, "expected the top-level mount THEN the subvol=@ mount: {cmds:?}");
-    assert!(!mount_cmds[0].contains("subvol="), "the first mount must be the default subvolume: {mount_cmds:?}");
-    assert!(mount_cmds[1].contains("subvol=@") && !mount_cmds[1].contains("subvol=@snapshots"), "{mount_cmds:?}");
+    assert_eq!(
+        mount_cmds.len(),
+        2,
+        "expected the top-level mount THEN the subvol=@ mount: {cmds:?}"
+    );
+    assert!(
+        !mount_cmds[0].contains("subvol="),
+        "the first mount must be the default subvolume: {mount_cmds:?}"
+    );
+    assert!(
+        mount_cmds[1].contains("subvol=@") && !mount_cmds[1].contains("subvol=@snapshots"),
+        "{mount_cmds:?}"
+    );
 
     // The top-level mount must be torn down before the real `subvol=@`
     // mount replaces it -- Btrfs only honors `subvol=` on a fresh mount.
-    let unmount_pos = cmds.iter().position(|c| c == &format!("umount {mount_point}")).expect("must unmount");
+    let unmount_pos = cmds
+        .iter()
+        .position(|c| c == &format!("umount {mount_point}"))
+        .expect("must unmount");
     let mount_at_pos = cmds.iter().position(|c| c == mount_cmds[1]).unwrap();
-    assert!(unmount_pos < mount_at_pos, "must unmount before remounting subvol=@: {cmds:?}");
+    assert!(
+        unmount_pos < mount_at_pos,
+        "must unmount before remounting subvol=@: {cmds:?}"
+    );
 }
 
 #[test]
@@ -4723,12 +5302,24 @@ fn preview_create_shows_the_same_at_snapshots_subvolume_commands_as_real_executi
     let (state, commands) = shr_orchestrate::preview_create(store, create_req(three_disks())).unwrap();
     let mount_point = &state.filesystem.mount_point;
 
-    assert!(commands.iter().any(|c| c == &format!("btrfs subvolume create {mount_point}/@")), "{commands:?}");
     assert!(
-        commands.iter().any(|c| c == &format!("btrfs subvolume create {mount_point}/@snapshots")),
+        commands
+            .iter()
+            .any(|c| c == &format!("btrfs subvolume create {mount_point}/@")),
         "{commands:?}"
     );
-    assert!(commands.iter().any(|c| c.starts_with("mount ") && c.contains("subvol=@") && !c.contains("subvol=@snapshots")), "{commands:?}");
+    assert!(
+        commands
+            .iter()
+            .any(|c| c == &format!("btrfs subvolume create {mount_point}/@snapshots")),
+        "{commands:?}"
+    );
+    assert!(
+        commands
+            .iter()
+            .any(|c| c.starts_with("mount ") && c.contains("subvol=@") && !c.contains("subvol=@snapshots")),
+        "{commands:?}"
+    );
 }
 
 #[test]
@@ -4746,15 +5337,21 @@ fn snapshot_create_mounts_the_top_level_subvolume_and_snapshots_at_into_snapshot
     let cmds = &runner.get_recorded()[mark..];
     let scratch = "/run/shr-rs/snapshot-mount-default";
     assert!(
-        cmds.iter().any(|c| c.starts_with("mount ") && c.ends_with(&format!(" {scratch}")) && !c.contains("subvol=")),
+        cmds.iter().any(|c| c.starts_with("mount ")
+            && c.ends_with(&format!(" {scratch}"))
+            && !c.contains("subvol=")),
         "must mount the default subvolume, not subvol=@: {cmds:?}"
     );
     assert!(
-        cmds.iter().any(|c| c
-            == &format!("btrfs subvolume snapshot -r {scratch}/@ {scratch}/@snapshots/before-upgrade")),
+        cmds.iter()
+            .any(|c| c
+                == &format!("btrfs subvolume snapshot -r {scratch}/@ {scratch}/@snapshots/before-upgrade")),
         "{cmds:?}"
     );
-    assert!(cmds.iter().any(|c| c == &format!("umount {scratch}")), "must unmount the scratch mount: {cmds:?}");
+    assert!(
+        cmds.iter().any(|c| c == &format!("umount {scratch}")),
+        "must unmount the scratch mount: {cmds:?}"
+    );
 }
 
 #[test]
@@ -4769,7 +5366,11 @@ fn snapshot_create_rejects_a_name_containing_a_slash_before_touching_anything() 
 
     let err = engine.snapshot_create(None, "../escape").unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
-    assert_eq!(&runner.get_recorded()[mark..], &[] as &[String], "must not touch anything");
+    assert_eq!(
+        &runner.get_recorded()[mark..],
+        &[] as &[String],
+        "must not touch anything"
+    );
 }
 
 #[test]
@@ -4782,7 +5383,10 @@ fn snapshot_create_still_unmounts_the_scratch_mount_when_the_snapshot_itself_fai
     let created = create_engine.create(create_req(three_disks())).unwrap();
     state_store.save(&StateFile::new(vec![created])).unwrap();
 
-    let failing = FailingRunner { fail_forever_trigger: Some("subvolume snapshot".to_string()), ..FailingRunner::healthy() };
+    let failing = FailingRunner {
+        fail_forever_trigger: Some("subvolume snapshot".to_string()),
+        ..FailingRunner::healthy()
+    };
     let engine = OrchestrationEngine::new(&failing, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let err = engine.snapshot_create(None, "will-fail").unwrap_err();
@@ -4815,14 +5419,19 @@ fn snapshot_create_rejects_a_name_that_already_exists_instead_of_letting_btrfs_r
     let created = create_engine.create(create_req(three_disks())).unwrap();
     state_store.save(&StateFile::new(vec![created])).unwrap();
 
-    let runner =
-        FailingRunner { ls_response: "nightly\nbefore-upgrade\n".to_string(), ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        ls_response: "nightly\nbefore-upgrade\n".to_string(),
+        ..FailingRunner::healthy()
+    };
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let err = engine.snapshot_create(None, "before-upgrade").unwrap_err();
     match &err {
         OrchestrateError::Validation(message) => {
-            assert!(message.contains("before-upgrade"), "must name the snapshot asked for: {message}");
+            assert!(
+                message.contains("before-upgrade"),
+                "must name the snapshot asked for: {message}"
+            );
         }
         other => panic!("expected Validation, got {other:?}"),
     }
@@ -4835,7 +5444,8 @@ fn snapshot_create_rejects_a_name_that_already_exists_instead_of_letting_btrfs_r
     // The collision is only visible with the top-level subvolume mounted,
     // so the scratch mount still has to come down on this path too.
     assert!(
-        cmds.iter().any(|c| c == "umount /run/shr-rs/snapshot-mount-default"),
+        cmds.iter()
+            .any(|c| c == "umount /run/shr-rs/snapshot-mount-default"),
         "must still unmount the scratch mount: {cmds:?}"
     );
 }
@@ -4853,8 +5463,10 @@ fn snapshot_create_still_proceeds_when_other_snapshots_exist_under_a_different_n
     let created = create_engine.create(create_req(three_disks())).unwrap();
     state_store.save(&StateFile::new(vec![created])).unwrap();
 
-    let runner =
-        FailingRunner { ls_response: "nightly\nbefore-upgrade\n".to_string(), ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        ls_response: "nightly\nbefore-upgrade\n".to_string(),
+        ..FailingRunner::healthy()
+    };
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     engine.snapshot_create(None, "after-upgrade").unwrap();
@@ -4863,7 +5475,8 @@ fn snapshot_create_still_proceeds_when_other_snapshots_exist_under_a_different_n
     let scratch = "/run/shr-rs/snapshot-mount-default";
     assert!(
         cmds.iter()
-            .any(|c| c == &format!("btrfs subvolume snapshot -r {scratch}/@ {scratch}/@snapshots/after-upgrade")),
+            .any(|c| c
+                == &format!("btrfs subvolume snapshot -r {scratch}/@ {scratch}/@snapshots/after-upgrade")),
         "{cmds:?}"
     );
 }
@@ -4884,7 +5497,10 @@ fn snapshot_create_rejects_the_reserved_auto_prefix() {
     let err = engine.snapshot_create(None, "auto-hand-crafted").unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("reserved"), "{err}");
-    assert!(runner.get_recorded()[mark..].is_empty(), "must reject before touching anything");
+    assert!(
+        runner.get_recorded()[mark..].is_empty(),
+        "must reject before touching anything"
+    );
 }
 
 #[test]
@@ -4894,8 +5510,12 @@ fn snapshot_auto_run_creates_one_auto_snapshot_per_group() {
     let seed_runner = FailingRunner::healthy();
     let seed_engine =
         OrchestrationEngine::new(&seed_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    seed_engine.create(create_req_named("shr1", three_disks())).unwrap();
-    seed_engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    seed_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
+    seed_engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
 
     let runner = FailingRunner::healthy();
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
@@ -4904,11 +5524,15 @@ fn snapshot_auto_run_creates_one_auto_snapshot_per_group() {
     assert_eq!(summary.len(), 2, "{summary:?}");
 
     let cmds = runner.get_recorded();
-    let snapshot_cmds: Vec<&String> =
-        cmds.iter().filter(|c| c.starts_with("btrfs subvolume snapshot")).collect();
+    let snapshot_cmds: Vec<&String> = cmds
+        .iter()
+        .filter(|c| c.starts_with("btrfs subvolume snapshot"))
+        .collect();
     assert_eq!(snapshot_cmds.len(), 2, "{cmds:?}");
     assert!(
-        snapshot_cmds.iter().all(|c| c.contains(&format!("@snapshots/{AUTO_SNAPSHOT_PREFIX}"))),
+        snapshot_cmds
+            .iter()
+            .all(|c| c.contains(&format!("@snapshots/{AUTO_SNAPSHOT_PREFIX}"))),
         "every created snapshot must carry the reserved auto- prefix: {snapshot_cmds:?}"
     );
 }
@@ -4922,7 +5546,10 @@ fn snapshot_auto_run_is_a_noop_when_no_active_array_exists() {
 
     let summary = engine.snapshot_auto_run(7).unwrap();
     assert!(summary.is_empty(), "{summary:?}");
-    assert!(runner.get_recorded().is_empty(), "a host with no state.toml has nothing to snapshot yet");
+    assert!(
+        runner.get_recorded().is_empty(),
+        "a host with no state.toml has nothing to snapshot yet"
+    );
 }
 
 /// `state.toml` can outlive the array it describes -- real-guest
@@ -4944,8 +5571,12 @@ fn snapshot_auto_run_skips_a_group_whose_array_is_not_assembled_but_still_snapsh
     let seed_runner = FailingRunner::healthy();
     let seed_engine =
         OrchestrationEngine::new(&seed_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    seed_engine.create(create_req_named("shr1", three_disks())).unwrap();
-    seed_engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    seed_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
+    seed_engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
 
     let runner = FailingRunner {
         mount_missing_device_for: Some("snapshot-mount-shr1".to_string()),
@@ -4954,20 +5585,34 @@ fn snapshot_auto_run_skips_a_group_whose_array_is_not_assembled_but_still_snapsh
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let summary = engine.snapshot_auto_run(7).unwrap();
-    assert_eq!(summary.len(), 2, "one line per group, even the skipped one: {summary:?}");
+    assert_eq!(
+        summary.len(),
+        2,
+        "one line per group, even the skipped one: {summary:?}"
+    );
     assert!(
-        summary.iter().any(|l| l.contains("shr1") && l.contains("SKIPPED")),
+        summary
+            .iter()
+            .any(|l| l.contains("shr1") && l.contains("SKIPPED")),
         "shr1's line must say it was skipped, not silently vanish: {summary:?}"
     );
     assert!(
-        summary.iter().any(|l| l.contains("shr2") && l.contains("created")),
+        summary
+            .iter()
+            .any(|l| l.contains("shr2") && l.contains("created")),
         "shr2 must still get its snapshot despite shr1's failure: {summary:?}"
     );
 
     let cmds = runner.get_recorded();
-    let snapshot_cmds: Vec<&String> =
-        cmds.iter().filter(|c| c.starts_with("btrfs subvolume snapshot")).collect();
-    assert_eq!(snapshot_cmds.len(), 1, "only shr2's snapshot must actually have been taken: {cmds:?}");
+    let snapshot_cmds: Vec<&String> = cmds
+        .iter()
+        .filter(|c| c.starts_with("btrfs subvolume snapshot"))
+        .collect();
+    assert_eq!(
+        snapshot_cmds.len(),
+        1,
+        "only shr2's snapshot must actually have been taken: {cmds:?}"
+    );
     assert!(snapshot_cmds[0].contains("snapshot-mount-shr2"), "{cmds:?}");
 }
 
@@ -5033,17 +5678,30 @@ fn snapshot_auto_run_prunes_oldest_auto_snapshots_beyond_keep_and_never_a_manual
     assert!(summary[0].contains("pruned 2"), "{summary:?}");
 
     let cmds = runner.get_recorded();
-    let deletes: Vec<&String> = cmds.iter().filter(|c| c.starts_with("btrfs subvolume delete")).collect();
+    let deletes: Vec<&String> = cmds
+        .iter()
+        .filter(|c| c.starts_with("btrfs subvolume delete"))
+        .collect();
     assert_eq!(deletes.len(), 2, "{deletes:?}");
-    assert!(deletes.iter().any(|c| c.contains("auto-20260101T000000Z")), "{deletes:?}");
-    assert!(deletes.iter().any(|c| c.contains("auto-20260102T000000Z")), "{deletes:?}");
     assert!(
-        !deletes.iter().any(|c| c.contains("auto-20260103T000000Z") || c.contains("auto-20260104T000000Z")),
+        deletes.iter().any(|c| c.contains("auto-20260101T000000Z")),
+        "{deletes:?}"
+    );
+    assert!(
+        deletes.iter().any(|c| c.contains("auto-20260102T000000Z")),
+        "{deletes:?}"
+    );
+    assert!(
+        !deletes
+            .iter()
+            .any(|c| c.contains("auto-20260103T000000Z") || c.contains("auto-20260104T000000Z")),
         "must keep the {} newest auto-snapshots: {deletes:?}",
         2
     );
     assert!(
-        !cmds.iter().any(|c| c.starts_with("btrfs subvolume delete") && c.contains("manual-keep-me-forever")),
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("btrfs subvolume delete") && c.contains("manual-keep-me-forever")),
         "a manually created snapshot must never be pruned, regardless of its age: {cmds:?}"
     );
 }
@@ -5058,13 +5716,27 @@ fn replace_disk_partitions_the_new_disk_and_issues_mdadm_replace() {
     state_store.save(&StateFile::new(vec![created])).unwrap();
 
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
-    let result = engine.replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()]).unwrap();
+    let result = engine
+        .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
+        .unwrap();
 
-    assert!(result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"), "{:?}", result.disks);
-    assert!(!result.disks.iter().any(|d| d.id == "ata-DISK1"), "old disk must be gone: {:?}", result.disks);
+    assert!(
+        result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"),
+        "{:?}",
+        result.disks
+    );
+    assert!(
+        !result.disks.iter().any(|d| d.id == "ata-DISK1"),
+        "old disk must be gone: {:?}",
+        result.disks
+    );
 
     let cmds = runner.get_recorded();
-    assert!(cmds.iter().any(|c| c.contains("mklabel gpt") && c.contains("ata-DISK4-NEW")), "{cmds:?}");
+    assert!(
+        cmds.iter()
+            .any(|c| c.contains("mklabel gpt") && c.contains("ata-DISK4-NEW")),
+        "{cmds:?}"
+    );
     // Mdadm's `--replace old --with new` requires
     // `new` to ALREADY be a member of the array -- `--with`'s target must
     // have been `--add`-ed FIRST, as a distinct, EARLIER command, not just
@@ -5088,7 +5760,11 @@ fn replace_disk_partitions_the_new_disk_and_issues_mdadm_replace() {
     assert_eq!(added_device, with_device, "{cmds:?}");
 
     let saved = state_store.load().unwrap().unwrap();
-    assert_eq!(saved.groups[0].disks.len(), 3, "member count must be unchanged, just one identity swapped");
+    assert_eq!(
+        saved.groups[0].disks.len(),
+        3,
+        "member count must be unchanged, just one identity swapped"
+    );
 }
 
 /// `replace_disk` updated the DISK's own
@@ -5112,7 +5788,9 @@ fn replace_disk_keeps_the_band_resolvable_for_a_later_expand() {
     state_store.save(&StateFile::new(vec![created])).unwrap();
 
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
-    engine.replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()]).unwrap();
+    engine
+        .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
+        .unwrap();
 
     // The real symptom, checked FIRST: a later expand must resolve every
     // band member back to a disk. Before the fix this fails with "band 0
@@ -5130,10 +5808,16 @@ fn replace_disk_keeps_the_band_resolvable_for_a_later_expand() {
     // order mirrors mdadm's device order, so this isn't just "contains it
     // somewhere".
     let saved = state_store.load().unwrap().unwrap();
-    let new_disk_state = saved.groups[0].disks.iter().find(|d| d.id == "ata-DISK4-NEW").unwrap();
+    let new_disk_state = saved.groups[0]
+        .disks
+        .iter()
+        .find(|d| d.id == "ata-DISK4-NEW")
+        .unwrap();
     let new_part_uuid = new_disk_state.partitions[0].part_uuid.clone();
     assert!(
-        saved.groups[0].bands[0].member_partitions.contains(&new_part_uuid),
+        saved.groups[0].bands[0]
+            .member_partitions
+            .contains(&new_part_uuid),
         "band must reference the new disk's part_uuid: {:?}",
         saved.groups[0].bands[0].member_partitions
     );
@@ -5169,12 +5853,25 @@ fn replace_disk_accepts_the_recorded_serial_with_no_live_system_call() {
     let runner = FailingRunner::healthy();
     let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
-    let result = engine.replace_disk(None, "SN-sdb", &new_disk, &["sda".to_string()]).unwrap();
+    let result = engine
+        .replace_disk(None, "SN-sdb", &new_disk, &["sda".to_string()])
+        .unwrap();
 
-    assert!(result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"), "{:?}", result.disks);
-    assert!(!result.disks.iter().any(|d| d.id == "ata-DISK1"), "old disk must be gone: {:?}", result.disks);
     assert!(
-        !runner.get_recorded().iter().any(|c| c.starts_with("readlink") && c.contains("by-id")),
+        result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"),
+        "{:?}",
+        result.disks
+    );
+    assert!(
+        !result.disks.iter().any(|d| d.id == "ata-DISK1"),
+        "old disk must be gone: {:?}",
+        result.disks
+    );
+    assert!(
+        !runner
+            .get_recorded()
+            .iter()
+            .any(|c| c.starts_with("readlink") && c.contains("by-id")),
         "serial matching must be resolvable from state.toml alone, with no by-id live lookup: {:?}",
         runner.get_recorded()
     );
@@ -5204,10 +5901,20 @@ fn replace_disk_accepts_a_live_kernel_name_by_resolving_the_right_disks_by_id_sy
     };
     let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
-    let result = engine.replace_disk(None, "sdc", &new_disk, &["sda".to_string()]).unwrap();
+    let result = engine
+        .replace_disk(None, "sdc", &new_disk, &["sda".to_string()])
+        .unwrap();
 
-    assert!(result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"), "{:?}", result.disks);
-    assert!(!result.disks.iter().any(|d| d.id == "ata-DISK2"), "the disk mapped to sdc must be gone: {:?}", result.disks);
+    assert!(
+        result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"),
+        "{:?}",
+        result.disks
+    );
+    assert!(
+        !result.disks.iter().any(|d| d.id == "ata-DISK2"),
+        "the disk mapped to sdc must be gone: {:?}",
+        result.disks
+    );
     assert!(
         result.disks.iter().any(|d| d.id == "ata-DISK1"),
         "ata-DISK1 (never mapped to sdc) must be untouched, proving the match wasn't just \"first in group\": {:?}",
@@ -5234,7 +5941,9 @@ fn replace_disk_unknown_reference_names_the_accepted_identifier_forms() {
     let runner = FailingRunner::healthy(); // no by-id/readlink mapping -- every live lookup fails
     let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
-    let err = engine.replace_disk(None, "loop99", &new_disk, &["sda".to_string()]).unwrap_err();
+    let err = engine
+        .replace_disk(None, "loop99", &new_disk, &["sda".to_string()])
+        .unwrap_err();
 
     let msg = err.to_string().to_lowercase();
     assert!(msg.contains("by-id"), "{msg}");
@@ -5259,7 +5968,9 @@ fn replace_disk_removes_the_old_member_once_the_replace_copy_has_already_finishe
     state_store.save(&StateFile::new(vec![created])).unwrap();
 
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
-    engine.replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()]).unwrap();
+    engine
+        .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
+        .unwrap();
 
     let cmds = runner.get_recorded();
     let replace = cmds
@@ -5278,12 +5989,15 @@ fn replace_disk_removes_the_old_member_once_the_replace_copy_has_already_finishe
         .unwrap_or_else(|| panic!("expected a cleanup `mdadm --remove` for the old member: {cmds:?}"));
     let replace_pos = cmds.iter().position(|c| c == replace).unwrap();
     let remove_pos = cmds.iter().position(|c| c == remove_cmd).unwrap();
-    assert!(replace_pos < remove_pos, "the old member must be removed AFTER --replace: {cmds:?}");
+    assert!(
+        replace_pos < remove_pos,
+        "the old member must be removed AFTER --replace: {cmds:?}"
+    );
 }
 
 #[test]
-fn replace_disk_treats_removal_as_success_when_mdstat_no_longer_lists_the_member_even_though_its_partition_symlink_still_resolves()
-{
+fn replace_disk_treats_removal_as_success_when_mdstat_no_longer_lists_the_member_even_though_its_partition_symlink_still_resolves(
+) {
     // Real-guest repro: `reconcile` (and, via the same code path,
     // `replace_disk`'s own synchronous cleanup) reported a successful
     // `mdadm --remove` as a FAILURE. Root cause: the post-remove check
@@ -5318,9 +6032,15 @@ fn replace_disk_treats_removal_as_success_when_mdstat_no_longer_lists_the_member
 
     let result = engine
         .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
-        .expect("a real removal must not be reported as a failure just because its by-partuuid \
-                 symlink still resolves");
-    assert!(result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"), "{:?}", result.disks);
+        .expect(
+            "a real removal must not be reported as a failure just because its by-partuuid \
+                 symlink still resolves",
+        );
+    assert!(
+        result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"),
+        "{:?}",
+        result.disks
+    );
 
     let saved = state_store.load().unwrap().unwrap();
     assert!(
@@ -5346,7 +6066,9 @@ fn replace_disk_surfaces_a_failed_old_member_removal_instead_of_reporting_plain_
     let runner = FailingRunner::failing_once_on("--remove");
     let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
-    let err = engine.replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()]).unwrap_err();
+    let err = engine
+        .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
+        .unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("attached"), "{err}");
 
@@ -5354,8 +6076,16 @@ fn replace_disk_surfaces_a_failed_old_member_removal_instead_of_reporting_plain_
     // happened for real and state.toml already reflects it -- ONLY the
     // cleanup step failed, so the record must not be rolled back.
     let saved = state_store.load().unwrap().unwrap();
-    assert!(saved.groups[0].disks.iter().any(|d| d.id == "ata-DISK4-NEW"), "{:?}", saved.groups[0].disks);
-    assert!(!saved.groups[0].disks.iter().any(|d| d.id == "ata-DISK1"), "{:?}", saved.groups[0].disks);
+    assert!(
+        saved.groups[0].disks.iter().any(|d| d.id == "ata-DISK4-NEW"),
+        "{:?}",
+        saved.groups[0].disks
+    );
+    assert!(
+        !saved.groups[0].disks.iter().any(|d| d.id == "ata-DISK1"),
+        "{:?}",
+        saved.groups[0].disks
+    );
 }
 
 #[test]
@@ -5383,11 +6113,17 @@ fn replace_disk_defers_old_member_removal_while_the_copy_is_still_running() {
     let result = engine
         .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
         .expect("a copy still running must not be reported as a failure");
-    assert!(result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"), "{:?}", result.disks);
+    assert!(
+        result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"),
+        "{:?}",
+        result.disks
+    );
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.starts_with("mdadm") && c.contains("--remove")),
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("mdadm") && c.contains("--remove")),
         "must not remove the old member while its copy is still running: {cmds:?}"
     );
     let updates = progress.updates();
@@ -5435,7 +6171,10 @@ fn reconcile_completes_a_deferred_replace_member_removal_once_the_copy_finishes(
     // the original partition on `ata-DISK1`/`sdb`) still resolving --
     // i.e. still physically attached -- for as long as it hasn't been
     // `--remove`d (see `removed_member_paths`'s doc comment).
-    let runner = FailingRunner { readlink_kernel_name: Some("sdb1".to_string()), ..FailingRunner::reshaping() };
+    let runner = FailingRunner {
+        readlink_kernel_name: Some("sdb1".to_string()),
+        ..FailingRunner::reshaping()
+    };
     let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
     engine
@@ -5458,7 +6197,10 @@ fn reconcile_completes_a_deferred_replace_member_removal_once_the_copy_finishes(
     );
     let mark = runner.get_recorded().len();
 
-    let outcome = engine.reconcile().unwrap().expect("an active array must be found");
+    let outcome = engine
+        .reconcile()
+        .unwrap()
+        .expect("an active array must be found");
     assert!(
         outcome.state.groups[0].bands[0].pending_member_removal.is_none(),
         "the deferred removal must be cleared once actually completed"
@@ -5492,7 +6234,10 @@ fn reconcile_completes_a_deferred_replace_member_removal_once_the_copy_finishes(
         .iter()
         .rposition(|c| c == &format!("readlink -e {old_member_path}"))
         .expect("reconcile must re-check the kernel after removing");
-    assert!(reverify_pos > remove_pos, "re-verification must happen AFTER --remove: {cmds:?}");
+    assert!(
+        reverify_pos > remove_pos,
+        "re-verification must happen AFTER --remove: {cmds:?}"
+    );
 
     let saved = state_store.load().unwrap().unwrap();
     assert!(
@@ -5516,7 +6261,9 @@ fn reconcile_does_not_touch_the_array_when_no_replace_removal_is_pending() {
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.contains("--remove") || c.starts_with("readlink")),
+        !cmds
+            .iter()
+            .any(|c| c.contains("--remove") || c.starts_with("readlink")),
         "must not probe for a stray replaced member when none is pending: {cmds:?}"
     );
 }
@@ -5537,10 +6284,15 @@ fn check_health_also_completes_a_deferred_replace_member_removal() {
     let created = seed_engine.create(create_req(three_disks())).unwrap();
     state_store.save(&StateFile::new(vec![created])).unwrap();
 
-    let runner = FailingRunner { readlink_kernel_name: Some("sdb1".to_string()), ..FailingRunner::reshaping() };
+    let runner = FailingRunner {
+        readlink_kernel_name: Some("sdb1".to_string()),
+        ..FailingRunner::reshaping()
+    };
     let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
-    engine.replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()]).unwrap();
+    engine
+        .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
+        .unwrap();
 
     runner.finish_reshape();
     runner.set_mdstat_content(
@@ -5566,20 +6318,28 @@ fn replace_disk_undoes_the_added_spare_and_reports_want_replacement_when_replace
     // `want_replacement` marker on the old member.
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
-    let runner =
-        FailingRunner { fail_forever_trigger: Some("--replace".to_string()), ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        fail_forever_trigger: Some("--replace".to_string()),
+        ..FailingRunner::healthy()
+    };
     let engine = seeded_engine(&runner, state_store, three_disks());
 
     let new_disk = resolved_disk("ata-DISK4-NEW", "sde", 4_000_000_000_000);
-    let err = engine.replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()]).unwrap_err();
+    let err = engine
+        .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
+        .unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     let msg = format!("{err}");
     assert!(msg.contains("want_replacement"), "{msg}");
 
     let cmds = runner.get_recorded();
-    assert!(cmds.iter().any(|c| c.starts_with("mdadm") && c.contains("--add")), "{cmds:?}");
     assert!(
-        cmds.iter().any(|c| c.starts_with("mdadm") && c.contains("--remove")),
+        cmds.iter().any(|c| c.starts_with("mdadm") && c.contains("--add")),
+        "{cmds:?}"
+    );
+    assert!(
+        cmds.iter()
+            .any(|c| c.starts_with("mdadm") && c.contains("--remove")),
         "must attempt to undo the spare it just added: {cmds:?}"
     );
 }
@@ -5593,10 +6353,16 @@ fn replace_disk_rejects_a_smaller_replacement() {
 
     let mark = runner.get_recorded().len();
     let smaller = resolved_disk("ata-SMALL", "sde", 2_000_000_000_000);
-    let err = engine.replace_disk(None, "ata-DISK1", &smaller, &["sda".to_string()]).unwrap_err();
+    let err = engine
+        .replace_disk(None, "ata-DISK1", &smaller, &["sda".to_string()])
+        .unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("smaller"), "{err}");
-    assert_eq!(runner.get_recorded().len(), mark, "must never touch any disk once blocked");
+    assert_eq!(
+        runner.get_recorded().len(),
+        mark,
+        "must never touch any disk once blocked"
+    );
 }
 
 #[test]
@@ -5607,7 +6373,9 @@ fn replace_disk_accepts_an_equal_size_replacement() {
     let engine = seeded_engine(&runner, state_store, three_disks());
 
     let same_size = resolved_disk("ata-DISK1-NEW", "sde", 4_000_000_000_000);
-    engine.replace_disk(None, "ata-DISK1", &same_size, &["sda".to_string()]).expect("equal size must be allowed");
+    engine
+        .replace_disk(None, "ata-DISK1", &same_size, &["sda".to_string()])
+        .expect("equal size must be allowed");
 }
 
 #[test]
@@ -5618,7 +6386,9 @@ fn replace_disk_rejects_a_disk_that_already_belongs_to_another_group() {
     let engine = seeded_engine(&runner, state_store, three_disks());
 
     let already_a_member = resolved_disk("ata-DISK2", "sdc", 4_000_000_000_000);
-    let err = engine.replace_disk(None, "ata-DISK1", &already_a_member, &["sda".to_string()]).unwrap_err();
+    let err = engine
+        .replace_disk(None, "ata-DISK1", &already_a_member, &["sda".to_string()])
+        .unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("already belongs"), "{err}");
 }
@@ -5631,7 +6401,9 @@ fn replace_disk_rejects_a_system_disk() {
     let engine = seeded_engine(&runner, state_store, three_disks());
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
-    let err = engine.replace_disk(None, "ata-DISK1", &new_disk, &["sde".to_string()]).unwrap_err();
+    let err = engine
+        .replace_disk(None, "ata-DISK1", &new_disk, &["sde".to_string()])
+        .unwrap_err();
     assert!(format!("{err}").contains("system disk"), "{err:?}");
 }
 
@@ -5659,7 +6431,9 @@ fn replace_disk_is_blocked_when_a_different_member_is_degraded() {
 
     let mark = runner.get_recorded().len();
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
-    let err = engine.replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()]).unwrap_err();
+    let err = engine
+        .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
+        .unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     assert!(format!("{err}").contains("OTHER than"), "{err}");
     // The block itself needs read-only commands (degraded_count, readlink,
@@ -5695,11 +6469,16 @@ fn replace_disk_rebuilds_via_add_when_old_disk_has_already_failed() {
         .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
         .expect("old_disk itself failing must not block its own replace");
 
-    assert!(result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"), "{:?}", result.disks);
+    assert!(
+        result.disks.iter().any(|d| d.id == "ata-DISK4-NEW"),
+        "{:?}",
+        result.disks
+    );
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter().any(|c| c.starts_with("mdadm") && c.contains("--remove")),
+        cmds.iter()
+            .any(|c| c.starts_with("mdadm") && c.contains("--remove")),
         "must remove the already-failed old member first: {cmds:?}"
     );
     assert!(
@@ -5707,12 +6486,18 @@ fn replace_disk_rebuilds_via_add_when_old_disk_has_already_failed() {
         "must rebuild via --add, not --replace: {cmds:?}"
     );
     assert!(
-        !cmds.iter().any(|c| c.starts_with("mdadm") && c.contains("--replace")),
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("mdadm") && c.contains("--replace")),
         "must not attempt --replace against a member that's already gone: {cmds:?}"
     );
 
     let saved = state_store.load().unwrap().unwrap();
-    assert_eq!(saved.groups[0].disks.len(), 3, "member count must be unchanged, just one identity swapped");
+    assert_eq!(
+        saved.groups[0].disks.len(),
+        3,
+        "member count must be unchanged, just one identity swapped"
+    );
 }
 
 #[test]
@@ -5728,11 +6513,16 @@ fn replace_disk_is_blocked_by_reject_confirm_sink_before_any_destructive_command
     let engine = OrchestrationEngine::new(&runner, state_store.clone());
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
-    let err = engine.replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()]).unwrap_err();
+    let err = engine
+        .replace_disk(None, "ata-DISK1", &new_disk, &["sda".to_string()])
+        .unwrap_err();
     assert!(matches!(err, OrchestrateError::Rejected(_)), "{err:?}");
 
     let saved = state_store.load().unwrap().unwrap();
-    assert!(saved.groups[0].disks.iter().any(|d| d.id == "ata-DISK1"), "old disk must be untouched");
+    assert!(
+        saved.groups[0].disks.iter().any(|d| d.id == "ata-DISK1"),
+        "old disk must be untouched"
+    );
 }
 
 // --- Destroy ------------------------------------------------------
@@ -5753,7 +6543,9 @@ fn destroy_removes_only_the_target_group_leaving_the_other_groups_and_configs_in
         .with_confirm_sink(&ALWAYS_CONFIRM);
 
     let shr1 = engine.create(create_req_named("shr1", three_disks())).unwrap();
-    let shr2 = engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    let shr2 = engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
 
     engine.destroy(Some("shr1"), false).unwrap();
 
@@ -5772,12 +6564,26 @@ fn destroy_removes_only_the_target_group_leaving_the_other_groups_and_configs_in
     );
 
     let fstab_after = std::fs::read_to_string(&fstab).unwrap();
-    assert!(!fstab_after.contains(&shr1.filesystem.mount_point), "{fstab_after}");
-    assert!(fstab_after.contains(&shr2.filesystem.mount_point), "{fstab_after}");
+    assert!(
+        !fstab_after.contains(&shr1.filesystem.mount_point),
+        "{fstab_after}"
+    );
+    assert!(
+        fstab_after.contains(&shr2.filesystem.mount_point),
+        "{fstab_after}"
+    );
 
     let cmds = runner.get_recorded();
-    assert!(cmds.iter().any(|c| c == &format!("umount {}", shr1.filesystem.mount_point)), "{cmds:?}");
-    assert!(cmds.iter().any(|c| c.starts_with("mdadm --stop") && c.contains(&shr1.bands[0].md_name)), "{cmds:?}");
+    assert!(
+        cmds.iter()
+            .any(|c| c == &format!("umount {}", shr1.filesystem.mount_point)),
+        "{cmds:?}"
+    );
+    assert!(
+        cmds.iter()
+            .any(|c| c.starts_with("mdadm --stop") && c.contains(&shr1.bands[0].md_name)),
+        "{cmds:?}"
+    );
 }
 
 /// A destroyed group's own `shr-rs-scrub-*`
@@ -5799,7 +6605,9 @@ fn destroy_removes_only_the_target_groups_scrub_unit_leaving_other_groups_units_
         .with_confirm_sink(&ALWAYS_CONFIRM);
 
     engine.create(create_req_named("shr1", three_disks())).unwrap();
-    engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
 
     // Seed both groups' scrub units for real, exactly like `shr-rs schedule
     // install` would -- proves cleanup is scoped by the SAME path-deriving
@@ -5816,7 +6624,8 @@ fn destroy_removes_only_the_target_groups_scrub_unit_leaving_other_groups_units_
     let cmds = &runner.get_recorded()[mark..];
 
     assert!(
-        cmds.iter().any(|c| c == "systemctl disable --now shr-rs-scrub-shr1.timer"),
+        cmds.iter()
+            .any(|c| c == "systemctl disable --now shr-rs-scrub-shr1.timer"),
         "must disable shr1's own timer: {cmds:?}"
     );
     assert!(cmds.iter().any(|c| c == "systemctl daemon-reload"), "{cmds:?}");
@@ -5825,7 +6634,10 @@ fn destroy_removes_only_the_target_groups_scrub_unit_leaving_other_groups_units_
         "shr2's unit must never be mentioned by a destroy of shr1: {cmds:?}"
     );
 
-    assert!(!shr1_service.exists(), "shr1's service file must actually be deleted");
+    assert!(
+        !shr1_service.exists(),
+        "shr1's service file must actually be deleted"
+    );
     assert!(!shr1_timer.exists(), "shr1's timer file must actually be deleted");
     assert!(shr2_service.exists(), "shr2's service file must survive");
     assert!(shr2_timer.exists(), "shr2's timer file must survive");
@@ -5848,7 +6660,11 @@ fn destroy_never_touches_a_hand_written_unit_that_merely_shares_the_groups_unit_
 
     let (hand_written, _timer) = scrub_unit_paths(&unit_dir, "shr1");
     std::fs::create_dir_all(&unit_dir).unwrap();
-    std::fs::write(&hand_written, "[Unit]\nDescription=an operator wrote this by hand, not shr-rs\n").unwrap();
+    std::fs::write(
+        &hand_written,
+        "[Unit]\nDescription=an operator wrote this by hand, not shr-rs\n",
+    )
+    .unwrap();
 
     let mark = runner.get_recorded().len();
     engine.destroy(Some("shr1"), false).unwrap();
@@ -5858,9 +6674,15 @@ fn destroy_never_touches_a_hand_written_unit_that_merely_shares_the_groups_unit_
         !cmds.iter().any(|c| c.starts_with("systemctl")),
         "an unowned lookalike must never trigger any systemctl call: {cmds:?}"
     );
-    assert!(hand_written.exists(), "the operator's own unit must never be deleted");
+    assert!(
+        hand_written.exists(),
+        "the operator's own unit must never be deleted"
+    );
     let content = std::fs::read_to_string(&hand_written).unwrap();
-    assert!(content.contains("an operator wrote this by hand"), "content must be untouched: {content}");
+    assert!(
+        content.contains("an operator wrote this by hand"),
+        "content must be untouched: {content}"
+    );
 }
 
 #[test]
@@ -5928,8 +6750,10 @@ fn destroy_leaves_state_and_configs_unchanged_when_stopping_the_array_fails() {
         .with_confirm_sink(&ALWAYS_CONFIRM);
     create_engine.create(create_req(three_disks())).unwrap();
 
-    let runner =
-        FailingRunner { fail_forever_trigger: Some("mdadm --stop".to_string()), ..FailingRunner::healthy() };
+    let runner = FailingRunner {
+        fail_forever_trigger: Some("mdadm --stop".to_string()),
+        ..FailingRunner::healthy()
+    };
     let engine = OrchestrationEngine::new(&runner, state_store.clone())
         .with_conf_paths(&mdadm_conf, &fstab)
         .with_confirm_sink(&ALWAYS_CONFIRM);
@@ -5939,7 +6763,11 @@ fn destroy_leaves_state_and_configs_unchanged_when_stopping_the_array_fails() {
     assert!(format!("{err}").contains("UNCHANGED"), "{err}");
 
     let saved = state_store.load().unwrap().unwrap();
-    assert_eq!(saved.groups.len(), 1, "group must still be recorded: destroy did not fully succeed");
+    assert_eq!(
+        saved.groups.len(),
+        1,
+        "group must still be recorded: destroy did not fully succeed"
+    );
     let mdadm_conf_after = std::fs::read_to_string(&mdadm_conf).unwrap();
     assert!(
         mdadm_conf_after.contains(&format!("ARRAY /dev/{}", saved.groups[0].bands[0].md_name)),
@@ -5957,8 +6785,14 @@ fn preview_destroy_never_persists_and_records_the_same_shape_of_commands_as_real
 
     let commands = preview_destroy(state_store.clone(), None, false).unwrap();
 
-    assert!(commands.iter().any(|c| c == &format!("umount {mount_point}")), "{commands:?}");
-    assert!(commands.iter().any(|c| c.starts_with("mdadm --stop")), "{commands:?}");
+    assert!(
+        commands.iter().any(|c| c == &format!("umount {mount_point}")),
+        "{commands:?}"
+    );
+    assert!(
+        commands.iter().any(|c| c.starts_with("mdadm --stop")),
+        "{commands:?}"
+    );
     let saved = state_store.load().unwrap().unwrap();
     assert_eq!(saved.groups.len(), 1, "a preview must never persist the destroy");
 }
@@ -5985,14 +6819,23 @@ fn no_active_array_message_does_not_name_an_unrelated_operation() {
 
     for (op, msg) in [("scrub_status", &scrub_err), ("destroy", &destroy_err)] {
         let lower = msg.to_lowercase();
-        assert!(!lower.contains("expand"), "{op} error names 'expand', which it isn't: {msg}");
-        assert!(!lower.contains("resume"), "{op} error names 'resume', which it isn't: {msg}");
+        assert!(
+            !lower.contains("expand"),
+            "{op} error names 'expand', which it isn't: {msg}"
+        );
+        assert!(
+            !lower.contains("resume"),
+            "{op} error names 'resume', which it isn't: {msg}"
+        );
     }
 
     // Both callers hit the exact same precondition (no group recorded in
     // state.toml yet) -- the text they get back must be identical, not two
     // different operation-specific misnomers.
-    assert_eq!(scrub_err, destroy_err, "same precondition must produce the same message");
+    assert_eq!(
+        scrub_err, destroy_err,
+        "same precondition must produce the same message"
+    );
 }
 
 // -- Tick_active_reshapes must not let one band's absent array abort
@@ -6031,9 +6874,15 @@ impl CommandRunner for SyncActionEnoentRunner {
             });
         }
         if program == "cat" && cmd.contains("/md/sync_action") {
-            return Ok(CommandOutput { stdout: "reshape\n".to_string(), stderr: String::new() });
+            return Ok(CommandOutput {
+                stdout: "reshape\n".to_string(),
+                stderr: String::new(),
+            });
         }
-        Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+        Ok(CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+        })
     }
 
     fn is_dry_run(&self) -> bool {
@@ -6043,7 +6892,10 @@ impl CommandRunner for SyncActionEnoentRunner {
 
 impl SyncActionEnoentRunner {
     fn new(missing_md: &str) -> Self {
-        Self { missing_md: missing_md.to_string(), recorded: Mutex::new(Vec::new()) }
+        Self {
+            missing_md: missing_md.to_string(),
+            recorded: Mutex::new(Vec::new()),
+        }
     }
 
     fn get_recorded(&self) -> Vec<String> {
@@ -6072,7 +6924,10 @@ impl CommandRunner for PermissionDeniedRunner {
                 stderr: "cat: /sys/block/md0/md/sync_action: Permission denied".to_string(),
             });
         }
-        Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+        Ok(CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+        })
     }
 
     fn is_dry_run(&self) -> bool {
@@ -6082,7 +6937,9 @@ impl CommandRunner for PermissionDeniedRunner {
 
 impl PermissionDeniedRunner {
     fn new() -> Self {
-        Self { recorded: Mutex::new(Vec::new()) }
+        Self {
+            recorded: Mutex::new(Vec::new()),
+        }
     }
 }
 
@@ -6110,7 +6967,10 @@ impl CommandRunner for NonCatEnoentRunner {
                 stderr: "not-cat: /sys/block/md0/md/sync_action: No such file or directory".to_string(),
             });
         }
-        Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+        Ok(CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+        })
     }
 
     fn is_dry_run(&self) -> bool {
@@ -6120,7 +6980,9 @@ impl CommandRunner for NonCatEnoentRunner {
 
 impl NonCatEnoentRunner {
     fn new() -> Self {
-        Self { recorded: Mutex::new(Vec::new()) }
+        Self {
+            recorded: Mutex::new(Vec::new()),
+        }
     }
 }
 
@@ -6137,7 +6999,9 @@ fn enoent_from_a_different_program_still_aborts_the_tick() {
     let setup_runner = FailingRunner::healthy();
     let setup_engine =
         OrchestrationEngine::new(&setup_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    setup_engine.create(create_req_named("shr1", three_disks())).unwrap();
+    setup_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
 
     let runner = NonCatEnoentRunner::new();
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
@@ -6166,8 +7030,12 @@ fn a_missing_arrays_band_is_skipped_and_a_later_reshaping_bands_band_is_still_ti
     let setup_runner = FailingRunner::healthy();
     let setup_engine =
         OrchestrationEngine::new(&setup_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    setup_engine.create(create_req_named("shr1", three_disks())).unwrap();
-    setup_engine.create(create_req_named("shr2", other_two_disks())).unwrap();
+    setup_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
+    setup_engine
+        .create(create_req_named("shr2", other_two_disks()))
+        .unwrap();
 
     let runner = SyncActionEnoentRunner::new("md0");
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
@@ -6190,7 +7058,8 @@ fn a_missing_arrays_band_is_skipped_and_a_later_reshaping_bands_band_is_still_ti
         "band 1 must be reached -- proves the sweep did not die at band 0: {cmds:?}"
     );
     assert!(
-        cmds.iter().any(|c| c.starts_with("sh -c") && c.contains("speed_limit_max")),
+        cmds.iter()
+            .any(|c| c.starts_with("sh -c") && c.contains("speed_limit_max")),
         "band 1's throttle decision must actually reach the kernel parameter: {cmds:?}"
     );
 }
@@ -6210,7 +7079,9 @@ fn a_non_enoent_sync_action_failure_still_aborts_the_tick_instead_of_being_swall
     let setup_runner = FailingRunner::healthy();
     let setup_engine =
         OrchestrationEngine::new(&setup_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    setup_engine.create(create_req_named("shr1", three_disks())).unwrap();
+    setup_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
 
     let runner = PermissionDeniedRunner::new();
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
@@ -6311,9 +7182,15 @@ impl CommandRunner for AbsentArrayRunner {
                 });
             }
             if self.degraded_unparseable {
-                return Ok(CommandOutput { stdout: "not-a-number\n".to_string(), stderr: String::new() });
+                return Ok(CommandOutput {
+                    stdout: "not-a-number\n".to_string(),
+                    stderr: String::new(),
+                });
             }
-            return Ok(CommandOutput { stdout: "0\n".to_string(), stderr: String::new() });
+            return Ok(CommandOutput {
+                stdout: "0\n".to_string(),
+                stderr: String::new(),
+            });
         }
         if program == "cat" && args.contains(&sync_action_path.as_str()) {
             if self.enoent_leaf == Some("sync_action") {
@@ -6332,9 +7209,15 @@ impl CommandRunner for AbsentArrayRunner {
                     stderr: format!("cat: {sync_action_path}: Permission denied\n"),
                 });
             }
-            return Ok(CommandOutput { stdout: "idle\n".to_string(), stderr: String::new() });
+            return Ok(CommandOutput {
+                stdout: "idle\n".to_string(),
+                stderr: String::new(),
+            });
         }
-        Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+        Ok(CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+        })
     }
 
     fn is_dry_run(&self) -> bool {
@@ -6353,7 +7236,9 @@ fn scrub_start_degraded_read_enoent_names_array_not_assembled() {
     let setup_runner = FailingRunner::healthy();
     let setup_engine =
         OrchestrationEngine::new(&setup_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    setup_engine.create(create_req_named("shr1", three_disks())).unwrap();
+    setup_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
 
     let runner = AbsentArrayRunner::enoent("md0", "degraded");
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
@@ -6361,11 +7246,20 @@ fn scrub_start_degraded_read_enoent_names_array_not_assembled() {
     let err = engine.scrub_start(None).unwrap_err();
     let msg = format!("{err}");
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
-    assert!(msg.contains("not assembled"), "must name the actual condition: {msg}");
+    assert!(
+        msg.contains("not assembled"),
+        "must name the actual condition: {msg}"
+    );
     assert!(msg.contains("md0"), "must name the md device: {msg}");
     assert!(msg.contains('0'), "must name the band index: {msg}");
-    assert!(!msg.contains("cat:"), "must not leak the raw `cat` plumbing: {msg}");
-    assert!(!msg.contains("No such file or directory"), "must not leak raw ENOENT text: {msg}");
+    assert!(
+        !msg.contains("cat:"),
+        "must not leak the raw `cat` plumbing: {msg}"
+    );
+    assert!(
+        !msg.contains("No such file or directory"),
+        "must not leak raw ENOENT text: {msg}"
+    );
 }
 
 /// Same value test, for the second abort point (the `sync_action` guard)
@@ -6379,7 +7273,9 @@ fn scrub_start_sync_action_read_enoent_names_array_not_assembled() {
     let setup_runner = FailingRunner::healthy();
     let setup_engine =
         OrchestrationEngine::new(&setup_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    setup_engine.create(create_req_named("shr1", three_disks())).unwrap();
+    setup_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
 
     let runner = AbsentArrayRunner::enoent("md0", "sync_action");
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
@@ -6387,10 +7283,19 @@ fn scrub_start_sync_action_read_enoent_names_array_not_assembled() {
     let err = engine.scrub_start(None).unwrap_err();
     let msg = format!("{err}");
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
-    assert!(msg.contains("not assembled"), "must name the actual condition: {msg}");
+    assert!(
+        msg.contains("not assembled"),
+        "must name the actual condition: {msg}"
+    );
     assert!(msg.contains("md0"), "must name the md device: {msg}");
-    assert!(!msg.contains("cat:"), "must not leak the raw `cat` plumbing: {msg}");
-    assert!(!msg.contains("No such file or directory"), "must not leak raw ENOENT text: {msg}");
+    assert!(
+        !msg.contains("cat:"),
+        "must not leak the raw `cat` plumbing: {msg}"
+    );
+    assert!(
+        !msg.contains("No such file or directory"),
+        "must not leak raw ENOENT text: {msg}"
+    );
 }
 
 /// Safety property: an absent array must produce ONLY the clear error --
@@ -6406,7 +7311,9 @@ fn scrub_start_absent_array_never_issues_scrub_write_or_saves_state() {
     let setup_runner = FailingRunner::healthy();
     let setup_engine =
         OrchestrationEngine::new(&setup_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    setup_engine.create(create_req_named("shr1", three_disks())).unwrap();
+    setup_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
     let before_toml = std::fs::read_to_string(&state_path).unwrap();
 
     let runner = AbsentArrayRunner::enoent("md0", "degraded");
@@ -6416,7 +7323,9 @@ fn scrub_start_absent_array_never_issues_scrub_write_or_saves_state() {
 
     let cmds = runner.get_recorded();
     assert!(
-        !cmds.iter().any(|c| c.contains("sync_action") && c.contains("check")),
+        !cmds
+            .iter()
+            .any(|c| c.contains("sync_action") && c.contains("check")),
         "must never issue the scrub write once the array is found absent: {cmds:?}"
     );
     assert!(
@@ -6425,7 +7334,10 @@ fn scrub_start_absent_array_never_issues_scrub_write_or_saves_state() {
     );
 
     let after_toml = std::fs::read_to_string(&state_path).unwrap();
-    assert_eq!(before_toml, after_toml, "state.toml must not be touched on an aborted scrub_start");
+    assert_eq!(
+        before_toml, after_toml,
+        "state.toml must not be touched on an aborted scrub_start"
+    );
     let saved = state_store.load().unwrap().unwrap();
     assert!(
         saved.groups[0].bands.iter().all(|b| !b.scrub_in_progress),
@@ -6445,7 +7357,9 @@ fn degraded_unparseable_is_not_reported_as_array_not_assembled() {
     let setup_runner = FailingRunner::healthy();
     let setup_engine =
         OrchestrationEngine::new(&setup_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    setup_engine.create(create_req_named("shr1", three_disks())).unwrap();
+    setup_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
 
     let runner = AbsentArrayRunner::degraded_unparseable("md0");
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
@@ -6456,7 +7370,10 @@ fn degraded_unparseable_is_not_reported_as_array_not_assembled() {
         !msg.contains("not assembled"),
         "a parse failure on an assembled array must not be reported as absent: {msg}"
     );
-    assert!(msg.to_lowercase().contains("degraded count") || msg.to_lowercase().contains("parse"), "{msg}");
+    assert!(
+        msg.to_lowercase().contains("degraded count") || msg.to_lowercase().contains("parse"),
+        "{msg}"
+    );
 }
 
 /// Distinguishing test (sync_action side): a genuine non-ENOENT
@@ -6472,7 +7389,9 @@ fn sync_action_permission_denied_is_not_reported_as_array_not_assembled() {
     let setup_runner = FailingRunner::healthy();
     let setup_engine =
         OrchestrationEngine::new(&setup_runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    setup_engine.create(create_req_named("shr1", three_disks())).unwrap();
+    setup_engine
+        .create(create_req_named("shr1", three_disks()))
+        .unwrap();
 
     let runner = AbsentArrayRunner::sync_action_permission_denied("md0");
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);

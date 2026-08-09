@@ -44,9 +44,7 @@ impl SystemRunner {
 impl CommandRunner for SystemRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
         let start = std::time::Instant::now();
-        let output = std::process::Command::new(program)
-            .args(args)
-            .output()?;
+        let output = std::process::Command::new(program).args(args).output()?;
 
         let exit_code = output.status.code().unwrap_or(-1);
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -144,7 +142,10 @@ impl CommandRunner for DryRunRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
         let cmd_str = format!("{} {}", program, args.join(" "));
         self.recorded_commands.lock().unwrap().push(cmd_str);
-        Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+        Ok(CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+        })
     }
 
     fn is_dry_run(&self) -> bool {
@@ -193,8 +194,11 @@ mod tests {
     /// it wrote.
     fn capture_tracing(f: impl FnOnce()) -> String {
         let log = CapturedLog::default();
-        let subscriber =
-            tracing_subscriber::fmt().with_writer(log.clone()).with_ansi(false).without_time().finish();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(log.clone())
+            .with_ansi(false)
+            .without_time()
+            .finish();
         tracing::subscriber::with_default(subscriber, f);
         log.text()
     }
@@ -214,10 +218,22 @@ mod tests {
             SystemRunner::new().run(program, args).unwrap();
         });
 
-        assert!(output.contains(program), "expected the program name in the log, got: {output}");
-        assert!(output.contains("exit_code"), "expected an exit code field, got: {output}");
-        assert!(output.contains("elapsed_ms"), "expected a duration field, got: {output}");
-        assert!(output.contains("args"), "expected the arguments recorded, got: {output}");
+        assert!(
+            output.contains(program),
+            "expected the program name in the log, got: {output}"
+        );
+        assert!(
+            output.contains("exit_code"),
+            "expected an exit code field, got: {output}"
+        );
+        assert!(
+            output.contains("elapsed_ms"),
+            "expected a duration field, got: {output}"
+        );
+        assert!(
+            output.contains("args"),
+            "expected the arguments recorded, got: {output}"
+        );
     }
 
     #[test]
@@ -234,9 +250,18 @@ mod tests {
             );
         });
 
-        assert!(output.contains("curl"), "expected the program name still logged, got: {output}");
-        assert!(!output.contains("super-secret"), "webhook token leaked into the log: {output}");
-        assert!(!output.contains("hooks.example.com"), "webhook URL leaked into the log: {output}");
+        assert!(
+            output.contains("curl"),
+            "expected the program name still logged, got: {output}"
+        );
+        assert!(
+            !output.contains("super-secret"),
+            "webhook token leaked into the log: {output}"
+        );
+        assert!(
+            !output.contains("hooks.example.com"),
+            "webhook URL leaked into the log: {output}"
+        );
     }
 
     #[test]
@@ -244,9 +269,14 @@ mod tests {
         // DryRunRunner never executes anything -- an log line about it
         // would describe a command that never actually ran.
         let output = capture_tracing(|| {
-            DryRunRunner::new().run("mdadm", &["--create", "/dev/md0"]).unwrap();
+            DryRunRunner::new()
+                .run("mdadm", &["--create", "/dev/md0"])
+                .unwrap();
         });
 
-        assert!(output.trim().is_empty(), "DryRunRunner must stay silent, got: {output}");
+        assert!(
+            output.trim().is_empty(),
+            "DryRunRunner must stay silent, got: {output}"
+        );
     }
 }

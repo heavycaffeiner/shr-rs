@@ -155,8 +155,8 @@ pub fn plan_initial(input: &PlannerInput) -> Result<PlannerOutput, PlanError> {
                 // silently past 255, colliding a 257th band with band 0
                 // inside the returned PlannerOutput -- fail loudly instead
                 // (rule #4: never report a result that isn't what happened).
-                let band_index = u8::try_from(bands.len())
-                    .map_err(|_| PlanError::TooManyBands { index: bands.len() })?;
+                let band_index =
+                    u8::try_from(bands.len()).map_err(|_| PlanError::TooManyBands { index: bands.len() })?;
                 let band = RedundantBand::new(band_index, start, size, members, level, input.mode)?;
                 bands.push(band);
             }

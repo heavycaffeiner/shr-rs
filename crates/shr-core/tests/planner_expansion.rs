@@ -3,8 +3,8 @@
 //! snapshots, and unusable-region reporting.
 
 use shr_core::{
-    plan_expansion, plan_initial, Disk, ExpansionStep, LayoutSnapshot, PlanError, PlannerInput,
-    RaidLevel, RedundancyMode, RedundantBand, DEFAULT_RESERVED_HEAD, DEFAULT_RESERVED_TAIL,
+    plan_expansion, plan_initial, Disk, ExpansionStep, LayoutSnapshot, PlanError, PlannerInput, RaidLevel,
+    RedundancyMode, RedundantBand, DEFAULT_RESERVED_HEAD, DEFAULT_RESERVED_TAIL,
 };
 
 const TB: u64 = 1_000_000_000_000;
@@ -167,24 +167,8 @@ fn duplicate_band_index_is_rejected() {
     // empty-band path).
     let ds = disks(&[4 * TB, 4 * TB, 4 * TB]);
     let members: Vec<_> = ds.iter().map(|d| d.id.clone()).collect();
-    let a = RedundantBand::new(
-        0,
-        0,
-        TB,
-        members.clone(),
-        RaidLevel::Raid5,
-        RedundancyMode::Shr,
-    )
-    .unwrap();
-    let b = RedundantBand::new(
-        0,
-        TB,
-        TB,
-        members,
-        RaidLevel::Raid5,
-        RedundancyMode::Shr,
-    )
-    .unwrap();
+    let a = RedundantBand::new(0, 0, TB, members.clone(), RaidLevel::Raid5, RedundancyMode::Shr).unwrap();
+    let b = RedundantBand::new(0, TB, TB, members, RaidLevel::Raid5, RedundancyMode::Shr).unwrap();
     let cur = LayoutSnapshot {
         disks: ds,
         bands: vec![a, b],

@@ -36,7 +36,18 @@ impl<'a> NotifyExecutor<'a> {
     pub fn webhook(&self, url: &str, json_body: &str) -> Result<(), ExecError> {
         self.runner.run(
             "curl",
-            &["-fsS", "--max-time", "10", "-X", "POST", "-H", "Content-Type: application/json", "-d", json_body, url],
+            &[
+                "-fsS",
+                "--max-time",
+                "10",
+                "-X",
+                "POST",
+                "-H",
+                "Content-Type: application/json",
+                "-d",
+                json_body,
+                url,
+            ],
         )?;
         Ok(())
     }
@@ -67,7 +78,8 @@ impl<'a> NotifyExecutor<'a> {
     /// handles that, so this wrapper does not need its own "am I
     /// supervised" detection.
     pub fn systemd_notify(&self, status: &str) -> Result<(), ExecError> {
-        self.runner.run("systemd-notify", &[&format!("--status={status}")])?;
+        self.runner
+            .run("systemd-notify", &[&format!("--status={status}")])?;
         Ok(())
     }
 }
@@ -88,12 +100,18 @@ mod tests {
             self.commands.lock().unwrap().clone()
         }
         fn failing() -> Self {
-            Self { fail: true, ..Self::default() }
+            Self {
+                fail: true,
+                ..Self::default()
+            }
         }
     }
     impl CommandRunner for SpyRunner {
         fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
-            self.commands.lock().unwrap().push(format!("{program} {}", args.join(" ")));
+            self.commands
+                .lock()
+                .unwrap()
+                .push(format!("{program} {}", args.join(" ")));
             if self.fail {
                 return Err(ExecError::NonZeroExit {
                     program: program.to_string(),
@@ -102,7 +120,10 @@ mod tests {
                     stderr: "simulated failure".to_string(),
                 });
             }
-            Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+            Ok(CommandOutput {
+                stdout: String::new(),
+                stderr: String::new(),
+            })
         }
         fn is_dry_run(&self) -> bool {
             false
@@ -112,7 +133,9 @@ mod tests {
     #[test]
     fn webhook_posts_the_json_body_to_the_url_via_curl_never_a_shell() {
         let runner = SpyRunner::default();
-        NotifyExecutor::new(&runner).webhook("https://hooks.example.com/x", r#"{"kind":"Degraded"}"#).unwrap();
+        NotifyExecutor::new(&runner)
+            .webhook("https://hooks.example.com/x", r#"{"kind":"Degraded"}"#)
+            .unwrap();
 
         let cmds = runner.commands();
         assert_eq!(cmds.len(), 1, "{cmds:?}");
@@ -120,19 +143,26 @@ mod tests {
         assert!(cmds[0].contains("-X POST"), "{cmds:?}");
         assert!(cmds[0].contains(r#"{"kind":"Degraded"}"#), "{cmds:?}");
         assert!(cmds[0].contains("https://hooks.example.com/x"), "{cmds:?}");
-        assert!(cmds[0].contains("--max-time 10"), "must bound how long a dead endpoint can block: {cmds:?}");
+        assert!(
+            cmds[0].contains("--max-time 10"),
+            "must bound how long a dead endpoint can block: {cmds:?}"
+        );
     }
 
     #[test]
     fn webhook_failure_surfaces_as_a_real_error_here_for_the_caller_to_choose_what_to_do_with() {
         let runner = SpyRunner::failing();
-        assert!(NotifyExecutor::new(&runner).webhook("https://dead.example.com", "{}").is_err());
+        assert!(NotifyExecutor::new(&runner)
+            .webhook("https://dead.example.com", "{}")
+            .is_err());
     }
 
     #[test]
     fn systemd_notify_reports_status_and_tolerates_running_unsupervised() {
         let runner = SpyRunner::default();
-        NotifyExecutor::new(&runner).systemd_notify("scrub found 3 errors").unwrap();
+        NotifyExecutor::new(&runner)
+            .systemd_notify("scrub found 3 errors")
+            .unwrap();
         let cmds = runner.commands();
         assert_eq!(cmds, vec!["systemd-notify --status=scrub found 3 errors"]);
 

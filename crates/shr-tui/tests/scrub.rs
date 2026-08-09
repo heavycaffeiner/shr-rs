@@ -8,8 +8,7 @@
 
 use shr_exec::{CommandOutput, CommandRunner, ExecError};
 use shr_state::{
-    ArrayState, StateBand, StateDisk, StateExpansion, StateFile, StateFilesystem, StatePartition,
-    StateStore,
+    ArrayState, StateBand, StateDisk, StateExpansion, StateFile, StateFilesystem, StatePartition, StateStore,
 };
 use shr_tui::scrub::{ScrubAction, ScrubController, Step};
 use std::sync::{Arc, Mutex};
@@ -64,12 +63,19 @@ fn base_state(name: &str, expansion: StateExpansion) -> ArrayState {
 }
 
 fn seed_healthy_group(store: &Arc<StateStore>, name: &str) {
-    store.save(&StateFile::new(vec![base_state(name, StateExpansion::default())])).unwrap();
+    store
+        .save(&StateFile::new(vec![base_state(name, StateExpansion::default())]))
+        .unwrap();
 }
 
 fn seed_group_with_expansion_in_progress(store: &Arc<StateStore>, name: &str) {
-    let expansion = StateExpansion { in_progress: true, ..StateExpansion::default() };
-    store.save(&StateFile::new(vec![base_state(name, expansion)])).unwrap();
+    let expansion = StateExpansion {
+        in_progress: true,
+        ..StateExpansion::default()
+    };
+    store
+        .save(&StateFile::new(vec![base_state(name, expansion)]))
+        .unwrap();
 }
 
 /// Records every command it was asked to run and answers nothing -- proves
@@ -81,14 +87,22 @@ struct RecordingRunner {
 
 impl RecordingRunner {
     fn new() -> Self {
-        Self { commands: Mutex::new(Vec::new()) }
+        Self {
+            commands: Mutex::new(Vec::new()),
+        }
     }
 }
 
 impl CommandRunner for RecordingRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
-        self.commands.lock().unwrap().push(format!("{program} {}", args.join(" ")));
-        Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+        self.commands
+            .lock()
+            .unwrap()
+            .push(format!("{program} {}", args.join(" ")));
+        Ok(CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+        })
     }
     fn is_dry_run(&self) -> bool {
         false
@@ -117,7 +131,10 @@ impl CommandRunner for HealthyRunner {
         } else {
             ""
         };
-        Ok(CommandOutput { stdout: stdout.to_string(), stderr: String::new() })
+        Ok(CommandOutput {
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+        })
     }
     fn is_dry_run(&self) -> bool {
         false
@@ -162,8 +179,14 @@ fn confirm_start_is_refused_before_request_start_was_called() {
     let runner = RecordingRunner::new();
 
     assert!(!ctrl.can_confirm_start());
-    assert!(!ctrl.confirm_start(&runner), "confirm_start() must refuse and do nothing");
-    assert!(runner.commands.lock().unwrap().is_empty(), "no engine call must have happened");
+    assert!(
+        !ctrl.confirm_start(&runner),
+        "confirm_start() must refuse and do nothing"
+    );
+    assert!(
+        runner.commands.lock().unwrap().is_empty(),
+        "no engine call must have happened"
+    );
 }
 
 #[test]
@@ -189,7 +212,10 @@ fn confirm_cancel_is_refused_until_the_operator_types_the_exact_group_name() {
     let runner = RecordingRunner::new();
 
     ctrl.request_cancel();
-    assert!(!ctrl.can_confirm_cancel(), "a bare keypress reaching ConfirmCancel must not be enough");
+    assert!(
+        !ctrl.can_confirm_cancel(),
+        "a bare keypress reaching ConfirmCancel must not be enough"
+    );
     assert!(!ctrl.confirm_cancel(&runner));
     assert!(runner.commands.lock().unwrap().is_empty());
 
@@ -199,7 +225,10 @@ fn confirm_cancel_is_refused_until_the_operator_types_the_exact_group_name() {
     assert!(runner.commands.lock().unwrap().is_empty());
 
     ctrl.set_confirmation_text("shr1");
-    assert!(ctrl.can_confirm_cancel(), "the exact group name must unlock confirm_cancel");
+    assert!(
+        ctrl.can_confirm_cancel(),
+        "the exact group name must unlock confirm_cancel"
+    );
 }
 
 #[test]
@@ -218,7 +247,11 @@ fn confirm_start_surfaces_the_engines_own_refusal_verbatim_never_reaching_done()
         Step::Error,
         "the engine's expansion-in-progress refusal must land on Error, never Done"
     );
-    let msg = ctrl.state.error_message.as_ref().expect("error message must be set");
+    let msg = ctrl
+        .state
+        .error_message
+        .as_ref()
+        .expect("error message must be set");
     assert!(
         msg.contains("expansion in progress") && msg.contains("scrub is blocked"),
         "must be the engine's own message verbatim, not a re-derived one: {msg}"
@@ -268,8 +301,16 @@ fn confirm_cancel_surfaces_a_genuine_engine_failure_verbatim_never_reaching_done
     ctrl.set_confirmation_text("shr1");
     assert!(ctrl.confirm_cancel(&runner));
 
-    assert_eq!(ctrl.state.step(), Step::Error, "a genuine failure on every channel must land on Error");
-    let msg = ctrl.state.error_message.as_ref().expect("error message must be set");
+    assert_eq!(
+        ctrl.state.step(),
+        Step::Error,
+        "a genuine failure on every channel must land on Error"
+    );
+    let msg = ctrl
+        .state
+        .error_message
+        .as_ref()
+        .expect("error message must be set");
     assert!(
         msg.contains("scrub cancel did not fully stop everything"),
         "must be the engine's own aggregated failure text, not a re-derived one: {msg}"

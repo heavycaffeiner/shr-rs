@@ -144,10 +144,12 @@ impl<'a> AddDiskController<'a> {
     fn resolve_selected(&self) -> Result<Vec<shr_inspect::ResolvedDisk>, OrchestrateError> {
         let lsblk = self.inspector.block_devices().map_err(to_orchestrate_error)?;
         let by_id = self.inspector.by_id_index().map_err(to_orchestrate_error)?;
-        let refs: Vec<DiskRef> =
-            self.selected_kernel_names.iter().map(|n| DiskRef::Path(n.clone())).collect();
-        resolve_disk_refs(&refs, &lsblk, &by_id)
-            .map_err(|e| OrchestrateError::Validation(e.to_string()))
+        let refs: Vec<DiskRef> = self
+            .selected_kernel_names
+            .iter()
+            .map(|n| DiskRef::Path(n.clone()))
+            .collect();
+        resolve_disk_refs(&refs, &lsblk, &by_id).map_err(|e| OrchestrateError::Validation(e.to_string()))
     }
 
     /// Step 1 -> 2. Constraint 4: trusts `WritePreflight.ok` verbatim.
@@ -212,7 +214,9 @@ impl<'a> AddDiskController<'a> {
     /// Constraint 1 + 5 combined: a completed preview AND a confirmation
     /// text matching the target group's exact name are both required.
     pub fn can_execute(&self) -> bool {
-        let Some(name) = &self.group_name else { return false };
+        let Some(name) = &self.group_name else {
+            return false;
+        };
         self.state.step() == Step::Confirm
             && self.state.preview_state.is_some()
             && !self.state.confirmation_text.is_empty()
@@ -446,7 +450,9 @@ impl<'a> ReplaceDiskController<'a> {
     /// unconditionally with no `group_name` set, same as the expand
     /// wizard -- there is nothing for the operator's typed text to match.
     pub fn can_execute(&self) -> bool {
-        let Some(name) = &self.group_name else { return false };
+        let Some(name) = &self.group_name else {
+            return false;
+        };
         self.state.step() == ReplaceStep::Confirm
             && self.state.preview_state.is_some()
             && !self.state.confirmation_text.is_empty()
@@ -467,9 +473,10 @@ impl<'a> ReplaceDiskController<'a> {
             // a successful `run_preview()`, which itself requires
             // `old_disk_id` to be set -- so this is never actually reached
             // with `None` from a caller that respected `can_execute()`.
-            let old_id = self.old_disk_id.clone().ok_or_else(|| {
-                OrchestrateError::Validation("no disk selected to replace".to_string())
-            })?;
+            let old_id = self
+                .old_disk_id
+                .clone()
+                .ok_or_else(|| OrchestrateError::Validation("no disk selected to replace".to_string()))?;
             let engine = OrchestrationEngine::new(runner, self.store.clone())
                 .with_conf_paths(&self.mdadm_conf, &self.fstab)
                 .with_confirm_sink(&AlwaysConfirmSink);
@@ -545,14 +552,22 @@ mod tests {
 
     impl RecordingRunner {
         fn new() -> Self {
-            Self { commands: Mutex::new(Vec::new()) }
+            Self {
+                commands: Mutex::new(Vec::new()),
+            }
         }
     }
 
     impl CommandRunner for RecordingRunner {
         fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
-            self.commands.lock().unwrap().push(format!("{program} {}", args.join(" ")));
-            Ok(CommandOutput { stdout: String::new(), stderr: String::new() })
+            self.commands
+                .lock()
+                .unwrap()
+                .push(format!("{program} {}", args.join(" ")));
+            Ok(CommandOutput {
+                stdout: String::new(),
+                stderr: String::new(),
+            })
         }
         fn is_dry_run(&self) -> bool {
             false
@@ -619,7 +634,7 @@ mod tests {
                 resize_pending: false,
                 last_smart_reallocated: None,
                 last_scrub: None,
-            scrub_in_progress: false,
+                scrub_in_progress: false,
                 pending_member_removal: None,
                 reshape_priority: None,
             }],
@@ -660,7 +675,10 @@ mod tests {
         assert!(!wizard.can_execute());
         assert!(!wizard.execute(&runner), "execute() must refuse and do nothing");
         assert!(wizard.state.result.is_none());
-        assert!(runner.commands.lock().unwrap().is_empty(), "no engine call must have happened");
+        assert!(
+            runner.commands.lock().unwrap().is_empty(),
+            "no engine call must have happened"
+        );
     }
 
     #[test]
@@ -718,17 +736,36 @@ mod tests {
             Step::ScrubCheckWarning,
             "must stop at a distinct, visible warning step, not silently reach Confirm"
         );
-        let warning = wizard.state.scrub_check_warning.as_ref().expect("warning text must be set");
+        let warning = wizard
+            .state
+            .scrub_check_warning
+            .as_ref()
+            .expect("warning text must be set");
         assert!(warning.contains("--skip-scrub-check"), "{warning}");
-        assert!(wizard.state.preview_state.is_none(), "must not have produced a preview to confirm");
-        assert!(wizard.state.error_message.is_none(), "this is a warning, not Step::Error");
+        assert!(
+            wizard.state.preview_state.is_none(),
+            "must not have produced a preview to confirm"
+        );
+        assert!(
+            wizard.state.error_message.is_none(),
+            "this is a warning, not Step::Error"
+        );
 
         // The safety gate must actually gate: nothing executable yet.
         assert!(!wizard.can_execute());
         wizard.set_confirmation_text("shr1");
-        assert!(!wizard.can_execute(), "typing the name alone must not bypass the scrub warning");
-        assert!(!wizard.execute(&runner), "execute() must refuse from Step::ScrubCheckWarning");
-        assert!(runner.commands.lock().unwrap().is_empty(), "no engine call must have happened");
+        assert!(
+            !wizard.can_execute(),
+            "typing the name alone must not bypass the scrub warning"
+        );
+        assert!(
+            !wizard.execute(&runner),
+            "execute() must refuse from Step::ScrubCheckWarning"
+        );
+        assert!(
+            runner.commands.lock().unwrap().is_empty(),
+            "no engine call must have happened"
+        );
     }
 
     /// The explicit override (`set_skip_scrub_check(true)`, the TUI
@@ -752,7 +789,10 @@ mod tests {
 
         assert_eq!(wizard.state.step(), Step::Confirm);
         assert!(wizard.state.preview_state.is_some());
-        assert!(wizard.state.scrub_check_warning.is_none(), "the stale warning must be cleared on success");
+        assert!(
+            wizard.state.scrub_check_warning.is_none(),
+            "the stale warning must be cleared on success"
+        );
     }
 
     /// Proves the wizard actually delegates to the real engine once every
@@ -783,8 +823,15 @@ mod tests {
         assert!(wizard.can_execute());
         assert!(wizard.execute(&runner), "execute() must have attempted the call");
 
-        assert!(!runner.commands.lock().unwrap().is_empty(), "the real engine call must have run");
-        assert_ne!(wizard.state.step(), Step::Confirm, "state must have moved past confirm one way or another");
+        assert!(
+            !runner.commands.lock().unwrap().is_empty(),
+            "the real engine call must have run"
+        );
+        assert_ne!(
+            wizard.state.step(),
+            Step::Confirm,
+            "state must have moved past confirm one way or another"
+        );
     }
 
     /// Constraint 6, proven with a deterministic failure: a runner that
@@ -931,25 +978,42 @@ mod tests {
         let runner = RecordingRunner::new();
 
         ctrl.select("ata-EXISTING1", "sdb");
-        assert_eq!(ctrl.state.step(), ReplaceStep::Select, "select() alone must not advance the step");
+        assert_eq!(
+            ctrl.state.step(),
+            ReplaceStep::Select,
+            "select() alone must not advance the step"
+        );
         assert!(!ctrl.can_execute());
 
         ctrl.run_preview();
         assert_eq!(ctrl.state.step(), ReplaceStep::Confirm);
         assert!(!ctrl.state.preview_commands.is_empty());
         assert!(ctrl.state.preview_state.is_some());
-        assert!(runner.commands.lock().unwrap().is_empty(), "preview must never touch the real runner");
+        assert!(
+            runner.commands.lock().unwrap().is_empty(),
+            "preview must never touch the real runner"
+        );
 
         ctrl.set_confirmation_text("not-shr1");
-        assert!(!ctrl.can_execute(), "mismatched confirmation text must refuse execute");
+        assert!(
+            !ctrl.can_execute(),
+            "mismatched confirmation text must refuse execute"
+        );
         assert!(!ctrl.execute(&runner));
         assert!(runner.commands.lock().unwrap().is_empty());
 
         ctrl.set_confirmation_text("shr1");
         assert!(ctrl.can_execute());
         assert!(ctrl.execute(&runner), "execute() must have attempted the call");
-        assert!(!runner.commands.lock().unwrap().is_empty(), "the real engine call must have run");
-        assert_ne!(ctrl.state.step(), ReplaceStep::Confirm, "state must have moved past confirm one way or another");
+        assert!(
+            !runner.commands.lock().unwrap().is_empty(),
+            "the real engine call must have run"
+        );
+        assert_ne!(
+            ctrl.state.step(),
+            ReplaceStep::Confirm,
+            "state must have moved past confirm one way or another"
+        );
     }
 
     /// `run_preview()` without `select()` first must fail cleanly (no
@@ -1038,6 +1102,11 @@ mod tests {
         ctrl.run_preview();
 
         assert_eq!(ctrl.state.step(), ReplaceStep::Error);
-        assert!(ctrl.state.error_message.as_ref().unwrap().contains("not a member"));
+        assert!(ctrl
+            .state
+            .error_message
+            .as_ref()
+            .unwrap()
+            .contains("not a member"));
     }
 }

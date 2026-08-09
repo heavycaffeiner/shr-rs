@@ -107,7 +107,10 @@ fn reset_sigpipe() {}
 fn init_tracing(mode: UiMode) {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(fallback_filter_for(mode)));
-    tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .init();
 }
 
 /// The no-`RUST_LOG` fallback level, split out from `init_tracing` so it's
@@ -130,7 +133,11 @@ fn fallback_filter_for(mode: UiMode) -> &'static str {
 /// shows the real path the operator invoked.
 fn cli_args(program: String, rest: &[String]) -> Vec<String> {
     std::iter::once(program)
-        .chain(rest.iter().filter(|a| a.as_str() != "--tui" && a.as_str() != "--no-tui").cloned())
+        .chain(
+            rest.iter()
+                .filter(|a| a.as_str() != "--tui" && a.as_str() != "--no-tui")
+                .cloned(),
+        )
         .collect()
 }
 
@@ -152,7 +159,12 @@ mod tests {
         let rest = vec!["expand".to_string(), "--add".to_string(), "sdb".to_string()];
         assert_eq!(
             cli_args("shr-rs".to_string(), &rest),
-            vec!["shr-rs".to_string(), "expand".to_string(), "--add".to_string(), "sdb".to_string()]
+            vec![
+                "shr-rs".to_string(),
+                "expand".to_string(),
+                "--add".to_string(),
+                "sdb".to_string()
+            ]
         );
     }
 

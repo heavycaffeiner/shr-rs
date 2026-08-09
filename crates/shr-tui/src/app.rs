@@ -614,7 +614,10 @@ impl App {
                         .report
                         .disks
                         .iter()
-                        .map(|d| DiskCandidate { name: d.name.clone(), system_disk: d.system_disk })
+                        .map(|d| DiskCandidate {
+                            name: d.name.clone(),
+                            system_disk: d.system_disk,
+                        })
                         .collect(),
                     cursor: 0,
                     selected: Vec::new(),
@@ -627,11 +630,13 @@ impl App {
                 self.error = None;
             }
             0 => self.error = Some("Add Disk: no group to expand. Create a group first.".to_string()),
-            _ => self.error = Some(
-                "Add Disk: multiple groups exist. The TUI only auto-selects a single group -- \
+            _ => {
+                self.error = Some(
+                    "Add Disk: multiple groups exist. The TUI only auto-selects a single group -- \
                  use `shr-rs expand --name <group> --add <disk>` to target the one you want."
-                    .to_string(),
-            ),
+                        .to_string(),
+                )
+            }
         }
     }
 
@@ -664,7 +669,9 @@ impl App {
             }
             return;
         }
-        let Some(wizard) = self.wizard.as_mut() else { return };
+        let Some(wizard) = self.wizard.as_mut() else {
+            return;
+        };
 
         match wizard.step() {
             Step::SelectDisks => {
@@ -842,7 +849,9 @@ impl App {
             }
             return;
         }
-        let Some(replace) = self.replace.as_mut() else { return };
+        let Some(replace) = self.replace.as_mut() else {
+            return;
+        };
 
         match replace.step() {
             ReplaceStep::Select => {
@@ -949,11 +958,13 @@ impl App {
                 self.error = None;
             }
             0 => self.error = Some("Scrub: no target group. Create a group first.".to_string()),
-            _ => self.error = Some(
-                "Scrub: multiple groups exist. The TUI only auto-selects a single group -- \
+            _ => {
+                self.error = Some(
+                    "Scrub: multiple groups exist. The TUI only auto-selects a single group -- \
                  use `shr-rs scrub start --name <group>` to target the one you want."
-                    .to_string(),
-            ),
+                        .to_string(),
+                )
+            }
         }
     }
 
@@ -1029,7 +1040,9 @@ impl App {
             }
             return;
         }
-        let Some(reconcile) = self.reconcile.as_mut() else { return };
+        let Some(reconcile) = self.reconcile.as_mut() else {
+            return;
+        };
 
         match reconcile.step() {
             ReconcileStep::Confirm => {
@@ -1165,7 +1178,11 @@ mod tests {
             smart: ok_smart(),
             arrays,
             system_disk,
-            system_mounts: if system_disk { vec!["/".to_string()] } else { vec![] },
+            system_mounts: if system_disk {
+                vec!["/".to_string()]
+            } else {
+                vec![]
+            },
         }
     }
 
@@ -1227,7 +1244,11 @@ mod tests {
             disk("vdb", "ata-FREE1", vec![], false),
             disk("vdc", "ata-SYSTEM1", vec![], true),
         ];
-        report.groups = vec![group("shr1", vec!["ata-EXISTING1".to_string()], vec![band(false)])];
+        report.groups = vec![group(
+            "shr1",
+            vec!["ata-EXISTING1".to_string()],
+            vec![band(false)],
+        )];
         report
     }
 
@@ -1244,7 +1265,10 @@ mod tests {
             let replace = app.replace().expect("replace modal should be open");
             assert_eq!(replace.group_name, "shr1");
             assert_eq!(replace.step(), ReplaceStep::Select);
-            assert!(!replace.picking_new, "must start on the OLD-member picker, not the new-disk one");
+            assert!(
+                !replace.picking_new,
+                "must start on the OLD-member picker, not the new-disk one"
+            );
             assert_eq!(replace.old_candidates.len(), 1);
             assert_eq!(replace.old_candidates[0].id, "ata-EXISTING1");
             // "vdc" is a system disk with an empty `arrays` list -- the
@@ -1253,7 +1277,11 @@ mod tests {
             // and marked, never silently hidden), only refusing it at
             // selection time. See the system-disk refusal test below for
             // that actual refusal.
-            assert_eq!(replace.new_candidates.len(), 2, "both vdb and vdc (system) are free disks");
+            assert_eq!(
+                replace.new_candidates.len(),
+                2,
+                "both vdb and vdc (system) are free disks"
+            );
             assert!(app.error().is_none());
         }
 
@@ -1280,16 +1308,28 @@ mod tests {
 
             // Pick the only old candidate ("vda").
             app.handle_key(key(KeyCode::Enter));
-            assert!(app.replace().unwrap().picking_new, "must move to the new-disk picker");
-            assert_eq!(app.replace().unwrap().selected_old.as_deref(), Some("ata-EXISTING1"));
-            assert!(app.take_replace_action().is_none(), "picking only the old disk must not fire yet");
+            assert!(
+                app.replace().unwrap().picking_new,
+                "must move to the new-disk picker"
+            );
+            assert_eq!(
+                app.replace().unwrap().selected_old.as_deref(),
+                Some("ata-EXISTING1")
+            );
+            assert!(
+                app.take_replace_action().is_none(),
+                "picking only the old disk must not fire yet"
+            );
 
             // Cursor starts on "vdb" (index 0), a genuinely free, non-system
             // disk -- pick it.
             app.handle_key(key(KeyCode::Enter));
             assert_eq!(app.replace().unwrap().selected_new.as_deref(), Some("vdb"));
             assert_eq!(app.take_replace_action(), Some(ReplaceAction::RunPreview));
-            assert!(app.take_replace_action().is_none(), "the action must be consumed, not repeated");
+            assert!(
+                app.take_replace_action().is_none(),
+                "the action must be consumed, not repeated"
+            );
         }
 
         /// The new-disk picker must refuse the system disk the same way
@@ -1315,20 +1355,29 @@ mod tests {
                 app.replace().unwrap().selection_blocked_reason.is_some(),
                 "must say why the selection was refused, not silently do nothing"
             );
-            assert!(app.take_replace_action().is_none(), "a refused pick must not request a preview");
+            assert!(
+                app.take_replace_action().is_none(),
+                "a refused pick must not request a preview"
+            );
         }
 
         #[test]
         fn replace_confirm_gate_requires_the_exact_group_name_before_execute_is_requested() {
             let mut app = App::new(single_group_report_for_replace());
             app.handle_key(key(KeyCode::Char('x')));
-            app.set_replace_state(ReplaceWizardState { step: Some(ReplaceStep::Confirm), ..Default::default() });
+            app.set_replace_state(ReplaceWizardState {
+                step: Some(ReplaceStep::Confirm),
+                ..Default::default()
+            });
 
             for ch in "shr".chars() {
                 app.handle_key(key(KeyCode::Char(ch)));
             }
             app.handle_key(key(KeyCode::Enter));
-            assert!(app.take_replace_action().is_none(), "a partial match must not confirm");
+            assert!(
+                app.take_replace_action().is_none(),
+                "a partial match must not confirm"
+            );
 
             app.handle_key(key(KeyCode::Char('1')));
             assert_eq!(app.replace().unwrap().confirmation_input, "shr1");
@@ -1344,7 +1393,10 @@ mod tests {
 
             assert!(app.replace().is_none());
             assert!(app.take_replace_action().is_none());
-            assert!(!app.should_quit(), "Esc while replace is open must close it, not quit the TUI");
+            assert!(
+                !app.should_quit(),
+                "Esc while replace is open must close it, not quit the TUI"
+            );
         }
 
         /// The Replace-Disk counterpart: `ReplaceStep::Executing` means
@@ -1355,13 +1407,22 @@ mod tests {
         fn esc_is_refused_while_replace_is_executing_and_says_why() {
             let mut app = App::new(single_group_report_for_replace());
             app.handle_key(key(KeyCode::Char('x')));
-            app.set_replace_state(ReplaceWizardState { step: Some(ReplaceStep::Executing), ..Default::default() });
+            app.set_replace_state(ReplaceWizardState {
+                step: Some(ReplaceStep::Executing),
+                ..Default::default()
+            });
 
             app.handle_key(key(KeyCode::Esc));
 
-            assert!(app.replace().is_some(), "Esc must not abandon an in-flight destructive operation");
+            assert!(
+                app.replace().is_some(),
+                "Esc must not abandon an in-flight destructive operation"
+            );
             assert_eq!(app.replace().unwrap().step(), ReplaceStep::Executing);
-            assert!(app.error().is_some(), "must say why Esc did nothing, not silently ignore it");
+            assert!(
+                app.error().is_some(),
+                "must say why Esc did nothing, not silently ignore it"
+            );
         }
 
         /// The second half, replace-disk side: a result can still arrive
@@ -1371,7 +1432,10 @@ mod tests {
         fn a_late_arriving_replace_result_after_the_modal_is_gone_is_not_silently_dropped() {
             let mut app = App::new(single_group_report_for_replace());
             app.handle_key(key(KeyCode::Char('x')));
-            app.set_replace_state(ReplaceWizardState { step: Some(ReplaceStep::Confirm), ..Default::default() });
+            app.set_replace_state(ReplaceWizardState {
+                step: Some(ReplaceStep::Confirm),
+                ..Default::default()
+            });
             app.handle_key(key(KeyCode::Esc));
             assert!(app.replace().is_none());
 
@@ -1393,13 +1457,20 @@ mod tests {
             // 'a' (Add Disk) and 's' (Scrub) must not open a second modal
             // while replace is already open -- only one modal at a time.
             app.handle_key(key(KeyCode::Char('a')));
-            assert!(app.wizard().is_none(), "a second modal must never open over an existing one");
+            assert!(
+                app.wizard().is_none(),
+                "a second modal must never open over an existing one"
+            );
             app.handle_key(key(KeyCode::Char('s')));
             assert!(app.scrub().is_none());
 
             assert_eq!(app.tab(), Tab::Dashboard);
             app.handle_key(key(KeyCode::Char('4'))); // would normally jump to the Groups tab
-            assert_eq!(app.tab(), Tab::Dashboard, "replace key handling must consume the key, not fall through");
+            assert_eq!(
+                app.tab(),
+                Tab::Dashboard,
+                "replace key handling must consume the key, not fall through"
+            );
             assert!(app.replace().is_some(), "replace itself must still be open");
         }
     }
@@ -1449,7 +1520,10 @@ mod tests {
             let mut app = App::new(single_group_report_for_replace());
             app.handle_key(key(KeyCode::Char('s')));
             app.take_scrub_action(); // consume the auto-fired RequestStart
-            app.set_scrub_state(ScrubState { step: Some(ScrubStep::ConfirmStart), ..Default::default() });
+            app.set_scrub_state(ScrubState {
+                step: Some(ScrubStep::ConfirmStart),
+                ..Default::default()
+            });
 
             app.handle_key(key(KeyCode::Enter));
             assert_eq!(app.take_scrub_action(), Some(ScrubUiAction::Confirm));
@@ -1460,13 +1534,19 @@ mod tests {
             let mut app = App::new(single_group_report_for_replace());
             app.handle_key(key(KeyCode::Char('s')));
             app.take_scrub_action(); // consume the auto-fired action
-            app.set_scrub_state(ScrubState { step: Some(ScrubStep::ConfirmCancel), ..Default::default() });
+            app.set_scrub_state(ScrubState {
+                step: Some(ScrubStep::ConfirmCancel),
+                ..Default::default()
+            });
 
             for ch in "shr".chars() {
                 app.handle_key(key(KeyCode::Char(ch)));
             }
             app.handle_key(key(KeyCode::Enter));
-            assert!(app.take_scrub_action().is_none(), "a partial match must not confirm cancelling a live scrub");
+            assert!(
+                app.take_scrub_action().is_none(),
+                "a partial match must not confirm cancelling a live scrub"
+            );
 
             app.handle_key(key(KeyCode::Char('1')));
             assert_eq!(app.scrub().unwrap().confirmation_input, "shr1");
@@ -1482,7 +1562,10 @@ mod tests {
         fn esc_always_closes_scrub_even_from_confirm_cancel() {
             let mut app = App::new(single_group_report_for_replace());
             app.handle_key(key(KeyCode::Char('s')));
-            app.set_scrub_state(ScrubState { step: Some(ScrubStep::ConfirmCancel), ..Default::default() });
+            app.set_scrub_state(ScrubState {
+                step: Some(ScrubStep::ConfirmCancel),
+                ..Default::default()
+            });
 
             app.handle_key(key(KeyCode::Esc));
 
@@ -1502,7 +1585,11 @@ mod tests {
 
             assert_eq!(app.tab(), Tab::Dashboard);
             app.handle_key(key(KeyCode::Char('4')));
-            assert_eq!(app.tab(), Tab::Dashboard, "scrub key handling must consume the key, not fall through");
+            assert_eq!(
+                app.tab(),
+                Tab::Dashboard,
+                "scrub key handling must consume the key, not fall through"
+            );
             assert!(app.scrub().is_some());
         }
     }
@@ -1524,7 +1611,9 @@ mod tests {
             let mut app = App::new(empty_report());
             app.handle_key(key(KeyCode::Char('f')));
 
-            let reconcile = app.reconcile().expect("reconcile modal should open even with zero groups");
+            let reconcile = app
+                .reconcile()
+                .expect("reconcile modal should open even with zero groups");
             assert_eq!(reconcile.step(), ReconcileStep::Confirm);
             assert!(app.error().is_none());
             // No `pending_action` fired on open -- unlike scrub's auto-fired
@@ -1542,7 +1631,10 @@ mod tests {
 
             app.handle_key(key(KeyCode::Enter));
             assert_eq!(app.take_reconcile_action(), Some(ReconcileUiAction::Execute));
-            assert!(app.take_reconcile_action().is_none(), "the action must be consumed, not repeated");
+            assert!(
+                app.take_reconcile_action().is_none(),
+                "the action must be consumed, not repeated"
+            );
         }
 
         #[test]
@@ -1553,7 +1645,10 @@ mod tests {
 
             assert!(app.reconcile().is_none());
             assert!(app.take_reconcile_action().is_none());
-            assert!(!app.should_quit(), "Esc while reconcile is open must close it, not quit the TUI");
+            assert!(
+                !app.should_quit(),
+                "Esc while reconcile is open must close it, not quit the TUI"
+            );
         }
 
         /// The reconcile counterpart: `ReconcileStep::Executing` means
@@ -1566,13 +1661,22 @@ mod tests {
         fn esc_is_refused_while_reconcile_is_executing_and_says_why() {
             let mut app = App::new(single_group_report_for_replace());
             app.handle_key(key(KeyCode::Char('f')));
-            app.set_reconcile_state(ReconcileState { step: Some(ReconcileStep::Executing), ..Default::default() });
+            app.set_reconcile_state(ReconcileState {
+                step: Some(ReconcileStep::Executing),
+                ..Default::default()
+            });
 
             app.handle_key(key(KeyCode::Esc));
 
-            assert!(app.reconcile().is_some(), "Esc must not abandon an in-flight reconcile");
+            assert!(
+                app.reconcile().is_some(),
+                "Esc must not abandon an in-flight reconcile"
+            );
             assert_eq!(app.reconcile().unwrap().step(), ReconcileStep::Executing);
-            assert!(app.error().is_some(), "must say why Esc did nothing, not silently ignore it");
+            assert!(
+                app.error().is_some(),
+                "must say why Esc did nothing, not silently ignore it"
+            );
         }
 
         /// The second half: a background result can still arrive after the
@@ -1609,7 +1713,11 @@ mod tests {
 
             assert_eq!(app.tab(), Tab::Dashboard);
             app.handle_key(key(KeyCode::Char('4')));
-            assert_eq!(app.tab(), Tab::Dashboard, "reconcile key handling must consume the key, not fall through");
+            assert_eq!(
+                app.tab(),
+                Tab::Dashboard,
+                "reconcile key handling must consume the key, not fall through"
+            );
             assert!(app.reconcile().is_some());
         }
     }

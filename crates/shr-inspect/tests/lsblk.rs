@@ -42,10 +42,7 @@ fn detects_rotational_flag() {
         out.disks().find(|d| d.name == "nvme0n1").unwrap().rota,
         Some(false)
     );
-    assert_eq!(
-        out.disks().find(|d| d.name == "sda").unwrap().rota,
-        Some(true)
-    );
+    assert_eq!(out.disks().find(|d| d.name == "sda").unwrap().rota, Some(true));
 }
 
 #[test]
@@ -74,8 +71,7 @@ fn whitespace_only_fstype_is_not_content() {
 
 #[test]
 fn tolerates_null_fields() {
-    let json =
-        r#"{"blockdevices":[{"name":"sdz","size":null,"type":"disk","model":null,"serial":null}]}"#;
+    let json = r#"{"blockdevices":[{"name":"sdz","size":null,"type":"disk","model":null,"serial":null}]}"#;
     let out = parse_lsblk(json).unwrap();
     let d = &out.blockdevices[0];
     assert_eq!(d.size, None);
