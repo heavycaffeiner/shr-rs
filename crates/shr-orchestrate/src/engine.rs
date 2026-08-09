@@ -3482,8 +3482,8 @@ impl<'a> OrchestrationEngine<'a> {
         // check just above -- `mdadm`'s sync_action stays `idle` the whole
         // time a scrub is running. Without this check, that let a running
         // scrub fall through all the way to the freshness check below,
-        // where `scrub_is_fresh` sees no COMPLETED scrub yet and reports
-        // "has not been fully checked for errors ... run `fs scrub start`" --
+        // where `scrub_staleness` sees no COMPLETED scrub yet and reports
+        // "has never been checked ... run `fs scrub start`" --
         // actively misleading the operator into thinking nothing is
         // running when one already is.
         //
@@ -3521,14 +3521,22 @@ impl<'a> OrchestrationEngine<'a> {
         // never every group's history.
         if !req.skip_scrub_check {
             for band in &full_state.groups[group_idx].bands {
-                if !scrub_is_fresh(band) {
+                if let Some(staleness) = scrub_staleness(band) {
+                    // The cause-specific half comes from `describe()`; the
+                    // advice after it is identical for every cause, and both
+                    // other UIs key off the `--skip-scrub-check` substring in
+                    // it to tell this recoverable refusal from the ones no
+                    // override can fix (`shr-tui`'s `is_scrub_check_warning`,
+                    // the Cockpit plugin's `isScrubCheckWarning`). Any new
+                    // variant must keep that tail.
                     return Err(OrchestrateError::Validation(format!(
-                        "band {} ({}) has not been fully checked for errors in the last {} \
-                         days; run `shr-rs fs scrub start` first, or pass --skip-scrub-check to \
-                         expand anyway (expanding rebuilds the redundancy from each disk's \
-                         CURRENT data, so undetected corruption gets baked into the new layout \
-                         instead of being caught)",
-                        band.index, band.md_name, SCRUB_FRESHNESS_DAYS
+                        "band {} ({}) {}; run `shr-rs fs scrub start` first, or pass \
+                         --skip-scrub-check to expand anyway (expanding rebuilds the redundancy \
+                         from each disk's CURRENT data, so undetected corruption gets baked into \
+                         the new layout instead of being caught)",
+                        band.index,
+                        band.md_name,
+                        staleness.describe()
                     )));
                 }
             }
@@ -4636,25 +4644,79 @@ pub const SCRUB_FRESHNESS_DAYS: i64 = 30;
 /// hand.
 pub const AUTO_SNAPSHOT_PREFIX: &str = "auto-";
 
-/// Whether `band.last_scrub` satisfies the pre-reshape safety check --
-/// must exist, must have `ScrubOutcome::Completed` (a cancelled or failed
-/// scrub proves nothing about the array's health), and must be within
-/// `SCRUB_FRESHNESS_DAYS`. An unparseable `finished_at` (should never
-/// happen -- always written by this engine's own scrub-finishing code, see
-/// `Utc::now().to_rfc3339()`) is treated as NOT fresh rather than panicking
-/// or assuming freshness -- the same "unknown never means safe" rule that
-/// applies to throttle metrics.
-fn scrub_is_fresh(band: &StateBand) -> bool {
+/// Why `band.last_scrub` fails the pre-reshape safety check. The four ways
+/// it can fail need four different things from the operator, and reporting
+/// them with one "not checked in the last 30 days" sentence sent whoever hit
+/// it looking for a scrub they had supposedly already run -- most often on a
+/// group created minutes earlier, which has no history at all.
+enum ScrubStaleness {
+    /// No `last_scrub` record. What every freshly created group looks like:
+    /// `create()` writes `last_scrub: None`, and the initial mdadm sync that
+    /// follows writes parity rather than verifying anything, so it is not
+    /// recorded as (and is not) a scrub.
+    NeverScrubbed,
+    /// A record exists but the scrub did not run to the end, so it proves
+    /// nothing about the array.
+    DidNotComplete(ScrubOutcome),
+    /// Completed, but longer ago than `SCRUB_FRESHNESS_DAYS`.
+    Stale { days: i64 },
+    /// `finished_at` will not parse. Should never happen (this engine writes
+    /// it with `Utc::now().to_rfc3339()`), and an age that cannot be read is
+    /// treated as failing rather than passing -- the same "unknown never
+    /// means safe" rule that applies to throttle metrics.
+    UnreadableTimestamp,
+}
+
+impl ScrubStaleness {
+    /// The half of the refusal that differs per cause. `expand()` supplies
+    /// the band and the shared advice around it.
+    fn describe(&self) -> String {
+        match self {
+            Self::NeverScrubbed => "has never been checked for errors (a group starts with no scrub \
+                 history: the initial sync writes redundancy, it does not verify what it reads)"
+                .to_string(),
+            Self::DidNotComplete(outcome) => {
+                let what = match outcome {
+                    ScrubOutcome::Cancelled => "was cancelled",
+                    ScrubOutcome::Failed => "failed",
+                    // Unreachable: `scrub_staleness` only builds this variant
+                    // for an outcome that is not `Completed`.
+                    ScrubOutcome::Completed => "did not finish",
+                };
+                format!(
+                    "has no completed error check: the last one {what} before it finished, so it \
+                     proves nothing about the array"
+                )
+            }
+            Self::Stale { days } => format!(
+                "was last checked for errors {days} days ago, past the {SCRUB_FRESHNESS_DAYS}-day limit"
+            ),
+            Self::UnreadableTimestamp => {
+                "has a scrub record whose finish time cannot be read, so its age cannot be trusted"
+                    .to_string()
+            }
+        }
+    }
+}
+
+/// `None` when `band.last_scrub` satisfies the pre-reshape safety check --
+/// it must exist, must have `ScrubOutcome::Completed`, and must be within
+/// `SCRUB_FRESHNESS_DAYS`.
+fn scrub_staleness(band: &StateBand) -> Option<ScrubStaleness> {
     let Some(scrub) = &band.last_scrub else {
-        return false;
+        return Some(ScrubStaleness::NeverScrubbed);
     };
     if scrub.outcome != ScrubOutcome::Completed {
-        return false;
+        return Some(ScrubStaleness::DidNotComplete(scrub.outcome));
     }
     let Ok(finished) = chrono::DateTime::parse_from_rfc3339(&scrub.finished_at) else {
-        return false;
+        return Some(ScrubStaleness::UnreadableTimestamp);
     };
-    Utc::now().signed_duration_since(finished) <= chrono::Duration::days(SCRUB_FRESHNESS_DAYS)
+    let age = Utc::now().signed_duration_since(finished);
+    if age > chrono::Duration::days(SCRUB_FRESHNESS_DAYS) {
+        return Some(ScrubStaleness::Stale { days: age.num_days() });
+    }
+    None
 }
 
 /// The system mountpoint currently reachable from `kernel_name` through

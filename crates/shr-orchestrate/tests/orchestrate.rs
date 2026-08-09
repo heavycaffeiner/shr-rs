@@ -4564,8 +4564,7 @@ fn expand_reports_a_currently_running_btrfs_scrub_clearly_instead_of_e19s_stale_
     // separate, filesystem-level scrub does -- `sync_action` reads back
     // `idle` while `btrfs scrub status` still reports `running`. The old
     // code fell through the mdadm guard (sync_action is idle, so it passes)
-    // straight to the "has not been fully checked for errors... run
-    // `fs scrub start`"
+    // straight to the freshness gate's "run `fs scrub start` first"
     // message -- actively misleading, since a scrub IS running, just not
     // finished yet. `skip_scrub_check: true` (via `expand_req`) proves this
     // is checked independently of the freshness gate, not a special case
@@ -4583,8 +4582,10 @@ fn expand_reports_a_currently_running_btrfs_scrub_clearly_instead_of_e19s_stale_
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
     let msg = format!("{err}");
     assert!(msg.contains("currently has a scrub running"), "{msg}");
+    // The advice tail every freshness-gate message shares, not one cause's
+    // wording -- see `ScrubStaleness`, which has four.
     assert!(
-        !msg.contains("has not been fully checked for errors"),
+        !msg.contains("--skip-scrub-check"),
         "must not show the misleading staleness message: {msg}"
     );
 }
@@ -5391,7 +5392,21 @@ fn expand_is_blocked_when_no_band_has_ever_been_scrubbed() {
         })
         .unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
-    assert!(format!("{err}").contains("scrub"), "{err}");
+    let msg = format!("{err}");
+    // A group created minutes ago has no history at all, and telling its
+    // operator it "has not been checked in the last 30 days" sent them
+    // looking for a scrub they thought they had already run. Name the real
+    // cause, and say why the initial sync did not count as one.
+    assert!(msg.contains("has never been checked for errors"), "{msg}");
+    assert!(msg.contains("initial sync"), "{msg}");
+    assert!(
+        !msg.contains("days ago"),
+        "a band with no history has no age to report: {msg}"
+    );
+    assert!(
+        msg.contains("--skip-scrub-check"),
+        "the way out must stay in every variant: {msg}"
+    );
 }
 
 #[test]
@@ -5454,7 +5469,12 @@ fn expand_is_blocked_when_the_last_scrub_is_stale() {
         })
         .unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
-    assert!(format!("{err}").contains("scrub"), "{err}");
+    let msg = format!("{err}");
+    // The one case where an age IS the point -- it must carry the real
+    // number, not just repeat the limit.
+    assert!(msg.contains("31 days ago"), "{msg}");
+    assert!(msg.contains("30-day limit"), "{msg}");
+    assert!(msg.contains("--skip-scrub-check"), "{msg}");
 }
 
 #[test]
@@ -5480,6 +5500,76 @@ fn expand_is_blocked_when_the_last_scrub_was_cancelled_not_completed() {
         })
         .unwrap_err();
     assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
+    let msg = format!("{err}");
+    // Yesterday's cancelled scrub is well inside the 30-day window, so a
+    // staleness message would read as flatly wrong to the operator who
+    // cancelled it. Say it was cancelled.
+    assert!(msg.contains("was cancelled"), "{msg}");
+    assert!(!msg.contains("days ago"), "{msg}");
+    assert!(msg.contains("--skip-scrub-check"), "{msg}");
+}
+
+#[test]
+fn expand_is_blocked_when_the_last_scrub_failed() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::healthy();
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    let failed = StateScrubResult {
+        finished_at: chrono::Utc::now().to_rfc3339(),
+        outcome: ScrubOutcome::Failed,
+        error_count: 0,
+    };
+    seed_scrub_history(&state_store, failed);
+
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    let err = engine
+        .expand(ExpandRequest {
+            name: None,
+            new_disks: vec![new_disk],
+            system_disks: vec!["sda".to_string()],
+            skip_scrub_check: false,
+        })
+        .unwrap_err();
+    assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
+    let msg = format!("{err}");
+    assert!(msg.contains("failed before it finished"), "{msg}");
+    assert!(
+        !msg.contains("was cancelled"),
+        "a failure is not a cancellation: {msg}"
+    );
+    assert!(msg.contains("--skip-scrub-check"), "{msg}");
+}
+
+#[test]
+fn expand_is_blocked_when_the_last_scrubs_timestamp_cannot_be_read() {
+    // An unreadable age must fail closed, and must not be reported as an age
+    // ("0 days ago") that the operator would read as a real measurement.
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::healthy();
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    let unreadable = StateScrubResult {
+        finished_at: "not a timestamp".to_string(),
+        outcome: ScrubOutcome::Completed,
+        error_count: 0,
+    };
+    seed_scrub_history(&state_store, unreadable);
+
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    let err = engine
+        .expand(ExpandRequest {
+            name: None,
+            new_disks: vec![new_disk],
+            system_disks: vec!["sda".to_string()],
+            skip_scrub_check: false,
+        })
+        .unwrap_err();
+    assert!(matches!(err, OrchestrateError::Validation(_)), "{err:?}");
+    let msg = format!("{err}");
+    assert!(msg.contains("finish time cannot be read"), "{msg}");
+    assert!(!msg.contains("days ago"), "{msg}");
+    assert!(msg.contains("--skip-scrub-check"), "{msg}");
 }
 
 // ---------------------------------------------------------------------

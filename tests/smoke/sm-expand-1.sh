@@ -74,11 +74,11 @@ BEFORE_SIZE="$(cat /sys/block/md0/size 2>/dev/null || echo 0)"
 
 echo "== SM-EXPAND-1: act (expand with a 3rd same-size disk) =="
 # expand() refuses unless every band has a scrub that COMPLETED within
-# the last 30 days (crates/shr-orchestrate/src/engine.rs scrub_is_fresh);
+# the last 30 days (crates/shr-orchestrate/src/engine.rs scrub_staleness);
 # a band this test just created has no scrub history at all, so without
-# --skip-scrub-check this would always fail preflight with "has no scrub
-# successfully completed" before ever reaching the reshape this case
-# exists to test (same trap already documented for the TUI wizard).
+# --skip-scrub-check this would always fail preflight with "has never been
+# checked for errors" before ever reaching the reshape this case exists to
+# test (same trap already documented for the TUI wizard).
 EXPAND_OUTPUT="$(sudo "$SHR_RS" --json expand --add ata-LOOP_DISK_12 --skip-scrub-check 2>&1)"
 EXPAND_EXIT=$?
 echo "$EXPAND_OUTPUT"

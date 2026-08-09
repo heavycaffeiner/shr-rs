@@ -367,8 +367,11 @@ mod tests {
         // would fabricate `sync_action == "idle"` and fall through to
         // the stale message instead.
         assert!(msg.contains("sync_action=check"), "{msg}");
+        // Matched on the advice tail, not on one cause's wording: the
+        // freshness gate has four messages now (see `ScrubStaleness`) and
+        // this must reject every one of them.
         assert!(
-            !msg.contains("has not been fully checked for errors"),
+            !msg.contains("--skip-scrub-check"),
             "must not show the misleading staleness message during preview: {msg}"
         );
     }
