@@ -24,7 +24,9 @@
 /pkg/
 /node_modules/
 /.npm-installed
+/playwright-report/
 /runtime-npm-modules.txt
+/test-results/
 /tmp/
 /tools/
 
@@ -35,4 +37,5 @@
 /po/LINGUAS
 /test/common/
 /test/images/
+/test/layout/report/
 /test/static-code

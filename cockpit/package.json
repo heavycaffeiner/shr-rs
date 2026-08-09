@@ -17,10 +17,12 @@
     "build": "node ./build.js",
     "test": "node --test src/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "eslint": "eslint src/",
-    "eslint:fix": "eslint --fix src/"
+    "eslint": "eslint src/ test/layout/ playwright.config.ts",
+    "layout": "playwright test",
+    "eslint:fix": "eslint --fix src/ test/layout/ playwright.config.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@types/gettext-parser": "^9.0.0",
     "@types/node": "^24.0.0",
     "@types/react": "18.3.13",
