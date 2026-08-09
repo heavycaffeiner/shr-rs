@@ -1,0 +1,90 @@
+# This file must live at the repository root -- GitHub reads workflows only
+# from the top-level .github/, never from a subdirectory.
+#
+# Until this existed, `release.yml` was the only workflow in the repository and
+# it triggers on tag push and workflow_dispatch. Its `plugin` job does run
+# `npm test`, `npm run typecheck` and `npm run eslint`, so those three were
+# enforced -- but not until someone cut a release. Between tags nothing ran.
+#
+# Scope is `cockpit/` only. The Rust crates are deliberately not built here;
+# adding cargo jobs to a pull-request workflow is a separate decision with a
+# separate runtime cost.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A pull request that gets three pushes in a minute should run the audit once,
+# not three times. The ref is the group because a run for one branch must never
+# cancel a run for another.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cockpit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Installing through the Makefile's own stamp target rather than calling
+      # npm here keeps one description of how dependencies get installed, and
+      # matches what release.yml does. The rule runs `npm ci`, which installs
+      # exactly what package-lock.json records and fails if the lock and
+      # package.json disagree.
+      - name: Install
+        run: make .npm-installed
+
+      # The browser is a ~130 MB download that changes only when the package
+      # does, so the key is the resolved version rather than the lockfile hash.
+      - name: Resolve the browser version
+        id: browser
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.browser.outputs.version }}
+
+      # P5 fails a Korean run when Hangul comes out at the missing-glyph
+      # advance, which is exactly what a machine with no CJK font renders. The
+      # matrix measures Korean at 390px, so the font is a dependency of the
+      # audit and not decoration.
+      - name: Install the browser and the Korean font
+        run: |
+          set -eux
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+
+      - name: Check
+        run: |
+          set -eux
+          npm test
+          npm run typecheck
+          npm run eslint
+          npm run build
+          npm run layout
+
+      # The console summary names every violation, but the trace and the
+      # per-run JSON are what say where each one is on the page.
+      - name: Upload the layout report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layout-report
+          path: |
+            cockpit/test/layout/report/
+            cockpit/test-results/
+          if-no-files-found: ignore

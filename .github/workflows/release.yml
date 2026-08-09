@@ -162,14 +162,52 @@ jobs:
       # whatever the registry offers on the day. v0.2.0's first build is why:
       # it resolved @patternfly/react-tokens to 6.6.1 against 6.6.0 pins and
       # failed the PatternFly coherence test.
+      - name: Install
+        working-directory: cockpit
+        run: make .npm-installed
+
+      # The browser is a ~130 MB download that changes only when the package
+      # does, so the key is the resolved version rather than the lockfile hash.
+      - name: Resolve the browser version
+        id: browser
+        working-directory: cockpit
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.browser.outputs.version }}
+
+      # P5 fails a Korean run when Hangul comes out at the missing-glyph
+      # advance, which is exactly what a machine with no CJK font renders. The
+      # matrix measures Korean at 390px, so the font is a dependency of the
+      # audit and not decoration.
+      - name: Install the browser and the Korean font
+        working-directory: cockpit
+        run: |
+          set -eux
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+
       - name: Check
         working-directory: cockpit
         run: |
           set -eux
-          make .npm-installed
           npm test
           npm run typecheck
           npm run eslint
+          npm run build
+          npm run layout
+
+      - name: Upload the layout report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layout-report
+          path: |
+            cockpit/test/layout/report/
+            cockpit/test-results/
+          if-no-files-found: ignore
 
       # VERSION is overridden because the Makefile derives it from
       # `git describe`, which would yield the tag verbatim ("v0.1.0").
