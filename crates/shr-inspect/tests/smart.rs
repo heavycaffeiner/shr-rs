@@ -90,6 +90,43 @@ fn nvme_and_ata_error_signals_warn_and_are_not_unknown() {
 }
 
 #[test]
+fn past_threshold_dip_alone_is_not_a_warning() {
+    // bit 5 (value 32) = DISK OK now, but some attribute sat at or below its
+    // threshold at some point in the past. Almost always a normalized
+    // temperature attribute remembering one hot spell, and permanent, so it is
+    // health information rather than something to act on.
+    let s = parse_smartctl(
+        r#"{"smartctl":{"exit_status":32},"smart_status":{"passed":true},
+          "temperature":{"current":41},
+          "ata_smart_attributes":{"table":[
+            {"id":5,"raw":{"value":0}},
+            {"id":197,"raw":{"value":0}},
+            {"id":198,"raw":{"value":0}}
+          ]}}"#,
+    )
+    .unwrap();
+    assert_eq!(s.exit_status, Some(32));
+    assert!(!s.inspection_failed());
+    assert!(!s.has_warning());
+    assert!(!s.is_unknown());
+}
+
+#[test]
+fn a_past_dip_never_masks_a_present_problem() {
+    // bit 5 together with bit 4 (prefail attribute at or below threshold now).
+    let now = parse_smartctl(r#"{"smartctl":{"exit_status":48},"smart_status":{"passed":true}}"#).unwrap();
+    assert!(now.has_warning());
+
+    // bit 5 on a drive that has also reallocated sectors.
+    let sectors = parse_smartctl(
+        r#"{"smartctl":{"exit_status":32},"smart_status":{"passed":true},
+          "ata_smart_attributes":{"table":[{"id":5,"raw":{"value":8}}]}}"#,
+    )
+    .unwrap();
+    assert!(sectors.has_warning());
+}
+
+#[test]
 fn empty_smart_is_unknown_not_a_warning() {
     let s = parse_smartctl("{}").unwrap();
     assert!(s.is_unknown());

@@ -304,11 +304,15 @@ enum Command {
         // `mdadm --assemble --scan` run by anything else in the meantime (a
         // different tool, a stray cron job, a reboot before the reuse) can
         // still find and reassemble the old array from it.
-        /// Also erase the RAID markers left on the disks. Off by default,
-        /// which leaves some chance of recovering the old arrangement; with
-        /// this flag the disks are left completely blank.
+        /// Also erase the RAID markers left on the disks, leaving them
+        /// completely blank.
         #[arg(long)]
         zero_superblocks: bool,
+        /// Leave the RAID markers in place, keeping some chance of
+        /// recovering the old arrangement by hand. The array is still
+        /// recorded so it is never auto-assembled again.
+        #[arg(long, conflicts_with = "zero_superblocks")]
+        no_zero_superblocks: bool,
         /// Print the teardown commands without running any of them.
         #[arg(long)]
         dry_run: bool,
@@ -1018,11 +1022,26 @@ fn dispatch(cli: Cli) -> Result<()> {
         Command::Destroy {
             name,
             zero_superblocks,
+            no_zero_superblocks,
             dry_run,
             yes,
         } => {
             let state_store = Arc::new(StateStore::new(STATE_PATH));
             let sys_runner = SystemRunner::new();
+            // Resolved BEFORE the preview, deliberately: the planned command
+            // list differs by this choice (it is what puts the `mdadm
+            // --zero-superblock` calls in or leaves them out), so previewing
+            // first would show the operator a plan that is not the one they
+            // then type a group name to confirm. Applies to `--dry-run` too
+            // -- "what would happen" has no single answer until this is
+            // settled.
+            let zero_superblocks = resolve_zero_superblocks(
+                zero_superblocks,
+                no_zero_superblocks,
+                yes,
+                shr_command::can_prompt_operator(),
+                &mut std::io::stdin().lock(),
+            )?;
             // Same reason as `Expand`: the preview replays
             // `destroy()` under a DryRunRunner, so its live-status
             // validation (expansion in progress, etc.) would otherwise read
@@ -2075,6 +2094,70 @@ fn require_typed_confirmation(
         bail!("{operation} of group `{expected_name}` cancelled: confirmation text did not match");
     }
     Ok(())
+}
+
+/// Decide whether `destroy` also wipes the member partitions' mdadm
+/// superblocks, from the two mutually exclusive flags plus, when neither is
+/// given, the operator.
+///
+/// This used to be a bare `--zero-superblocks: bool` defaulting to off, so
+/// an operator who never thought about it silently got "markers left
+/// behind" -- a real decision (it is the difference between disks that can
+/// still be pieced back together by hand and disks that cannot) made by
+/// nobody. Cockpit has always presented it as a checkbox; the CLI now
+/// insists on an answer too.
+///
+/// Non-interactive (`--yes`, or no terminal to prompt on) with neither flag
+/// is an ERROR rather than a fallback to the old default: a script that
+/// never states an intent is exactly the case that used to get one assigned
+/// to it. Existing scripts need one flag added, once.
+fn resolve_zero_superblocks(
+    zero: bool,
+    no_zero: bool,
+    yes: bool,
+    interactive: bool,
+    input: &mut dyn std::io::BufRead,
+) -> Result<bool> {
+    // clap enforces the mutual exclusion; this is the belt-and-braces read.
+    if zero && no_zero {
+        bail!("--zero-superblocks and --no-zero-superblocks cannot both be given");
+    }
+    if zero {
+        return Ok(true);
+    }
+    if no_zero {
+        return Ok(false);
+    }
+
+    if yes || !interactive {
+        bail!(
+            "destroy needs an explicit decision about the RAID markers on these disks: pass \
+             --zero-superblocks to erase them (disks left blank) or --no-zero-superblocks to \
+             leave them in place (recoverable by hand). Either way the array is recorded so it \
+             is never auto-assembled again."
+        );
+    }
+
+    use std::io::Write as _;
+    println!(
+        "Erase the RAID markers on these disks as well?\n  \
+         yes -- the disks are left completely blank\n  \
+         no  -- the markers stay, so the old arrangement can still be pieced back together by hand"
+    );
+    print!("Type `yes` or `no`: ");
+    std::io::stdout().flush().ok();
+
+    let mut line = String::new();
+    input
+        .read_line(&mut line)
+        .context("reading the superblock decision from stdin")?;
+    match line.trim() {
+        "yes" | "y" => Ok(true),
+        "no" | "n" => Ok(false),
+        other => {
+            bail!("destroy cancelled: expected `yes` or `no` for the RAID marker decision, got `{other}`")
+        }
+    }
 }
 
 fn render_preflight(r: &shr_inspect::WritePreflight) -> String {
@@ -3350,6 +3433,104 @@ mod tests {
     fn require_typed_confirmation_proceeds_when_the_typed_name_matches_exactly() {
         let mut input: &[u8] = b"shr1\n";
         require_typed_confirmation("shr1", &[], false, "create", true, &mut input).unwrap();
+    }
+
+    // -- `destroy`'s superblock decision.
+
+    #[test]
+    fn zero_superblocks_flags_are_taken_at_face_value_without_touching_stdin() {
+        // Either flag short-circuits before the prompt -- an EMPTY reader
+        // proves stdin is never consulted.
+        let mut empty: &[u8] = b"";
+        assert!(resolve_zero_superblocks(true, false, false, true, &mut empty).unwrap());
+        let mut empty: &[u8] = b"";
+        assert!(!resolve_zero_superblocks(false, true, false, true, &mut empty).unwrap());
+    }
+
+    #[test]
+    fn destroy_refuses_to_pick_a_superblock_default_for_a_script() {
+        // The whole point of the change: `--yes` with neither flag used to
+        // inherit "leave the markers", a real decision nobody made. It must
+        // now fail, and name both flags so the fix is obvious.
+        let mut empty: &[u8] = b"";
+        let err = resolve_zero_superblocks(false, false, true, true, &mut empty).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("--zero-superblocks"), "{msg}");
+        assert!(msg.contains("--no-zero-superblocks"), "{msg}");
+
+        // Same when there is simply no terminal to ask on (Cockpit's
+        // spawned process, a cron job), independently of `--yes`.
+        let mut empty: &[u8] = b"";
+        let err = resolve_zero_superblocks(false, false, false, false, &mut empty).unwrap_err();
+        assert!(err.to_string().contains("explicit decision"), "{err}");
+    }
+
+    #[test]
+    fn destroy_asks_the_operator_when_neither_flag_is_given_in_a_terminal() {
+        let mut yes_input: &[u8] = b"yes\n";
+        assert!(resolve_zero_superblocks(false, false, false, true, &mut yes_input).unwrap());
+
+        let mut no_input: &[u8] = b"no\n";
+        assert!(!resolve_zero_superblocks(false, false, false, true, &mut no_input).unwrap());
+
+        // Short forms, and a trailing CRLF, are accepted the same way.
+        let mut short: &[u8] = b"n\r\n";
+        assert!(!resolve_zero_superblocks(false, false, false, true, &mut short).unwrap());
+    }
+
+    #[test]
+    fn destroy_cancels_rather_than_guessing_at_an_unrecognized_answer() {
+        // Anything that is not clearly yes or no must NOT fall through to a
+        // default -- that would be the original bug wearing a prompt.
+        let mut vague: &[u8] = b"maybe\n";
+        let err = resolve_zero_superblocks(false, false, false, true, &mut vague).unwrap_err();
+        assert!(err.to_string().contains("cancelled"), "{err}");
+
+        let mut empty_line: &[u8] = b"\n";
+        let err = resolve_zero_superblocks(false, false, false, true, &mut empty_line).unwrap_err();
+        assert!(err.to_string().contains("cancelled"), "{err}");
+    }
+
+    #[test]
+    fn destroy_rejects_both_superblock_flags_at_once() {
+        // clap's `conflicts_with` catches this first; the helper refuses it
+        // too rather than silently letting one win.
+        let mut empty: &[u8] = b"";
+        assert!(resolve_zero_superblocks(true, true, false, true, &mut empty).is_err());
+    }
+
+    #[test]
+    fn destroy_flags_parse_and_are_mutually_exclusive() {
+        let cli = Cli::try_parse_from(["shr-rs", "destroy", "--name", "shr1", "--zero-superblocks"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Destroy {
+                zero_superblocks: true,
+                no_zero_superblocks: false,
+                ..
+            }
+        ));
+
+        let cli =
+            Cli::try_parse_from(["shr-rs", "destroy", "--name", "shr1", "--no-zero-superblocks"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Destroy {
+                zero_superblocks: false,
+                no_zero_superblocks: true,
+                ..
+            }
+        ));
+
+        assert!(Cli::try_parse_from([
+            "shr-rs",
+            "destroy",
+            "--name",
+            "shr1",
+            "--zero-superblocks",
+            "--no-zero-superblocks",
+        ])
+        .is_err());
     }
 
     #[test]

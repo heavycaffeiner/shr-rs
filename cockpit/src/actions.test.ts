@@ -560,18 +560,25 @@ describe("destroy argument validation", () => {
     // Both states asserted, not just the checked one -- a test that only
     // checks `zeroSuperblocks: true` would not prove the flag is actually
     // conditional (the lesson: assert what the test claims to assert).
-    it("--zero-superblocks appears only when explicitly requested, off by default", () => {
+    //
+    // Neither position may be expressed by OMITTING a flag: `--yes` makes
+    // this non-interactive, and `destroy` refuses to choose the superblock
+    // decision for a caller that never states one. Leaving the unchecked
+    // case bare would make every Cockpit destroy fail outright.
+    it("spells out the superblock decision in both checkbox positions", () => {
         const off = destroyArgs({ groupName: "shr1", zeroSuperblocks: false });
-        assert.ok(!off.argv.includes("--zero-superblocks"), "must default OFF -- member superblocks stay recoverable");
+        assert.ok(!off.argv.includes("--zero-superblocks"));
+        assert.ok(off.argv.includes("--no-zero-superblocks"), "unchecked must be stated, not omitted");
 
         const on = destroyArgs({ groupName: "shr1", zeroSuperblocks: true });
         assert.ok(on.argv.includes("--zero-superblocks"));
+        assert.ok(!on.argv.includes("--no-zero-superblocks"));
     });
 
     it("builds the exact expected argv on valid input, both zero-superblocks states", () => {
         assert.deepEqual(
             destroyArgs({ groupName: "shr1", zeroSuperblocks: false }).argv,
-            ["shr-rs", "destroy", "--name", "shr1", "--yes", "--json"],
+            ["shr-rs", "destroy", "--name", "shr1", "--yes", "--json", "--no-zero-superblocks"],
         );
         assert.deepEqual(
             destroyArgs({ groupName: "shr1", zeroSuperblocks: true }).argv,
@@ -628,7 +635,10 @@ describe("TypedConfirmController (destroy shape): proceed()/execute() end-to-end
         assert.equal(state.step, "done");
         assert.deepEqual(state.result, { destroyed: "shr1" });
         assert.equal(spawn.calls.length, 1);
-        assert.deepEqual(spawn.calls[0].argv, ["shr-rs", "destroy", "--name", "shr1", "--yes", "--json"]);
+        assert.deepEqual(
+            spawn.calls[0].argv,
+            ["shr-rs", "destroy", "--name", "shr1", "--yes", "--json", "--no-zero-superblocks"],
+        );
         assert.ok(spawn.calls[0].argv.includes("shr1"), "must spawn --name for the group the dialog was actually opened for");
     });
 

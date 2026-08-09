@@ -525,7 +525,12 @@ export const destroyArgs = (input: DestroyInput): SpawnCall => {
             "shr-rs", "destroy",
             "--name", name,
             "--yes", "--json",
-            ...(input.zeroSuperblocks ? ["--zero-superblocks"] : []),
+            // Always one flag or the other, never "omit it and take the
+            // default": `--yes` makes this a non-interactive run, and
+            // `destroy` now refuses to pick the superblock decision for a
+            // caller that never states one. The checkbox IS the operator's
+            // answer, so both of its positions have to be spelled out.
+            input.zeroSuperblocks ? "--zero-superblocks" : "--no-zero-superblocks",
         ],
         options: SPAWN_OPTIONS,
     };

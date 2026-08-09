@@ -8,8 +8,8 @@ pub use error::StateError;
 pub use policy::{NotifyPolicy, PolicyFile, PolicyStore};
 pub use schema::{
     ArrayState, ScrubOutcome, StateBand, StateCheckpoint, StateDisk, StateExpansion, StateFile,
-    StateFilesystem, StatePartition, StatePendingDisk, StateScrubResult, CURRENT_SCHEMA_VERSION,
-    DEFAULT_GROUP_NAME,
+    StateFilesystem, StatePartition, StatePendingDisk, StateRetiredArray, StateScrubResult,
+    CURRENT_SCHEMA_VERSION, DEFAULT_GROUP_NAME,
 };
 pub use store::StateStore;
 

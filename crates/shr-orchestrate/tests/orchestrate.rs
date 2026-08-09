@@ -211,6 +211,14 @@ struct FailingRunner {
     /// `mount_point_missing_is_not_treated_as_absent_array`). `None`
     /// (default) means every mount succeeds, as before.
     mount_missing_mountpoint_for: Option<String>,
+    /// Kernel name whose `lsblk -n -o MOUNTPOINT /dev/<name>` reports a
+    /// SYSTEM mountpoint, as it does for a disk that has become part of the
+    /// OS's storage since preflight ran. Exists to drive
+    /// `reverify_targets`'s live system-disk gate, which reads that column
+    /// precisely because it traces md and LVM stacking (`/proc/mounts`, what
+    /// this check used to read, never names the underlying disk at all).
+    /// `None` (default) leaves lsblk's answer empty, i.e. nothing mounted.
+    live_system_mount_on: Option<String>,
 }
 
 impl FailingRunner {
@@ -251,6 +259,7 @@ impl FailingRunner {
             stop_does_not_take_effect: false,
             mount_missing_device_for: None,
             mount_missing_mountpoint_for: None,
+            live_system_mount_on: None,
         }
     }
 
@@ -888,6 +897,14 @@ impl CommandRunner for FailingRunner {
             self.mismatch_cnt_response.clone()
         } else if program == "btrfs" && args.first() == Some(&"scrub") && args.get(1) == Some(&"status") {
             self.btrfs_scrub_status_response.clone()
+        } else if program == "lsblk" && args.contains(&"MOUNTPOINT") {
+            // `reverify_targets`'s live system-disk gate. The real column
+            // prints one mountpoint per line, blank for every unmounted
+            // node in the disk's holder tree.
+            match (&self.live_system_mount_on, args.last()) {
+                (Some(kernel), Some(dev)) if *dev == format!("/dev/{kernel}") => "\n\n/\n".to_string(),
+                _ => String::new(),
+            }
         } else if program == "blkid" {
             // Vary by target path so distinct partitions/filesystems don't
             // collide onto the same UUID (state.toml would then have
@@ -2764,6 +2781,44 @@ fn create_blocks_when_btrfs_is_unsupported_before_any_partitioning() {
     assert!(
         !cmds.iter().any(|c| c.contains("mdadm --create")),
         "no mdadm array before the btrfs check: {cmds:?}"
+    );
+}
+
+#[test]
+fn create_aborts_when_a_target_became_a_system_disk_through_md_or_lvm_since_preflight() {
+    // The live re-verification gate used to read `/proc/mounts` and match
+    // its device names against the target's kernel name as a prefix. That
+    // only ever sees a filesystem mounted straight off a partition, so on
+    // an md RAID root (`/dev/mdN`) or an LVM root
+    // (`/dev/mapper/<vg>-<lv>`) it matched nothing and never fired -- the
+    // exact layouts it exists to protect. Measured on a real RAID1-root
+    // guest whose `/`, `/boot` and `/boot/efi` all lived on `sda`:
+    // `grep -c '^/dev/sda' /proc/mounts` was 0.
+    //
+    // Reading lsblk's MOUNTPOINT column instead walks the holder tree, so
+    // a `/` that sits on LVM on md on this disk is still traced back to it.
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner {
+        live_system_mount_on: Some("sdc".to_string()),
+        ..FailingRunner::healthy()
+    };
+    let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
+
+    let err = engine.create(create_req(three_disks())).unwrap_err();
+
+    assert!(
+        matches!(&err, OrchestrateError::Validation(m) if m.contains("system mountpoint")),
+        "expected the live system-disk gate to fire, got {err:?}"
+    );
+    let cmds = runner.get_recorded();
+    assert!(
+        !cmds.iter().any(|c| c.contains("mkpart")),
+        "must abort before any partitioning: {cmds:?}"
+    );
+    assert!(
+        !cmds.iter().any(|c| c.contains("mdadm --create")),
+        "must abort before any array is created: {cmds:?}"
     );
 }
 
@@ -6683,6 +6738,97 @@ fn destroy_never_touches_a_hand_written_unit_that_merely_shares_the_groups_unit_
         content.contains("an operator wrote this by hand"),
         "content must be untouched: {content}"
     );
+}
+
+#[test]
+fn destroy_without_zeroing_records_the_array_so_it_is_never_auto_assembled_again() {
+    // Leaving the superblocks is the recoverable choice, but on its own it
+    // also means the kernel's incremental assembly finds those members at
+    // the next boot and resurrects the dead array -- observed on a real
+    // guest, where a destroyed group returned as `/dev/md6` owning a device
+    // number and belonging to no group. Recording it is what puts an
+    // `ARRAY <ignore>` line in mdadm.conf: metadata kept, assembly stopped.
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::healthy();
+    let mdadm_conf = dir.path().join("mdadm.conf");
+    let engine = OrchestrationEngine::new(&runner, state_store.clone())
+        .with_conf_paths(&mdadm_conf, dir.path().join("fstab"))
+        .with_confirm_sink(&ALWAYS_CONFIRM);
+
+    let created = engine.create(create_req_named("shr1", three_disks())).unwrap();
+    let md_uuid = created.bands[0]
+        .md_uuid
+        .clone()
+        .expect("band must have a real md_uuid");
+
+    engine.destroy(Some("shr1"), false).unwrap();
+
+    let state = state_store.load().unwrap().unwrap();
+    assert!(state.groups.is_empty());
+    assert_eq!(state.retired_arrays.len(), created.bands.len());
+    assert!(state.retired_arrays.iter().all(|r| r.group_name == "shr1"));
+    assert!(state.retired_arrays.iter().any(|r| r.md_uuid == md_uuid));
+
+    let conf = std::fs::read_to_string(&mdadm_conf).unwrap();
+    assert!(
+        conf.contains(&format!("ARRAY <ignore> UUID={md_uuid}")),
+        "the destroyed array must be marked never-assemble: {conf}"
+    );
+}
+
+#[test]
+fn destroy_with_zeroing_records_nothing_because_there_is_no_metadata_left_to_ignore() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::healthy();
+    let mdadm_conf = dir.path().join("mdadm.conf");
+    let engine = OrchestrationEngine::new(&runner, state_store.clone())
+        .with_conf_paths(&mdadm_conf, dir.path().join("fstab"))
+        .with_confirm_sink(&ALWAYS_CONFIRM);
+
+    engine.create(create_req_named("shr1", three_disks())).unwrap();
+    engine.destroy(Some("shr1"), true).unwrap();
+
+    let state = state_store.load().unwrap().unwrap();
+    assert!(
+        state.retired_arrays.is_empty(),
+        "zeroed superblocks leave nothing for an <ignore> line to match: {:?}",
+        state.retired_arrays
+    );
+    let conf = std::fs::read_to_string(&mdadm_conf).unwrap();
+    assert!(!conf.contains("<ignore>"), "{conf}");
+}
+
+#[test]
+fn reusing_a_retired_arrays_disks_prunes_its_ignore_entry() {
+    // Once `create` repartitions those same disks and `mdadm --create`
+    // writes fresh superblocks over them, the old array has no physical
+    // trace left to suppress -- keeping the entry would leave mdadm.conf
+    // accumulating `<ignore>` lines forever.
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::healthy();
+    let mdadm_conf = dir.path().join("mdadm.conf");
+    let engine = OrchestrationEngine::new(&runner, state_store.clone())
+        .with_conf_paths(&mdadm_conf, dir.path().join("fstab"))
+        .with_confirm_sink(&ALWAYS_CONFIRM);
+
+    engine.create(create_req_named("shr1", three_disks())).unwrap();
+    engine.destroy(Some("shr1"), false).unwrap();
+    assert!(!state_store.load().unwrap().unwrap().retired_arrays.is_empty());
+
+    // The SAME disks, handed to a new group.
+    engine.create(create_req_named("shr2", three_disks())).unwrap();
+
+    let state = state_store.load().unwrap().unwrap();
+    assert!(
+        state.retired_arrays.is_empty(),
+        "reusing the disks must prune the stale entry: {:?}",
+        state.retired_arrays
+    );
+    let conf = std::fs::read_to_string(&mdadm_conf).unwrap();
+    assert!(!conf.contains("<ignore>"), "{conf}");
 }
 
 #[test]

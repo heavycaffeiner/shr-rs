@@ -227,6 +227,49 @@ pub struct ArrayState {
 pub struct StateFile {
     pub schema_version: u32,
     pub groups: Vec<ArrayState>,
+    /// Arrays this host has destroyed but whose member superblocks are
+    /// still on the disks, because the operator chose not to erase them.
+    /// See [`StateRetiredArray`]. `#[serde(default)]` so every
+    /// `state.toml` written before this field existed still loads, which is
+    /// also why `schema_version` does not move: nothing branches on it, and
+    /// an absent list means exactly what the default says (nothing
+    /// retired). Worth knowing: an older binary reading such a file would
+    /// ignore this key and then drop it on the next write, so a downgrade
+    /// silently re-arms the auto-assembly this exists to prevent.
+    #[serde(default)]
+    pub retired_arrays: Vec<StateRetiredArray>,
+}
+
+/// An array that `destroy` tore down WITHOUT `--zero-superblocks`.
+///
+/// Leaving the superblocks is a legitimate choice -- it is what keeps a
+/// mistaken `destroy` recoverable by hand -- but on its own it means the
+/// kernel's incremental (udev) assembly finds those members at the next
+/// boot and brings the dead array back. Observed on a real guest: a
+/// destroyed group reappeared as `/dev/md6` after a reboot, holding a
+/// device number and showing up in `shr-rs status` as an array belonging to
+/// no group.
+///
+/// Recording the array's UUID here lets `write_mdadm_conf` emit an
+/// `ARRAY <ignore> UUID=...` line for it, which mdadm.conf(5) defines as
+/// "any array which matches the rest of the line will never be assembled".
+///
+/// `disk_ids` is what makes the list self-limiting: once those same disks
+/// are handed to a new `create`/`expand`, the old array is gone for good
+/// and its entry is pruned, so this never grows without bound.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StateRetiredArray {
+    /// The array's mdadm UUID (`MD_UUID`), the same value `StateBand::
+    /// md_uuid` carries and the only identifier that survives the array
+    /// being stopped.
+    pub md_uuid: String,
+    /// The group this band belonged to, so an operator reading
+    /// `mdadm.conf`/`state.toml` can tell what the entry refers to.
+    pub group_name: String,
+    /// by-id names of the disks whose partitions still carry the
+    /// superblock. Used to prune this entry when those disks are reused.
+    pub disk_ids: Vec<String>,
+    pub retired_at: String,
 }
 
 /// Current on-disk schema version. Bumped from the implicit "1" (a bare
@@ -244,6 +287,7 @@ impl StateFile {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
             groups,
+            retired_arrays: Vec::new(),
         }
     }
 

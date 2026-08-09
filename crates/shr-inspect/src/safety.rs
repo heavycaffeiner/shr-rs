@@ -11,7 +11,24 @@ use crate::identity::ByIdIndex;
 use crate::lsblk::{BlockDevice, LsblkOutput};
 
 /// Mountpoints that mark a disk as holding the operating system.
-pub const SYSTEM_MOUNTPOINTS: &[&str] = &["/", "/boot", "/boot/efi", "/boot/EFI", "/efi", "/boot/grub"];
+///
+/// `[SWAP]` is not a path: it is what `lsblk`'s MOUNTPOINT column (and
+/// lsblk's JSON `mountpoint` field) reports for an ACTIVE swap device. A
+/// disk backing the running system's swap is a system disk by any
+/// reasonable reading -- repartitioning it out from under a live
+/// `swapon` is not a data-disk operation -- and listing it here is what
+/// makes both gates agree about that, since `preflight_write_targets` and
+/// the orchestrator's live re-check both resolve through
+/// `is_system_mountpoint`.
+pub const SYSTEM_MOUNTPOINTS: &[&str] = &[
+    "/",
+    "/boot",
+    "/boot/efi",
+    "/boot/EFI",
+    "/efi",
+    "/boot/grub",
+    "[SWAP]",
+];
 
 /// Hard reasons a disk must not be written by shr-rs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

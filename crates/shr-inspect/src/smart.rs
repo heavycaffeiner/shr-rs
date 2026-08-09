@@ -9,7 +9,8 @@ use serde_json::Value;
 pub struct SmartInfo {
     /// `smart_status.passed` — overall SMART health assessment.
     pub passed: Option<bool>,
-    /// `smartctl.exit_status` — its high bits (>=8) flag real device problems.
+    /// `smartctl.exit_status`. Only some of its high bits flag real device
+    /// problems; see `SMARTCTL_PROBLEM_BITS`.
     pub exit_status: Option<u64>,
     pub temperature_c: Option<i64>,
     pub power_on_hours: Option<u64>,
@@ -27,14 +28,24 @@ pub struct SmartInfo {
     pub serial: Option<String>,
 }
 
-/// smartctl exit-status bits >= 3 (value >= 8) indicate SMART/device problems
-/// (failing, prefail, error-log entries, self-test failures) rather than mere
-/// CLI/usage errors.
-const SMARTCTL_PROBLEM_BITS: u64 = 0xF8;
+/// smartctl exit-status bits that mean the device is in trouble now: bit 3
+/// (status check says failing), bit 4 (prefail attribute at or below its
+/// threshold), bit 6 (error-log entries), bit 7 (self-test failures).
+///
+/// Bit 5 (value 32) is deliberately excluded. It only reports that some
+/// attribute was at or below its threshold at some point in the *past*, and in
+/// practice that is nearly always a normalized temperature attribute (190/194)
+/// remembering a single hot spell. The comparison is against WORST, a lifetime
+/// low-water mark that never resets, so the bit is permanent: treating it as a
+/// warning marks a healthy drive forever with nothing the operator can do about
+/// it. Actual media damage still surfaces via attributes 5/197/198.
+const SMARTCTL_PROBLEM_BITS: u64 = 0xD8;
 
 impl SmartInfo {
-    /// A definite "needs attention" signal: failed health assessment, problem
-    /// exit bits, or any pending/reallocated/uncorrectable/media error.
+    /// A definite "needs attention" signal: failed health assessment, a
+    /// current-problem exit bit, or any pending/reallocated/uncorrectable/media
+    /// error. Purely historical signals do not qualify, since there is no
+    /// action to take on them; see `SMARTCTL_PROBLEM_BITS`.
     pub fn has_warning(&self) -> bool {
         self.passed == Some(false)
             || self.exit_status.unwrap_or(0) & SMARTCTL_PROBLEM_BITS != 0

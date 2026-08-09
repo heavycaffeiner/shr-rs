@@ -1538,38 +1538,39 @@ mod tests {
         /// set on band 0 -- the exact shape `execute_grow` leaves behind
         /// when its reshape was still running when `expand()` returned.
         fn seeded_state_with_resize_pending(resize_pending: bool) -> StateFile {
-            StateFile {
-                schema_version: shr_state::CURRENT_SCHEMA_VERSION,
-                groups: vec![ArrayState {
-                    name: "shr1".to_string(),
-                    mode: "shr".to_string(),
-                    created_at: "2026-01-01T00:00:00Z".to_string(),
-                    layout_version: 1,
-                    disks: vec![],
-                    bands: vec![StateBand {
-                        index: 0,
-                        level: "raid1".to_string(),
-                        md_name: "md0".to_string(),
-                        md_uuid: None,
-                        member_partitions: vec![],
-                        usable_bytes: 4_000_000_000_000,
-                        resize_pending,
-                        last_smart_reallocated: None,
-                        last_scrub: None,
-                        scrub_in_progress: false,
-                        pending_member_removal: None,
-                        reshape_priority: None,
-                    }],
-                    filesystem: StateFilesystem {
-                        fs_uuid: None,
-                        mount_point: "/mnt/shr_data".to_string(),
-                        vg_name: "shr_vg".to_string(),
-                        lv_name: "data".to_string(),
-                        compression: "zstd:3".to_string(),
-                    },
-                    expansion: StateExpansion::default(),
+            // `StateFile::new`, not a struct literal: this fixture only
+            // cares about the one group below, and every field the wrapper
+            // grows afterwards has a correct empty default that a literal
+            // would have to keep restating.
+            StateFile::new(vec![ArrayState {
+                name: "shr1".to_string(),
+                mode: "shr".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                layout_version: 1,
+                disks: vec![],
+                bands: vec![StateBand {
+                    index: 0,
+                    level: "raid1".to_string(),
+                    md_name: "md0".to_string(),
+                    md_uuid: None,
+                    member_partitions: vec![],
+                    usable_bytes: 4_000_000_000_000,
+                    resize_pending,
+                    last_smart_reallocated: None,
+                    last_scrub: None,
+                    scrub_in_progress: false,
+                    pending_member_removal: None,
+                    reshape_priority: None,
                 }],
-            }
+                filesystem: StateFilesystem {
+                    fs_uuid: None,
+                    mount_point: "/mnt/shr_data".to_string(),
+                    vg_name: "shr_vg".to_string(),
+                    lv_name: "data".to_string(),
+                    compression: "zstd:3".to_string(),
+                },
+                expansion: StateExpansion::default(),
+            }])
         }
 
         #[test]

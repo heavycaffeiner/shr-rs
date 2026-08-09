@@ -33,6 +33,46 @@ fn detects_system_mounts_on_root_disk() {
 }
 
 #[test]
+fn detects_a_swap_holding_disk_as_a_system_disk_through_md_and_lvm() {
+    // Two things at once. lsblk reports an ACTIVE swap device as the
+    // literal string `[SWAP]` in its mountpoint field, not as a path, so a
+    // disk whose only OS role is carrying swap was previously invisible to
+    // both gates -- repartitioning it out from under a live `swapon` is not
+    // a data-disk operation. And the mountpoint here is nested two levels
+    // down (partition -> md -> LVM), which is how a RAID1 root actually
+    // looks: nothing at the disk or partition level names a mountpoint at
+    // all, so only walking the whole child tree finds it.
+    const SWAP_ON_RAID: &str = r#"{"blockdevices":[
+      {"name":"sde","size":4000000000000,"type":"disk","model":"SwapDisk","serial":"SW",
+       "children":[
+         {"name":"sde1","type":"part","fstype":"linux_raid_member",
+          "children":[
+            {"name":"md5","type":"raid1","fstype":"LVM2_member",
+             "children":[{"name":"vg-swap","type":"lvm","fstype":"swap","mountpoint":"[SWAP]"}]}
+          ]}
+       ]}
+    ]}"#;
+
+    let lsblk = parse_lsblk(SWAP_ON_RAID).unwrap();
+    let sde = lsblk.disks().find(|d| d.name == "sde").unwrap();
+
+    assert_eq!(system_mounts_on(sde), vec!["[SWAP]".to_string()]);
+
+    let mut idx = ByIdIndex::empty();
+    idx.insert("sde", "ata-SwapDisk_SW");
+    let report = preflight_write_targets(&["sde".into()], &lsblk, &idx, true);
+    assert!(!report.ok, "a live-swap disk must be refused: {report:?}");
+    assert!(
+        report
+            .blockers
+            .iter()
+            .any(|b| matches!(b, WriteBlocker::SystemDisk { .. })),
+        "expected a SystemDisk blocker: {:?}",
+        report.blockers
+    );
+}
+
+#[test]
 fn preflight_blocks_system_and_missing_id() {
     let lsblk = parse_lsblk(LSBLK).unwrap();
     let idx = index();

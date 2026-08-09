@@ -45,7 +45,7 @@ const UNIT_OWNERSHIP_MARKER: &str = BEGIN_MARKER;
 /// F1) are skipped rather than emitting a line mdadm couldn't use to
 /// reassemble anything.
 pub fn write_mdadm_conf(path: &Path, state: &StateFile) -> Result<(), StateError> {
-    let lines: Vec<String> = state
+    let mut lines: Vec<String> = state
         .groups
         .iter()
         .flat_map(|group| group.bands.iter())
@@ -55,6 +55,34 @@ pub fn write_mdadm_conf(path: &Path, state: &StateFile) -> Result<(), StateError
                 .map(|uuid| format!("ARRAY /dev/{} UUID={}", band.md_name, uuid))
         })
         .collect();
+
+    // Destroyed arrays whose superblocks are still on the disks. mdadm.conf(5):
+    // the device name `<ignore>` (angle brackets included) means "any array
+    // which matches the rest of the line will never be automatically
+    // assembled". Without this, the kernel's incremental (udev) assembly
+    // finds those leftover members at the next boot and resurrects the dead
+    // array -- observed on a real guest, where a destroyed group came back as
+    // `/dev/md6`, claimed a device number, and appeared in `shr-rs status`
+    // belonging to no group at all.
+    //
+    // Emitted INSIDE the same managed block as the live arrays, on purpose:
+    // these lines are regenerated from `StateFile` exactly like the others,
+    // so an entry pruned from state disappears from the file on the next
+    // write instead of lingering as something nothing owns.
+    if !state.retired_arrays.is_empty() {
+        lines.push(
+            "# destroyed by shr-rs; superblocks deliberately left on the disks for manual \
+             recovery -- never auto-assemble these"
+                .to_string(),
+        );
+        lines.extend(
+            state
+                .retired_arrays
+                .iter()
+                .map(|r| format!("ARRAY <ignore> UUID={} # was `{}`", r.md_uuid, r.group_name)),
+        );
+    }
+
     write_managed_block(path, &lines.join("\n"))
 }
 

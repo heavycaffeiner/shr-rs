@@ -18,7 +18,7 @@ use shr_inspect::{is_system_mountpoint, parse_mdstat, resolve_disk_path, DiskRef
 use shr_state::{
     conf::{is_shr_rs_owned_unit, remove_owned_unit_file, scrub_unit_paths, write_fstab, write_mdadm_conf},
     ArrayState, NotifyPolicy, ScrubOutcome, StateBand, StateCheckpoint, StateDisk, StateExpansion, StateFile,
-    StateFilesystem, StatePartition, StatePendingDisk, StateScrubResult, StateStore,
+    StateFilesystem, StatePartition, StatePendingDisk, StateRetiredArray, StateScrubResult, StateStore,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -476,11 +476,10 @@ impl<'a> OrchestrationEngine<'a> {
                 Err(e) => return Err(e.into()),
             }
 
-            // Still not a system disk: read the LIVE mount table, not the
+            // Still not a system disk: ask the LIVE system, not the
             // (necessarily stale-by-now) `system_disks` list already
             // checked earlier in this same call.
-            let mounts = runner.run("cat", &["/proc/mounts"])?;
-            if let Some(mp) = system_mountpoint_of(&mounts.stdout, &d.kernel_name) {
+            if let Some(mp) = live_system_mountpoint_on(runner, &d.kernel_name)? {
                 return Err(OrchestrateError::Validation(format!(
                     "disk `{}` (`{}`) now holds the system mountpoint `{mp}`, which it did not \
                      at preflight time; aborting before touching anything",
@@ -1084,6 +1083,7 @@ impl<'a> OrchestrationEngine<'a> {
         // -- rolling back a working array over a bookkeeping-file error would
         // be worse than the problem it solves.)
         if !self.runner.is_dry_run() {
+            prune_retired_arrays_for(&mut full_state, &req.disks);
             full_state.groups.push(state.clone());
             self.store.save(&full_state)?;
             self.write_managed_configs(&full_state)?;
@@ -3108,6 +3108,38 @@ impl<'a> OrchestrationEngine<'a> {
             )));
         }
 
+        // Leaving the superblocks in place is a legitimate choice -- it is
+        // what keeps a mistaken `destroy` recoverable by hand -- but on its
+        // own it also means the kernel's incremental assembly finds those
+        // members at the next boot and brings the dead array back (real
+        // guest: a destroyed group returned as `/dev/md6`, owning a device
+        // number, belonging to no group). Recording it here is what lets
+        // `write_mdadm_conf` emit an `ARRAY <ignore>` line so the metadata
+        // survives for recovery while nothing assembles it unasked. With
+        // `zero_superblocks` there is no metadata left to ignore.
+        if !zero_superblocks {
+            let disk_ids: Vec<String> = full_state.groups[group_idx]
+                .disks
+                .iter()
+                .map(|d| d.id.clone())
+                .collect();
+            let retired_at = Utc::now().to_rfc3339();
+            for band in &full_state.groups[group_idx].bands {
+                // A band whose `md_uuid` was never read back has nothing
+                // that could match an mdadm.conf line, so there is nothing
+                // to suppress -- and emitting `UUID=` with no value would
+                // be a line mdadm cannot act on.
+                if let Some(md_uuid) = &band.md_uuid {
+                    full_state.retired_arrays.push(StateRetiredArray {
+                        md_uuid: md_uuid.clone(),
+                        group_name: group_name.clone(),
+                        disk_ids: disk_ids.clone(),
+                        retired_at: retired_at.clone(),
+                    });
+                }
+            }
+        }
+
         full_state.groups.remove(group_idx);
         if !self.runner.is_dry_run() {
             self.store.save(&full_state)?;
@@ -3539,6 +3571,7 @@ impl<'a> OrchestrationEngine<'a> {
         // `resumable: true` from here on (unlike the older `false`
         // literal this replaced): a plan now IS persisted, so a crash after
         // this point has something to replay.
+        prune_retired_arrays_for(&mut full_state, &req.new_disks);
         full_state.groups[group_idx].expansion.in_progress = true;
         full_state.groups[group_idx].expansion.new_disks =
             req.new_disks.iter().map(pending_disk_from_resolved).collect();
@@ -4493,28 +4526,70 @@ fn scrub_is_fresh(band: &StateBand) -> bool {
     Utc::now().signed_duration_since(finished) <= chrono::Duration::days(SCRUB_FRESHNESS_DAYS)
 }
 
-/// The system mountpoint `kernel_name` (or one of its partitions) is
-/// CURRENTLY mounted at, per a `/proc/mounts` dump, if any. A lightweight,
-/// `CommandRunner`-only secondary check -- not a full `lsblk` tree walk --
-/// so `reverify_targets` stays cheap and trivially mockable (every existing
-/// test's default, unstubbed `cat /proc/mounts` response is empty, which
-/// correctly means "nothing mounted, no system disk found here").
-fn system_mountpoint_of(proc_mounts: &str, kernel_name: &str) -> Option<String> {
-    proc_mounts.lines().find_map(|line| {
-        let mut parts = line.split_whitespace();
-        let device = parts.next()?.trim_start_matches("/dev/");
-        let mountpoint = parts.next()?;
-        let rest = device.strip_prefix(kernel_name)?;
-        // `rest` is either empty (the whole disk itself, unlikely but
-        // possible for an unpartitioned system mount) or a partition
-        // suffix: plain digits (`sdb` -> `sdb1`) or `p`-separated digits
-        // (`nvme0n1` -> `nvme0n1p1`).
-        let is_partition_of_this_disk = rest.trim_start_matches('p').chars().all(|c| c.is_ascii_digit());
-        if !is_partition_of_this_disk {
-            return None;
-        }
-        is_system_mountpoint(mountpoint).then(|| mountpoint.to_string())
-    })
+/// The system mountpoint currently reachable from `kernel_name` through
+/// ANY depth of stacking, if any -- read live, via
+/// `lsblk -n -o MOUNTPOINT /dev/<kernel_name>`.
+///
+/// This used to parse `/proc/mounts` and match its device names against
+/// `kernel_name` as a prefix (`sda` -> `sda1`, `nvme0n1` -> `nvme0n1p1`).
+/// That can only ever see a filesystem mounted DIRECTLY off a partition of
+/// the disk, so it silently never fired on the two layouts most worth
+/// protecting: an md RAID root, whose mount source reads `/dev/mdN`, and an
+/// LVM root, whose mount source reads `/dev/mapper/<vg>-<lv>`. Neither
+/// string contains the disk's kernel name at all. Measured on a real
+/// RAID1-root guest with `/`, `/boot` and `/boot/efi` all on `sda`:
+/// `grep -c '^/dev/sda' /proc/mounts` returned **0**, so the whole check
+/// was dead code in exactly the configuration it existed for.
+///
+/// `lsblk` walks the holder tree, so one invocation reports the
+/// mountpoints of every md array, LVM volume and plain partition layered
+/// on the disk. Asking for only the MOUNTPOINT column keeps the output one
+/// value per line (blank for unmounted nodes) with none of the tree-drawing
+/// characters a NAME column would bring, so there is nothing to parse
+/// beyond trimming. Matching goes through `shr_inspect::is_system_mountpoint`
+/// -- the SAME predicate `preflight_write_targets` uses -- so the live gate
+/// and the preflight gate can no longer disagree about what counts as a
+/// system mountpoint.
+///
+/// Still cheap and trivially mockable: one command per target disk, and
+/// every existing test's default, unstubbed `lsblk` response is empty,
+/// which correctly reads as "nothing mounted, no system disk found here".
+fn live_system_mountpoint_on(
+    runner: &dyn CommandRunner,
+    kernel_name: &str,
+) -> Result<Option<String>, OrchestrateError> {
+    let dev = format!("/dev/{kernel_name}");
+    let out = runner.run("lsblk", &["-n", "-o", "MOUNTPOINT", &dev])?;
+    Ok(out
+        .stdout
+        .lines()
+        .map(str::trim)
+        .find(|mp| !mp.is_empty() && is_system_mountpoint(mp))
+        .map(str::to_string))
+}
+
+/// Drop `StateRetiredArray` entries whose disks are being taken by a
+/// `create`/`expand` that is about to repartition them.
+///
+/// A retired entry exists to stop a DEAD array from being auto-assembled off
+/// superblocks still sitting on its old disks. The moment those disks are
+/// handed to a new group, `create`/`expand` cut fresh partitions and
+/// `mdadm --create` writes new superblocks over them, so there is no longer
+/// anything for the old entry to suppress -- keeping it would leave
+/// `mdadm.conf` accumulating `<ignore>` lines for arrays whose last physical
+/// trace is gone.
+///
+/// Matched on ANY overlap rather than full containment: a retired array's
+/// members are spread across all of that group's disks, so reusing even one
+/// of them is enough to make the old array unassemblable anyway.
+fn prune_retired_arrays_for(state: &mut StateFile, taken: &[ResolvedDisk]) {
+    if state.retired_arrays.is_empty() {
+        return;
+    }
+    let taken_ids: HashSet<&str> = taken.iter().map(|d| d.id.as_str()).collect();
+    state
+        .retired_arrays
+        .retain(|r| !r.disk_ids.iter().any(|id| taken_ids.contains(id.as_str())));
 }
 
 /// Every mdN device NUMBER already claimed by a band in ANY group recorded

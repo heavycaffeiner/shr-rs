@@ -19,21 +19,51 @@ impl<'a> BtrfsExecutor<'a> {
     /// this unreachable from a `FailingRunner`-style test double and, on
     /// Windows (this project's native test host), unconditionally failed
     /// with an IO error for any non-dry-run test.
+    ///
+    /// `/proc/filesystems` answers "what can this kernel mount RIGHT NOW",
+    /// not "what can this kernel support" -- it lists only filesystems that
+    /// are built in or whose module is ALREADY LOADED. A modular btrfs that
+    /// nothing has mounted yet is simply absent from it. Real-guest repro
+    /// (ELRepo `kernel-ml`, which ships btrfs as a module rather than
+    /// built in): on a host that had not yet mounted any btrfs filesystem,
+    /// `create` refused with "the running kernel does not support btrfs"
+    /// while `modinfo -n btrfs` printed the module path and a bare
+    /// `modprobe btrfs` made the very same command succeed. So an absent
+    /// line means "ask for the module", never "give up".
     pub fn ensure_supported(&self) -> Result<(), ExecError> {
         if self.runner.is_dry_run() {
             return Ok(());
         }
 
-        let output = self.runner.run("cat", &["/proc/filesystems"])?;
-        if !kernel_supports_btrfs(&output.stdout) {
-            return Err(ExecError::Prerequisite(
-                "the running kernel does not support btrfs; install/load a compatible btrfs module first"
-                    .into(),
-            ));
+        if !self.btrfs_in_proc_filesystems()? {
+            // Deliberately ignoring modprobe's own exit status: the only
+            // answer that decides anything is whether btrfs is usable
+            // AFTERWARDS, which the re-read below reports directly. A
+            // modprobe that fails for its own reasons (already built in and
+            // no module file, a restricted container) must not pre-empt that.
+            let _ = self.runner.run("modprobe", &["btrfs"]);
+
+            if !self.btrfs_in_proc_filesystems()? {
+                return Err(ExecError::Prerequisite(
+                    "btrfs is unavailable: it is not built into the running kernel and \
+                     `modprobe btrfs` did not make it available -- either this kernel ships \
+                     no btrfs module (install one, e.g. an ELRepo kernel-ml) or loading it \
+                     was refused (check `modinfo -n btrfs` and `dmesg`)"
+                        .into(),
+                ));
+            }
         }
 
         self.runner.run("mkfs.btrfs", &["--version"])?;
         Ok(())
+    }
+
+    /// Whether `/proc/filesystems` currently lists btrfs. Split out only so
+    /// `ensure_supported` can ask the same question twice (before and after
+    /// `modprobe`) without duplicating the read.
+    fn btrfs_in_proc_filesystems(&self) -> Result<bool, ExecError> {
+        let output = self.runner.run("cat", &["/proc/filesystems"])?;
+        Ok(kernel_supports_btrfs(&output.stdout))
     }
 
     /// Unmount a Btrfs filesystem, for rollback of a partially-created array (D10).

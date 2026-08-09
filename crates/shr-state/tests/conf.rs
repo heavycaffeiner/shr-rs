@@ -5,6 +5,7 @@ use shr_state::conf::{
 };
 use shr_state::{
     ArrayState, StateBand, StateDisk, StateExpansion, StateFile, StateFilesystem, StatePartition,
+    StateRetiredArray,
 };
 use tempfile::tempdir;
 
@@ -91,6 +92,92 @@ fn mdadm_conf_skips_bands_without_a_real_md_uuid_yet() {
     let content = std::fs::read_to_string(&path).unwrap();
 
     assert!(!content.contains("md0"));
+}
+
+#[test]
+fn a_retired_array_gets_an_ignore_line_so_the_kernel_never_reassembles_it() {
+    // `destroy` without `--zero-superblocks` leaves the members' mdadm
+    // metadata on the disks on purpose (a mistaken destroy stays
+    // recoverable by hand), but that alone lets the kernel's incremental
+    // assembly resurrect the dead array at the next boot -- observed on a
+    // real guest, where a destroyed group came back as `/dev/md6`.
+    // mdadm.conf(5) defines `<ignore>` as "any array which matches the rest
+    // of the line will never be automatically assembled", which suppresses
+    // exactly that without erasing anything.
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("mdadm.conf");
+    let mut state = state_with_bands(
+        vec![band(0, "md0", Some("11111111:11111111:11111111:11111111"))],
+        None,
+    );
+    state.retired_arrays.push(StateRetiredArray {
+        md_uuid: "deadbeef:deadbeef:deadbeef:deadbeef".to_string(),
+        group_name: "scratch".to_string(),
+        disk_ids: vec!["ata-OLD-DISK-1".to_string()],
+        retired_at: "2026-08-09T00:00:00Z".to_string(),
+    });
+
+    write_mdadm_conf(&path, &state).unwrap();
+    let content = std::fs::read_to_string(&path).unwrap();
+
+    assert!(
+        content.contains("ARRAY <ignore> UUID=deadbeef:deadbeef:deadbeef:deadbeef"),
+        "the retired array needs an <ignore> line: {content}"
+    );
+    assert!(
+        content.contains("was `scratch`"),
+        "the line should say what it refers to: {content}"
+    );
+    // The live array is unaffected -- suppressing one must never suppress
+    // the other.
+    assert!(content.contains("ARRAY /dev/md0 UUID=11111111:11111111:11111111:11111111"));
+    assert!(
+        !content.contains("ARRAY <ignore> UUID=11111111"),
+        "a live band must never be marked ignore: {content}"
+    );
+}
+
+#[test]
+fn dropping_a_retired_array_from_state_removes_its_ignore_line_and_spares_foreign_entries() {
+    // The entry is pruned once its disks are reused, so the line has to
+    // disappear on the next write rather than linger as something nothing
+    // owns. And -- the property that matters most on a RAID1-root host --
+    // an OS array's own line, sitting OUTSIDE the managed markers, must
+    // survive every one of these rewrites untouched.
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("mdadm.conf");
+    std::fs::write(
+        &path,
+        "ARRAY /dev/md5 metadata=1.2 UUID=05050505:05050505:05050505:05050505\n",
+    )
+    .unwrap();
+
+    let mut state = state_with_bands(
+        vec![band(0, "md0", Some("11111111:11111111:11111111:11111111"))],
+        None,
+    );
+    state.retired_arrays.push(StateRetiredArray {
+        md_uuid: "deadbeef:deadbeef:deadbeef:deadbeef".to_string(),
+        group_name: "scratch".to_string(),
+        disk_ids: vec!["ata-OLD-DISK-1".to_string()],
+        retired_at: "2026-08-09T00:00:00Z".to_string(),
+    });
+    write_mdadm_conf(&path, &state).unwrap();
+    assert!(std::fs::read_to_string(&path).unwrap().contains("<ignore>"));
+
+    state.retired_arrays.clear();
+    write_mdadm_conf(&path, &state).unwrap();
+    let content = std::fs::read_to_string(&path).unwrap();
+
+    assert!(
+        !content.contains("<ignore>"),
+        "the pruned entry must be gone: {content}"
+    );
+    assert!(!content.contains("deadbeef"), "{content}");
+    assert!(
+        content.contains("ARRAY /dev/md5 metadata=1.2 UUID=05050505:05050505:05050505:05050505"),
+        "the OS array's own line lives outside the markers and must survive: {content}"
+    );
 }
 
 #[test]

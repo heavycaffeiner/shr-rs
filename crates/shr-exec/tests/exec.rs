@@ -411,6 +411,108 @@ fn real_ensure_supported_checks_each_tool_version() {
     assert!(cmds.contains(&"mkfs.btrfs --version".to_string()), "{cmds:?}");
 }
 
+/// Models the one distinction `/proc/filesystems` cannot express on its own:
+/// btrfs being SUPPORTED by the kernel versus btrfs being LOADED right now.
+/// `btrfs_listed` is what `/proc/filesystems` currently reports, and
+/// `modprobe_loads_it` decides whether `modprobe btrfs` flips that.
+struct ModularBtrfsRunner {
+    btrfs_listed: Mutex<bool>,
+    modprobe_loads_it: bool,
+    recorded: Mutex<Vec<String>>,
+}
+
+impl ModularBtrfsRunner {
+    fn new(btrfs_listed: bool, modprobe_loads_it: bool) -> Self {
+        Self {
+            btrfs_listed: Mutex::new(btrfs_listed),
+            modprobe_loads_it,
+            recorded: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn get_recorded(&self) -> Vec<String> {
+        self.recorded.lock().unwrap().clone()
+    }
+}
+
+impl CommandRunner for ModularBtrfsRunner {
+    fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
+        self.recorded
+            .lock()
+            .unwrap()
+            .push(format!("{} {}", program, args.join(" ")));
+
+        if program == "cat" && args.contains(&"/proc/filesystems") {
+            let stdout = if *self.btrfs_listed.lock().unwrap() {
+                "nodev\tsysfs\next4\nbtrfs\n".to_string()
+            } else {
+                "nodev\tsysfs\next4\n".to_string()
+            };
+            return Ok(CommandOutput {
+                stdout,
+                stderr: String::new(),
+            });
+        }
+
+        if program == "modprobe" {
+            if !self.modprobe_loads_it {
+                return Err(ExecError::NonZeroExit {
+                    program: program.to_string(),
+                    exit_code: 1,
+                    stdout: String::new(),
+                    stderr: "modprobe: FATAL: Module btrfs not found.\n".to_string(),
+                });
+            }
+            *self.btrfs_listed.lock().unwrap() = true;
+        }
+
+        Ok(CommandOutput {
+            stdout: String::new(),
+            stderr: String::new(),
+        })
+    }
+
+    fn is_dry_run(&self) -> bool {
+        false
+    }
+}
+
+#[test]
+fn ensure_supported_loads_a_modular_btrfs_instead_of_calling_it_unsupported() {
+    // Real-guest repro (ELRepo kernel-ml, btrfs as a module): before
+    // anything has mounted btrfs, /proc/filesystems has no btrfs line even
+    // though the kernel fully supports it. Declaring failure there refuses
+    // a perfectly capable host; asking for the module first is what makes
+    // the answer about capability rather than current load state.
+    let runner = ModularBtrfsRunner::new(false, true);
+
+    BtrfsExecutor::new(&runner).ensure_supported().unwrap();
+
+    let cmds = runner.get_recorded();
+    assert!(cmds.contains(&"modprobe btrfs".to_string()), "{cmds:?}");
+    assert!(cmds.contains(&"mkfs.btrfs --version".to_string()), "{cmds:?}");
+    // Read once before the modprobe and once after -- the second read is
+    // the only thing that may conclude anything.
+    assert_eq!(
+        cmds.iter()
+            .filter(|c| c.as_str() == "cat /proc/filesystems")
+            .count(),
+        2,
+        "{cmds:?}"
+    );
+}
+
+#[test]
+fn ensure_supported_does_not_modprobe_when_btrfs_is_already_available() {
+    let runner = ModularBtrfsRunner::new(true, true);
+
+    BtrfsExecutor::new(&runner).ensure_supported().unwrap();
+
+    let cmds = runner.get_recorded();
+    assert!(!cmds.iter().any(|c| c.starts_with("modprobe")), "{cmds:?}");
+    assert!(cmds.contains(&"mkfs.btrfs --version".to_string()), "{cmds:?}");
+}
+
 #[test]
 fn real_ensure_supported_rejects_kernel_without_btrfs_before_running_mkfs_btrfs() {
     // D11: reading /proc/filesystems through the SAME CommandRunner
@@ -419,28 +521,22 @@ fn real_ensure_supported_rejects_kernel_without_btrfs_before_running_mkfs_btrfs(
     // what let Step 4's engine-level tests inject "btrfs unsupported"
     // precisely, the exact scenario D11 exists to catch before any
     // partitioning happens.
-    struct NoBtrfsRunner;
-    impl CommandRunner for NoBtrfsRunner {
-        fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, ExecError> {
-            let stdout = if program == "cat" && args.contains(&"/proc/filesystems") {
-                "nodev\tsysfs\next4\n".to_string() // no btrfs line
-            } else {
-                panic!("must not run `{program}` after the kernel support check fails");
-            };
-            Ok(CommandOutput {
-                stdout,
-                stderr: String::new(),
-            })
-        }
-        fn is_dry_run(&self) -> bool {
-            false
-        }
-    }
+    //
+    // A genuinely btrfs-less kernel now means "not listed AND modprobe
+    // cannot produce it" -- the failing modprobe is expected here, and its
+    // nonzero exit is deliberately not what decides the outcome.
+    let runner = ModularBtrfsRunner::new(false, false);
 
-    let err = BtrfsExecutor::new(&NoBtrfsRunner).ensure_supported().unwrap_err();
+    let err = BtrfsExecutor::new(&runner).ensure_supported().unwrap_err();
+
     assert!(
         matches!(err, ExecError::Prerequisite(_)),
         "expected Prerequisite, got {err:?}"
+    );
+    let cmds = runner.get_recorded();
+    assert!(
+        !cmds.iter().any(|c| c.starts_with("mkfs.btrfs")),
+        "must not reach mkfs.btrfs once btrfs is confirmed unavailable: {cmds:?}"
     );
 }
 
