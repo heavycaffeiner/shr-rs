@@ -1953,3 +1953,23 @@ msgstr "백그라운드: 끊기지 않는 선에서 최소한만 사용"
 #: src/actionsDialogs.tsx
 msgid "dialogs.schedule.priority.max"
 msgstr "최대: 평소 파일 접근이 느려집니다"
+
+#: src/actions.ts
+msgid "actions.error.scrubSpeedNoName"
+msgstr "스크럽 속도를 바꿀 그룹 이름이 없습니다."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedLabel"
+msgstr "진행 중인 검사 속도"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedApply"
+msgstr "속도 적용"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedBusy"
+msgstr "적용하는 중…"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedHint"
+msgstr "이미 진행 중인 검사에 바로 적용됩니다. 다시 시작하지 않으므로 진행률도 그대로입니다."

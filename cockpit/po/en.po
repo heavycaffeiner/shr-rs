@@ -1972,3 +1972,23 @@ msgstr "Background: as little as still runs smoothly"
 #: src/actionsDialogs.tsx
 msgid "dialogs.schedule.priority.max"
 msgstr "Maximum: everyday file access will be slower"
+
+#: src/actions.ts
+msgid "actions.error.scrubSpeedNoName"
+msgstr "No group name to change a scrub's speed on."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedLabel"
+msgstr "Speed of the running check"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedApply"
+msgstr "Apply speed"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedBusy"
+msgstr "Applying…"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedHint"
+msgstr "Takes effect on the check already in progress. Nothing is restarted and no progress is lost."

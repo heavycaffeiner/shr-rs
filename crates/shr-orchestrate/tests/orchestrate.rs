@@ -2062,6 +2062,72 @@ fn tick_acts_on_check_repair_resync_and_recover_as_well_as_reshape() {
     }
 }
 
+/// The limits are ordinary kernel parameters md re-reads as it goes, so a
+/// running operation can be re-aimed without being stopped -- and cancelling
+/// a half-finished check just to run it faster throws away the work already
+/// done.
+#[test]
+fn set_sync_priority_re_aims_a_running_sync_without_restarting_it() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::syncing_per_array("check", (60_000, 150_000), 180_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    // A scrub started at `background`, the way an operator who wanted to
+    // stay out of the way would.
+    engine.scrub_start(None, Some(SyncPriority::Background)).unwrap();
+    let mark = runner.get_recorded().len();
+
+    let bands = engine.set_sync_priority(None, SyncPriority::Max).unwrap();
+
+    assert_eq!(bands, 1, "the one syncing band must be re-aimed");
+    let cmds = &runner.get_recorded()[mark..];
+    for leaf in ["sync_speed_min", "sync_speed_max"] {
+        assert!(
+            cmds.iter()
+                .any(|c| c.contains(&format!("/md/{leaf}")) && c.contains(&UNBOUNDED_SPEED_KB.to_string())),
+            "{leaf} did not take the new profile: {cmds:?}"
+        );
+    }
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| c.contains("sync_action") && c.starts_with("sh -c")),
+        "nothing may be written to sync_action -- the check must not be stopped or restarted: {cmds:?}"
+    );
+    assert_eq!(
+        state_store.load().unwrap().unwrap().groups[0].bands[0]
+            .sync_priority
+            .as_deref(),
+        Some("max"),
+        "the periodic tick reads this back, so it has to carry the NEW profile"
+    );
+}
+
+/// Writing limits to an idle array is the leftover this design exists to
+/// prevent, and "your scrub finished a minute ago" is something the operator
+/// needs told rather than silently absorbed.
+#[test]
+fn set_sync_priority_refuses_when_nothing_is_syncing() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::healthy();
+    let engine = seeded_engine(&runner, state_store, three_disks());
+    let mark = runner.get_recorded().len();
+
+    let err = engine
+        .set_sync_priority(None, SyncPriority::Max)
+        .expect_err("an idle group has no speed to change");
+
+    assert!(err.to_string().contains("is syncing"), "{err}");
+    let cmds = &runner.get_recorded()[mark..];
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("sh -c") && c.contains("sync_speed")),
+        "a refusal must write nothing at all: {cmds:?}"
+    );
+}
+
 /// Adding a member changes what the array can do, so an estimate learned on
 /// the old membership would derive every limit from a number that no longer
 /// describes it.

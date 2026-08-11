@@ -152,6 +152,23 @@ export const scrubCancelArgs = (groupName: string): SpawnCall => ({
     options: SPAWN_OPTIONS,
 });
 
+/** `shr-rs fs scrub speed`: re-aim a check that is ALREADY running at a
+ * different profile, without stopping it.
+ *
+ * The profile is required here, unlike `scrubStartArgs`, because there is no
+ * "leave it alone" reading of this verb: the operator is asking for a
+ * specific speed on work already in progress. The CLI refuses when nothing
+ * is running, which is what the dialog surfaces rather than second-guessing
+ * from a status poll that may be seconds stale. */
+export const scrubSpeedArgs = (input: { groupName: string; priority: ReshapePriority }): SpawnCall => ({
+    argv: [
+        "shr-rs", "fs", "scrub", "speed",
+        "--name", requireNonEmptyName(input.groupName, _("actions.error.scrubSpeedNoName")),
+        "--priority", input.priority,
+    ],
+    options: SPAWN_OPTIONS,
+});
+
 /** Parses `shr-rs fs scrub status --name <g> --json`'s stdout -- a single
  * `serde_json::json!` object (`group`/`running`/`error_count`), emitted
  * regardless of whether errors were found (unlike the non-JSON branch,

@@ -126,6 +126,10 @@ pub enum ReconcileAction {
     SpeedLimitRestored { speed_kb: u64 },
 }
 
+/// Every `sync_action` md reports for work in progress. Anything else --
+/// `idle`, `frozen` -- means that band has nothing running.
+const ACTIVE_SYNC_ACTIONS: [&str; 5] = ["reshape", "check", "repair", "resync", "recover"];
+
 /// `reconcile()`'s result: the array's state AFTER reconciling, plus
 /// exactly what it did to arrive there (`performed` is empty when -- and
 /// only when -- this call genuinely found nothing to do). See
@@ -2143,6 +2147,74 @@ impl<'a> OrchestrationEngine<'a> {
             message: format!("scrub started for group `{group_name}`"),
         });
         Ok(())
+    }
+
+    /// Re-aim a sync that is ALREADY running at a different profile, without
+    /// stopping and restarting it. Returns how many bands were re-aimed.
+    ///
+    /// The limits are ordinary kernel parameters that md re-reads as it
+    /// goes, so changing them mid-operation is exactly as valid as setting
+    /// them at the start -- there is nothing to restart. An operator who
+    /// started a scrub at `background` and then left for the night should
+    /// not have to cancel it (losing the work already done) to let it run
+    /// at `max`.
+    ///
+    /// Refuses when no band of the group is syncing, rather than writing
+    /// limits to idle arrays: a floor on an array with nothing running is
+    /// the leftover this whole design exists to prevent, and "your scrub
+    /// finished a minute ago" is something the operator needs told, not
+    /// silently absorbed.
+    ///
+    /// Every kind of md sync, not just a scrub: the same reasoning as
+    /// `tick_active_sync`'s, and the CLI verb sits under `fs scrub` only
+    /// because that is where an operator goes looking for it.
+    pub fn set_sync_priority(
+        &self,
+        name: Option<&str>,
+        priority: SyncPriority,
+    ) -> Result<usize, OrchestrateError> {
+        let mut state = self.store.load()?.ok_or(OrchestrateError::NoActiveArray)?;
+        let group_idx = Self::resolve_group_index(&state, name)?;
+        let group_name = state.groups[group_idx].name.clone();
+
+        let mut retargeted = 0usize;
+        for band_pos in 0..state.groups[group_idx].bands.len() {
+            let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
+            let Some(action) = Self::live_sync_action(self.status_runner(), &md_name)? else {
+                continue;
+            };
+            if !ACTIVE_SYNC_ACTIONS.contains(&action.as_str()) {
+                continue;
+            }
+            // The same call that sets a starting profile: it re-derives the
+            // limits from this band's own capability estimate, writes both,
+            // and applies one throttle decision on top, so a danger signal
+            // present right now still brakes the newly-widened operation
+            // instead of waiting for the next timer fire.
+            self.start_sync_throttle(&mut state, group_idx, band_pos, priority)?;
+            retargeted += 1;
+        }
+
+        if retargeted == 0 {
+            return Err(OrchestrateError::Validation(format!(
+                "no band of group `{group_name}` is syncing right now, so there is no speed to \
+                 change; `fs scrub start --priority {}` starts one at that profile instead",
+                priority.as_str()
+            )));
+        }
+        if !self.runner.is_dry_run() {
+            self.store.save(&state)?;
+        }
+        self.progress.report(ProgressUpdate {
+            operation: "scrub".to_string(),
+            stage: "speed".to_string(),
+            percent: None,
+            message: format!(
+                "group `{group_name}`: {retargeted} band(s) now running at `{}`",
+                priority.as_str()
+            ),
+        });
+        Ok(retargeted)
     }
 
     /// (measured on real guest: `mdadm --stop`ped array, weekly `fs
@@ -4295,10 +4367,6 @@ impl<'a> OrchestrationEngine<'a> {
     /// syncing for a reason this project didn't record (an operator's own
     /// `mdadm --action=check`, or a `state.toml` from an older binary).
     pub fn tick_active_sync(&self) -> Result<usize, OrchestrateError> {
-        /// Every `sync_action` md reports for work in progress. Anything
-        /// else -- `idle`, `frozen` -- means this band has nothing running.
-        const ACTIVE_SYNC_ACTIONS: [&str; 5] = ["reshape", "check", "repair", "resync", "recover"];
-
         let Some(mut state) = self.store.load()? else {
             return Ok(0);
         };

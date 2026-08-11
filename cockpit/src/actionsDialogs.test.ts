@@ -1024,11 +1024,15 @@ test("every dialog with an onChanged defers it to a handleClose wrapper, not a r
         `expected each of the 8 dialogs to define its own handleClose, found ${handleCloseDefs.length}`,
     );
 
+    // 9, not 8: `ScrubDialog` has two independent success branches, the
+    // confirmed start/cancel and the unconfirmed speed change on a check
+    // already running. Both must defer the same way -- what this counts is
+    // success branches, not dialogs.
     const deferredChanges = source.match(/setChanged\(true\)/g) ?? [];
     assert.equal(
         deferredChanges.length,
-        8,
-        `expected each of the 8 dialogs' success branch to defer via setChanged(true) instead of calling onChanged() directly, found ${deferredChanges.length}`,
+        9,
+        `expected every success branch to defer via setChanged(true) instead of calling onChanged() directly, found ${deferredChanges.length}`,
     );
 });
 

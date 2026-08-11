@@ -558,7 +558,33 @@ the kernel files:
 SM-THROTTLE-2 was not re-run on the guest for this change; its assertions
 were updated for the per-array files and the normalised load threshold.
 
-### 9.4 Two defects found by running it
+### 9.4 Changing the speed of a running check
+
+Not in the proposal, added on top of it: `fs scrub speed --priority`
+re-aims a check that is already running. The limits are ordinary kernel
+parameters md re-reads as it goes, so there was never anything to restart --
+the only reason it could not be done before was that nothing exposed it, and
+an operator who wanted a `background` scrub to finish faster had to cancel it
+and lose the work already done.
+
+Measured on `vault`'s `md2`, a real 4-member RAID5, with the check running
+throughout (`sync_action` stayed `check`; nothing was written to it):
+
+```
+13:14:39  background   speed= 43232   min=25000   max=42000
+13:14:47  background   speed= 42840   min=25000   max=42000
+          fs scrub speed --name vault --priority max
+13:14:56  max          speed=303255   min=10000000 max=10000000
+13:15:00  max          speed=441590   min=10000000 max=10000000
+```
+
+The same change from the Cockpit scrub dialog, on `tank`'s `md0`, verified in
+a browser: 25778 -> unbounded, observed speed 28928 -> 326311 KB/s, the check
+never interrupted. Asking for it while nothing is syncing is a refusal that
+names the command to start one instead, not a silent write of limits to an
+idle array.
+
+### 9.5 Two defects found by running it
 
 Both were found by SM-THROTTLE-7 against real arrays, not by any unit test:
 

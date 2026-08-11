@@ -480,6 +480,20 @@ enum ScrubCmd {
         #[arg(long, value_enum)]
         priority: Option<PriorityArg>,
     },
+    // The kernel re-reads these limits as it goes, so there is nothing to
+    // restart -- and cancelling a half-finished check just to run it faster
+    // throws away the work already done.
+    /// Change the speed of a check that is already running.
+    Speed {
+        /// Which group's running check to re-aim. Optional only while there
+        /// is exactly one group.
+        #[arg(long)]
+        name: Option<String>,
+        /// How much of the disks' speed the check may take from everyday
+        /// file access from now on.
+        #[arg(long, value_enum)]
+        priority: PriorityArg,
+    },
     /// Show how far the check has got, and record the result once it ends.
     Status {
         /// Which group to report on. Optional only while there is exactly
@@ -1253,6 +1267,24 @@ fn dispatch(cli: Cli) -> Result<()> {
                         }
                     }
                 }
+                ScrubCmd::Speed { name, priority } => {
+                    let mut lock = acquire_state_lock()?;
+                    let _guard = lock.try_write().map_err(|_| {
+                        anyhow!("another shr-rs create/expand/reconcile is already running (lock: {STATE_LOCK_PATH})")
+                    })?;
+                    let group = resolve_group_name_for_report(&state_store, name.as_deref());
+                    let speed = shr_exec::SyncPriority::from(priority);
+                    // The band count is the observable part: this writes to
+                    // each syncing band's own attributes, so "3 bands" and
+                    // "1 band" are genuinely different outcomes, and zero is
+                    // an error rather than a quiet success.
+                    let bands = engine.set_sync_priority(name.as_deref(), speed)?;
+                    if cli.json {
+                        println!("{}", scrub_speed_report_json(&group, speed.as_str(), bands));
+                    } else {
+                        println!("check speed set to {} on {bands} band(s)", speed.as_str());
+                    }
+                }
                 ScrubCmd::Status { name } => {
                     let report = engine.scrub_status(name.as_deref())?;
                     if cli.json {
@@ -1988,6 +2020,16 @@ fn stale_speed_limit_warning(
 /// a caller can tell "the scrub runs under whatever limit was already in
 /// place" apart from any particular profile -- the same distinction
 /// `OrchestrationEngine::scrub_start`'s `Option<SyncPriority>` draws.
+/// `scrub speed`'s `--json` shape. Carries the band count because the
+/// limits are per array: how many bands actually took the new profile is
+/// the part a caller cannot infer from the group name alone.
+fn scrub_speed_report_json(group: &str, priority: &str, bands: usize) -> serde_json::Value {
+    let mut value = scrub_action_report_json(group, "speed-changed");
+    value["priority"] = serde_json::json!(priority);
+    value["bands"] = serde_json::json!(bands);
+    value
+}
+
 fn scrub_start_report_json(group: &str, priority: Option<&str>) -> serde_json::Value {
     let mut value = scrub_action_report_json(group, "started");
     if let Some(p) = priority {
