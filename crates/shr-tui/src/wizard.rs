@@ -631,12 +631,7 @@ mod tests {
                 md_uuid: Some("a1b2c3d4:e5f6a7b8:c9d0e1f2:a3b4c5d6".to_string()),
                 member_partitions: part_uuids.iter().map(|u| u.to_string()).collect(),
                 usable_bytes: band.usable_bytes(),
-                resize_pending: false,
-                last_smart_reallocated: None,
-                last_scrub: None,
-                scrub_in_progress: false,
-                pending_member_removal: None,
-                reshape_priority: None,
+                ..Default::default()
             }],
             filesystem: shr_state::StateFilesystem {
                 fs_uuid: Some("a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d".to_string()),

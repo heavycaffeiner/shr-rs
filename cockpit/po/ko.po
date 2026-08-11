@@ -1909,3 +1909,47 @@ msgstr[0] "디스크 $0개"
 msgid "wizard.commands.toggle.one"
 msgid_plural "wizard.commands.toggle.other"
 msgstr[0] "실행될 명령 ($0개)"
+
+#: src/panels.tsx
+msgid "panels.band.speed.ofCapability"
+msgstr "$0 / 최대 약 $1"
+
+#: src/panels.tsx
+msgid "panels.band.speed.capabilityOnly"
+msgstr "측정된 최대 속도 약 $0"
+
+#: src/panels.tsx
+msgid "panels.band.speed.lastDecision"
+msgstr "마지막 속도 조절: $0"
+
+#: src/panels.tsx
+msgid "panels.band.speed.lastDecisionReason"
+msgstr "마지막 속도 조절: $0 ($1)"
+
+#: src/panels.tsx
+msgid "panels.band.speed.kb"
+msgstr "$0 KB/s"
+
+#: src/panels.tsx
+msgid "panels.band.speed.mb"
+msgstr "$0 MB/s"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priorityLabel"
+msgstr "예약 검사 속도"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priority.unset"
+msgstr "설정된 값을 그대로 사용"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priority.balanced"
+msgstr "균형: 배열 성능을 넉넉히 사용"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priority.background"
+msgstr "백그라운드: 끊기지 않는 선에서 최소한만 사용"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priority.max"
+msgstr "최대: 평소 파일 접근이 느려집니다"

@@ -11,8 +11,9 @@ use shr_core::{
     RedundancyMode, RedundantBand,
 };
 use shr_exec::{
-    BtrfsExecutor, CommandRunner, ExecError, LvmExecutor, MdadmExecutor, MetricsSampler, NotifyExecutor,
-    PartedExecutor, ReshapePriority, ReshapeThrottle, SafetyGuard, ThrottleController,
+    BtrfsExecutor, CapabilityEstimate, CommandRunner, ExecError, LimitScope, LvmExecutor, MdadmExecutor,
+    MetricsSampler, NotifyExecutor, PartedExecutor, ReshapeThrottle, SafetyGuard, SyncPriority,
+    ThrottleController, ThrottleTick,
 };
 use shr_inspect::{is_system_mountpoint, parse_mdstat, resolve_disk_path, DiskRef, MdArray, ResolvedDisk};
 use shr_state::{
@@ -204,7 +205,7 @@ pub struct OrchestrationEngine<'a> {
     unit_dir: PathBuf,
     progress: &'a dyn ProgressSink,
     confirm: &'a dyn ConfirmSink,
-    priority: ReshapePriority,
+    priority: SyncPriority,
     /// `None` (the default) means "read live-status checks (degraded,
     /// background activity, scrub-running) through `self.runner`, same as
     /// everything else" -- correct for every real (`SystemRunner`) caller
@@ -233,7 +234,7 @@ pub struct OrchestrationEngine<'a> {
     notify_policy: NotifyPolicy,
     /// `None` (the default) means "use a real, live `LiveMetricsSampler`
     /// built per-band from `self.runner` and that band's own member disks"
-    /// -- `start_reshape_throttle`/`tick_active_reshapes` construct
+    /// -- `start_sync_throttle`/`tick_active_sync` construct
     /// one on demand, since a single fixed sampler can't know which disks a
     /// given band actually has. `Some` is an explicit override (tests
     /// injecting a fixed danger/idle signal; a future caller with its own
@@ -264,7 +265,7 @@ impl<'a> OrchestrationEngine<'a> {
             unit_dir,
             progress: &DEFAULT_PROGRESS_SINK,
             confirm: &DEFAULT_CONFIRM_SINK,
-            priority: ReshapePriority::Balanced,
+            priority: SyncPriority::Balanced,
             metrics_sampler: None,
             status_runner: None,
             notify_policy: NotifyPolicy::default(),
@@ -402,11 +403,10 @@ impl<'a> OrchestrationEngine<'a> {
         }
     }
 
-    /// Select the reshape speed profile (`expand --priority`) new
-    /// reshapes started by `expand()` use. Defaults to `Balanced`, matching
-    /// `RESHAPE_SPEED_INITIAL_KB`'s older behavior for a caller that
-    /// doesn't opt in.
-    pub fn with_priority(mut self, priority: ReshapePriority) -> Self {
+    /// Select the speed profile (`--priority`) new md syncs started by this
+    /// engine use, and the fallback for a band whose own profile isn't
+    /// recorded. Defaults to `Balanced`.
+    pub fn with_priority(mut self, priority: SyncPriority) -> Self {
         self.priority = priority;
         self
     }
@@ -979,12 +979,7 @@ impl<'a> OrchestrationEngine<'a> {
                     md_uuid: Some(md_uuid),
                     member_partitions: member_part_uuids,
                     usable_bytes: band.usable_bytes(),
-                    resize_pending: false,
-                    last_smart_reallocated: None,
-                    last_scrub: None,
-                    scrub_in_progress: false,
-                    pending_member_removal: None,
-                    reshape_priority: None,
+                    ..Default::default()
                 });
             }
 
@@ -1092,6 +1087,17 @@ impl<'a> OrchestrationEngine<'a> {
         if !self.runner.is_dry_run() {
             prune_retired_arrays_for(&mut full_state, &req.disks);
             full_state.groups.push(state.clone());
+            // A fresh redundant array starts resyncing the moment it is
+            // created, and that resync used to be governed by no profile at
+            // all. Non-fatal: the array exists and is about to be recorded,
+            // so a failed sysfs write is worth reporting, not worth failing
+            // a successful `create` over.
+            let group_idx = full_state.groups.len() - 1;
+            for band_pos in 0..full_state.groups[group_idx].bands.len() {
+                if let Err(e) = self.govern_running_sync(&mut full_state, group_idx, band_pos) {
+                    tracing::warn!(target: "shr_rs::throttle", "band {band_pos} sync limits: {e}");
+                }
+            }
             self.store.save(&full_state)?;
             self.write_managed_configs(&full_state)?;
         }
@@ -1522,10 +1528,6 @@ impl<'a> OrchestrationEngine<'a> {
                     lvm.lvextend_max(&group.filesystem.vg_name, &group.filesystem.lv_name)?;
                     btrfs.resize_max(&group.filesystem.mount_point)?;
                     group.bands[i].resize_pending = false;
-                    // Clear the persisted priority alongside -- a stale
-                    // value surviving past its own reshape would silently
-                    // govern this band's NEXT one.
-                    group.bands[i].reshape_priority = None;
                     changed = true;
                     // This is a COMPLETED resize, not a pending one --
                     // it must never be reported (or, worse, silently
@@ -1535,6 +1537,29 @@ impl<'a> OrchestrationEngine<'a> {
                         band_index: group.bands[i].index,
                         md_name,
                     });
+                }
+            }
+        }
+
+        // Hand back the per-array limits of every band whose sync has
+        // finished. `tick_active_sync` does this too, but nothing guarantees
+        // a host ever ran `schedule install`, and a floor left behind
+        // silently governs every later operation on that array. Skipped
+        // under dry-run for the same reason as the host-wide restore below.
+        if !self.runner.is_dry_run() {
+            for group_idx in 0..state.groups.len() {
+                for band_pos in 0..state.groups[group_idx].bands.len() {
+                    if state.groups[group_idx].bands[band_pos].sync_priority.is_none() {
+                        continue;
+                    }
+                    let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
+                    let Some(action) = Self::live_sync_action(self.status_runner(), &md_name)? else {
+                        continue;
+                    };
+                    if action != "idle" {
+                        continue;
+                    }
+                    changed |= self.clear_band_limits(&mut state, group_idx, band_pos)?;
                 }
             }
         }
@@ -1989,27 +2014,25 @@ impl<'a> OrchestrationEngine<'a> {
     /// likewise only need the lock for their own brief read/write, never for
     /// "as long as the scrub is running".
     ///
-    /// `speed` sets the host-wide `/proc/sys/dev/raid/speed_limit_max` ceiling
-    /// the kernel's `check` threads run under, from the same three profiles
-    /// `expand --priority` uses (`ReshapePriority` is reused rather than
-    /// cloned into a near-identical `ScrubPriority`: the profiles, and their
-    /// KB/s numbers, are exactly the same question asked about a different
-    /// kernel sync activity).
+    /// `speed` sets the profile every band of this group runs its `check`
+    /// under, from the same three `expand --priority` uses (`SyncPriority`
+    /// is reused rather than cloned into a near-identical `ScrubPriority`:
+    /// it is exactly the same question asked about a different kernel sync
+    /// activity).
     ///
     /// `None` means "touch no kernel parameter at all", which is the default
     /// and the behavior every caller had before this existed -- whatever cap
-    /// is already in place governs the scrub. Note that the cap is genuinely
-    /// host-wide: this is not a per-group setting, and a second group's scrub
-    /// started with a different `speed` simply overwrites it.
+    /// is already in place governs the scrub. That is a real choice the
+    /// Cockpit dialog offers, so it stays.
     ///
-    /// Only the ceiling is written, never `speed_limit_min`: raising the
-    /// floor would take bandwidth from everyday file access under contention
-    /// rather than merely permitting the scrub to use more when it is free,
-    /// which is the opposite of what a priority profile is for here.
+    /// Both limits are written, not the ceiling alone: the kernel reduces
+    /// the sync rate toward `sync_speed_min` whenever non-sync IO touches
+    /// the members, so a scrub started with `--priority max` against a
+    /// 1 MB/s floor was throttled anyway.
     pub fn scrub_start(
         &self,
         name: Option<&str>,
-        speed: Option<ReshapePriority>,
+        speed: Option<SyncPriority>,
     ) -> Result<(), OrchestrateError> {
         let mut state = self.store.load()?.ok_or(OrchestrateError::NoActiveArray)?;
         let group_idx = Self::resolve_group_index(&state, name)?;
@@ -2079,13 +2102,22 @@ impl<'a> OrchestrationEngine<'a> {
         }
 
         // Before the `check` threads start, so they run under the requested
-        // ceiling from their first stripe rather than being re-capped a
-        // moment later. `remember_speed_limit_max` first, for the same reason
-        // `start_reshape_throttle` calls it first: the write below is what
-        // destroys the value being saved.
+        // limits from their first stripe rather than being re-capped a
+        // moment later. Per band, because the limits are per array: two
+        // groups scrubbing at different profiles at once each keep their
+        // own, which the host-wide parameter could not express.
         if let Some(priority) = speed {
-            self.remember_speed_limit_max(&mut state);
-            shr_exec::write_speed_limit_max(self.runner, priority.initial_speed_kb())?;
+            for band_pos in 0..state.groups[group_idx].bands.len() {
+                self.start_sync_throttle(&mut state, group_idx, band_pos, priority)?;
+            }
+            // Persisted before the checks start, not with the rest of the
+            // bookkeeping below: the limits are already written at this
+            // point, and a failure from here on would otherwise leave them
+            // in force with nothing recording that this project put them
+            // there -- so nothing would ever hand them back.
+            if !self.runner.is_dry_run() {
+                self.store.save(&state)?;
+            }
         }
 
         for md_name in &md_names {
@@ -2979,6 +3011,17 @@ impl<'a> OrchestrationEngine<'a> {
             }
         }
         if !self.runner.is_dry_run() {
+            // `mdadm --replace` copies onto the new member as a `recover`,
+            // which used to run under no profile at all. Non-fatal for the
+            // same reason as `create`'s: the replacement itself succeeded.
+            for band_pos in 0..state.groups[group_idx].bands.len() {
+                // Membership changed, so a capability learned on the old
+                // one describes a different array.
+                Self::discard_capability_estimate(&mut state.groups[group_idx].bands[band_pos]);
+                if let Err(e) = self.govern_running_sync(&mut state, group_idx, band_pos) {
+                    tracing::warn!(target: "shr_rs::throttle", "band {band_pos} sync limits: {e}");
+                }
+            }
             self.store.save(&state)?;
             self.write_managed_configs(&state)?;
         }
@@ -3941,66 +3984,202 @@ impl<'a> OrchestrationEngine<'a> {
     /// timer path -- can compute a real delta again instead of comparing against
     /// nothing.
     ///
-    /// `priority` decides the decision THRESHOLDS
-    /// (`ReshapePriority::thresholds()`), taken as an explicit parameter
-    /// rather than read from `self.priority` -- an earlier fix already addressed the SPEED
-    /// CEILING half of "the periodic tick must use the band's own persisted
-    /// priority, not the tick process's default"; this is the other half.
-    /// See `tick_active_reshapes`'s doc comment for why `self.priority`
-    /// alone is wrong there. `start_reshape_throttle` still passes
-    /// `self.priority` -- correct as-is, since it runs in the very process
-    /// that received the `--priority` flag.
+    /// `priority` decides both the decision thresholds and, in the caller,
+    /// the speed band -- taken as an explicit parameter rather than read
+    /// from `self.priority`, because the periodic tick is a brand-new
+    /// process that must use the BAND's own persisted profile, not whatever
+    /// that process's builder happened to default to.
     fn tick_throttle_decision(
         &self,
         state: &mut StateFile,
         group_idx: usize,
         band_pos: usize,
-        priority: ReshapePriority,
-    ) -> shr_exec::ThrottleDecision {
+        priority: SyncPriority,
+    ) -> ThrottleTick {
         if let Some(sampler) = self.metrics_sampler {
-            return ReshapeThrottle::new(priority.thresholds(), sampler).tick();
+            return ReshapeThrottle::new(priority, sampler).tick();
         }
 
         let band_index = state.groups[group_idx].bands[band_pos].index;
         let member_disks = Self::band_member_disk_paths(state, group_idx, band_index);
         let previous_total = state.groups[group_idx].bands[band_pos].last_smart_reallocated;
         let live = LiveMetricsSampler::new(self.runner, member_disks, previous_total);
-        let decision = ReshapeThrottle::new(priority.thresholds(), &live).tick();
+        let tick = ReshapeThrottle::new(priority, &live).tick();
         state.groups[group_idx].bands[band_pos].last_smart_reallocated = live.last_smart_total();
-        decision
+        tick
     }
 
-    /// Set a just-started reshape's initial kernel speed/cache parameters
-    /// for `self.priority`, then apply ONE throttle decision
-    /// on top of that initial value -- so a danger signal already
-    /// present at the moment the reshape starts (an elevated SMART
-    /// reallocated count, a hot disk) brakes it immediately instead of
-    /// blindly writing the profile's initial speed and only reacting later.
+    /// Where this band's speed limits get written, probed once and recorded
+    /// so later ticks don't re-probe. The per-array attributes are preferred
+    /// wherever they exist: they make a per-band profile mean something, let
+    /// two groups sync at different profiles at once, and make teardown a
+    /// write of `system` rather than a restore of a remembered number.
+    fn band_limit_scope(&self, state: &mut StateFile, group_idx: usize, band_pos: usize) -> LimitScope {
+        if let Some(per_array) = state.groups[group_idx].bands[band_pos].sync_limits_per_array {
+            return if per_array {
+                LimitScope::PerArray
+            } else {
+                LimitScope::HostWide
+            };
+        }
+        let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
+        let scope = shr_exec::probe_limit_scope(self.runner, &md_name);
+        // Not recorded under dry-run: `probe_limit_scope` cannot read
+        // anything real there, so its answer says nothing about this host.
+        if !self.runner.is_dry_run() {
+            state.groups[group_idx].bands[band_pos].sync_limits_per_array =
+                Some(scope == LimitScope::PerArray);
+        }
+        scope
+    }
+
+    /// Set a just-started sync's kernel limits for `priority`, then apply ONE
+    /// throttle decision on top -- so a danger signal already present at the
+    /// moment it starts (an elevated SMART reallocated count, a hot disk)
+    /// brakes it immediately instead of blindly writing the profile's
+    /// ceiling and only reacting later.
     ///
-    /// Deliberately a single tick, not a loop that polls until the reshape
+    /// Deliberately a single tick, not a loop that polls until the operation
     /// finishes: a real reshape can run for hours (see `execute_grow`'s
-    /// `resize_pending` doc comment), and `expand()` must return promptly
-    /// the same way it already does for the LVM/Btrfs resize -- blocking
-    /// here would freeze the CLI/TUI/Cockpit-spawned process for the same
-    /// duration an earlier review's `resize_pending` mechanism exists to avoid.
-    /// Ongoing monitoring for the rest of a real reshape is
-    /// `tick_active_reshapes`'s job (driven by a periodic systemd
-    /// timer), not this one-shot call.
-    fn start_reshape_throttle(
+    /// `resize_pending` doc comment), and the caller must return promptly.
+    /// Ongoing monitoring is `tick_active_sync`'s job, driven by a periodic
+    /// systemd timer.
+    ///
+    /// Persists `priority` on the band, which is both what the periodic tick
+    /// reads back and the marker that this project wrote these limits at all
+    /// (so `clear_band_limits` knows what to hand back later).
+    fn start_sync_throttle(
+        &self,
+        state: &mut StateFile,
+        group_idx: usize,
+        band_pos: usize,
+        priority: SyncPriority,
+    ) -> Result<(), OrchestrateError> {
+        let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
+        let scope = self.band_limit_scope(state, group_idx, band_pos);
+        // BEFORE the first write, never after -- the write below destroys
+        // the value being saved. Only the host-wide fallback needs it; the
+        // per-array path clears itself exactly.
+        if scope == LimitScope::HostWide {
+            self.remember_speed_limit_max(state);
+        }
+        let capability_kb = state.groups[group_idx].bands[band_pos].sync_capability_kb;
+        let mut ctrl = ThrottleController::new(self.runner, &md_name, priority, capability_kb, scope);
+        ctrl.apply_initial()?;
+        let tick = self.tick_throttle_decision(state, group_idx, band_pos, priority);
+        let speed_kb = ctrl.apply(tick.decision)?;
+        let band = &mut state.groups[group_idx].bands[band_pos];
+        band.sync_priority = Some(priority.as_str().to_string());
+        Self::record_throttle(band, &tick, speed_kb);
+        Ok(())
+    }
+
+    /// One throttle tick for a band whose md sync is currently running:
+    /// fold this tick's `sync_speed` into the capability estimate, re-derive
+    /// the profile's limits from it, then decide and apply.
+    ///
+    /// The estimate is updated BEFORE the decision so a band whose capability
+    /// has just been learned stops running under the bootstrap constants at
+    /// the first tick that yields an observation, rather than one tick later.
+    fn tick_sync_throttle(
+        &self,
+        state: &mut StateFile,
+        group_idx: usize,
+        band_pos: usize,
+        priority: SyncPriority,
+    ) -> Result<(), OrchestrateError> {
+        let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
+        let scope = self.band_limit_scope(state, group_idx, band_pos);
+        let before = CapabilityEstimate::new(
+            state.groups[group_idx].bands[band_pos].sync_capability_kb,
+            state.groups[group_idx].bands[band_pos].sync_capability_uncapped_ticks,
+        );
+        let mut ctrl = ThrottleController::resume(self.runner, &md_name, priority, before.kb, scope);
+
+        let observed = shr_exec::read_sync_speed_kb(self.runner, &md_name);
+        let updated = before.observe(observed, ctrl.current_speed_kb());
+        if updated.kb != before.kb {
+            state.groups[group_idx].bands[band_pos].sync_capability_kb = updated.kb;
+            state.groups[group_idx].bands[band_pos].sync_capability_observed_at =
+                Some(Utc::now().to_rfc3339());
+            ctrl.set_capability(updated.kb);
+        }
+        state.groups[group_idx].bands[band_pos].sync_capability_uncapped_ticks = updated.uncapped_ticks;
+
+        let tick = self.tick_throttle_decision(state, group_idx, band_pos, priority);
+        let speed_kb = ctrl.apply(tick.decision)?;
+        let band = &mut state.groups[group_idx].bands[band_pos];
+        // Recorded even when the profile came from the fallback rather than
+        // from the operator, so the band's limits are cleared once its sync
+        // ends the same way an `expand`'s are.
+        band.sync_priority = Some(priority.as_str().to_string());
+        Self::record_throttle(band, &tick, speed_kb);
+        Ok(())
+    }
+
+    /// Hand a band's speed limits back once its sync has finished, and
+    /// forget the profile that governed it -- a stale value surviving past
+    /// its own operation would silently govern the band's NEXT one.
+    /// Returns whether anything changed.
+    ///
+    /// A no-op for a band this project never wrote limits for, and for the
+    /// host-wide fallback, where there is nothing per-array to clear and
+    /// `restore_speed_limit_if_idle` owns putting the operator's own value
+    /// back.
+    fn clear_band_limits(
+        &self,
+        state: &mut StateFile,
+        group_idx: usize,
+        band_pos: usize,
+    ) -> Result<bool, OrchestrateError> {
+        let Some(priority) = state.groups[group_idx].bands[band_pos]
+            .sync_priority
+            .as_deref()
+            .and_then(SyncPriority::parse)
+        else {
+            return Ok(false);
+        };
+        let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
+        let scope = self.band_limit_scope(state, group_idx, band_pos);
+        ThrottleController::new(self.runner, &md_name, priority, None, scope).clear()?;
+        state.groups[group_idx].bands[band_pos].sync_priority = None;
+        Ok(true)
+    }
+
+    /// Apply this engine's profile to a band that has just started an md
+    /// sync of its own accord -- the resync after `create`, the recovery
+    /// after `replace_disk` -- but only if one is actually running, so a
+    /// band that finished instantly is not left with a floor nothing will
+    /// clear until the next tick.
+    fn govern_running_sync(
         &self,
         state: &mut StateFile,
         group_idx: usize,
         band_pos: usize,
     ) -> Result<(), OrchestrateError> {
         let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
-        // BEFORE the first write, never after -- `apply_initial` overwrites
-        // the very value being saved here.
-        self.remember_speed_limit_max(state);
-        let mut ctrl = ThrottleController::new(self.runner, &md_name, self.priority);
-        ctrl.apply_initial()?;
-        let decision = self.tick_throttle_decision(state, group_idx, band_pos, self.priority);
-        ctrl.apply(decision)?;
-        Ok(())
+        match Self::live_sync_action(self.runner, &md_name)? {
+            Some(action) if action != "idle" => {
+                self.start_sync_throttle(state, group_idx, band_pos, self.priority)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn record_throttle(band: &mut StateBand, tick: &ThrottleTick, speed_kb: u64) {
+        band.last_throttle_decision = Some(tick.decision.as_str().to_string());
+        band.last_throttle_reason = Some(tick.reason.clone());
+        band.last_throttle_speed_kb = Some(speed_kb);
+    }
+
+    /// Forget what this band was measured doing, because adding or removing
+    /// a member changes what the array can do -- a capability learned on the
+    /// old membership would derive every limit from a number that no longer
+    /// describes this array.
+    fn discard_capability_estimate(band: &mut StateBand) {
+        band.sync_capability_kb = None;
+        band.sync_capability_observed_at = None;
+        band.sync_capability_uncapped_ticks = 0;
     }
 
     /// Record what `/proc/sys/dev/raid/speed_limit_max` read BEFORE this
@@ -4071,7 +4250,7 @@ impl<'a> OrchestrationEngine<'a> {
     /// One band's live `sync_action`, or `None` when its array is not
     /// assembled at all.
     ///
-    /// Real-guest repro (recorded on `tick_active_reshapes`, which this was
+    /// Real-guest repro (recorded on `tick_active_sync`, which this was
     /// factored out of): `state.toml` outlived the array after an unplanned
     /// power cycle, so `cat /sys/block/<md>/md/sync_action` had no file to
     /// read and failed with `No such file or directory`. Every sweep across
@@ -4095,78 +4274,71 @@ impl<'a> OrchestrationEngine<'a> {
         }
     }
 
-    /// Apply one throttle tick to every band, across every group,
-    /// that currently has a reshape running (`sync_action() ==
-    /// "reshape"`). Meant to be invoked periodically by a systemd timer
-    /// (`shr-rs internal reshape-throttle-tick`) -- see the design
-    /// note on why this is a periodic external trigger rather than a
-    /// blocking in-process loop. A safe no-op when nothing is reshaping.
+    /// Apply one throttle tick to every band, across every group, that
+    /// currently has an md sync running, and hand back the limits of every
+    /// band that has finished one. Meant to be invoked periodically by a
+    /// systemd timer (`shr-rs internal reshape-throttle-tick`) rather than
+    /// as a blocking in-process loop. A safe no-op when nothing is syncing.
     ///
-    /// Unlike `start_reshape_throttle` (called once, right after `mdadm
-    /// --grow` succeeds, from within the SAME process that already knows
-    /// the priority profile's initial speed was just written), this uses
-    /// `ThrottleController::resume` to seed `current_speed_kb` from the
-    /// kernel's REAL current value: each periodic invocation is a brand-new
-    /// process with no memory of what a previous tick last wrote.
+    /// Every kind of md sync, not just reshape: the capability estimate is a
+    /// closed loop, so a scrub cannot keep the old set-once model and still
+    /// be capability-relative. It also closes two silent gaps, the resync
+    /// after `create` and the recovery after `replace_disk`, which were
+    /// governed by no profile at all.
     ///
-    /// Never touches a band whose `sync_action` isn't `"reshape"`:
-    /// this must not fire (or write kernel throttle parameters) for a band
-    /// that's merely doing a post-create `resync`, or one running a scrub
-    /// (`sync_action == "check"`), which has nothing to do with reshape
-    /// speed.
-    ///
-    /// Each band uses ITS OWN persisted `reshape_priority` (set by
-    /// `execute_grow` at the moment the reshape started), not `self.priority`
-    /// -- this call is itself a brand-new process (the systemd timer's `shr-rs
-    /// internal reshape-throttle-tick`) with no memory of the original
-    /// `expand --priority` flag, and `self.priority` here is always whatever
-    /// that command's builder happened to default to (`Balanced`). Falls back
-    /// to `self.priority` only when the band has no persisted value (older
-    /// `state.toml`, or a reshape started before this field existed) --
-    /// identical to today's behavior for such a band. `band_priority` feeds
-    /// BOTH `ThrottleController::resume`'s speed ceiling AND
-    /// `tick_throttle_decision`'s decision thresholds -- an earlier fix addressed only
-    /// the former and left the latter reading `self.priority`.
-    pub fn tick_active_reshapes(&self) -> Result<usize, OrchestrateError> {
+    /// Unlike `start_sync_throttle` (called once, in the same process that
+    /// received the `--priority` flag), this uses `ThrottleController::
+    /// resume` to seed the current ceiling from the kernel's REAL value:
+    /// each periodic invocation is a brand-new process with no memory of
+    /// what a previous tick last wrote. Each band likewise uses ITS OWN
+    /// persisted `sync_priority`, falling back to `self.priority` for a band
+    /// syncing for a reason this project didn't record (an operator's own
+    /// `mdadm --action=check`, or a `state.toml` from an older binary).
+    pub fn tick_active_sync(&self) -> Result<usize, OrchestrateError> {
+        /// Every `sync_action` md reports for work in progress. Anything
+        /// else -- `idle`, `frozen` -- means this band has nothing running.
+        const ACTIVE_SYNC_ACTIONS: [&str; 5] = ["reshape", "check", "repair", "resync", "recover"];
+
         let Some(mut state) = self.store.load()? else {
             return Ok(0);
         };
         let mut ticked = 0usize;
+        let mut cleared = false;
 
         for group_idx in 0..state.groups.len() {
             for band_pos in 0..state.groups[group_idx].bands.len() {
                 let md_name = state.groups[group_idx].bands[band_pos].md_name.clone();
-                // A band with no live array has no reshape to throttle --
-                // skip it, don't abort the whole sweep. See
-                // `live_sync_action`, which this ENOENT handling was factored
-                // out into once `restore_speed_limit_if_idle` needed the same
-                // rule.
+                // A band with no live array has nothing to throttle -- skip
+                // it, don't abort the whole sweep. See `live_sync_action`,
+                // which this ENOENT handling was factored out into once
+                // `restore_speed_limit_if_idle` needed the same rule.
                 let Some(action) = Self::live_sync_action(self.runner, &md_name)? else {
                     continue;
                 };
-                if action != "reshape" {
+                if !ACTIVE_SYNC_ACTIONS.contains(&action.as_str()) {
+                    cleared |= self.clear_band_limits(&mut state, group_idx, band_pos)?;
                     continue;
                 }
                 let band_priority = state.groups[group_idx].bands[band_pos]
-                    .reshape_priority
+                    .sync_priority
                     .as_deref()
-                    .and_then(parse_reshape_priority)
+                    .and_then(SyncPriority::parse)
                     .unwrap_or(self.priority);
-                let mut ctrl = ThrottleController::resume(self.runner, &md_name, band_priority);
-                let decision = self.tick_throttle_decision(&mut state, group_idx, band_pos, band_priority);
-                ctrl.apply(decision)?;
+                self.tick_sync_throttle(&mut state, group_idx, band_pos, band_priority)?;
                 ticked += 1;
             }
         }
 
         // The other half of this timer's job, and the only one that runs
-        // when nothing is reshaping: hand the host-wide speed limit back once
-        // the operation that borrowed it has finished. `reconcile()` does
-        // this too, but nothing guarantees an operator ever runs it -- this
-        // timer is what makes the restore automatic.
+        // when nothing is syncing: hand the host-wide speed limit back once
+        // the operation that borrowed it has finished. Only the fallback
+        // path ever borrows it, but a host that has since gained the
+        // per-array attributes may still have a value left over from before.
+        // `reconcile()` does this too, but nothing guarantees an operator
+        // ever runs it -- this timer is what makes the restore automatic.
         let restored = self.restore_speed_limit_if_idle(&mut state)?.is_some();
 
-        if (ticked > 0 || restored) && !self.runner.is_dry_run() {
+        if (ticked > 0 || cleared || restored) && !self.runner.is_dry_run() {
             self.store.save(&state)?;
         }
         Ok(ticked)
@@ -4402,18 +4574,14 @@ impl<'a> OrchestrationEngine<'a> {
         // doing anything else) is what actually finishes this later.
         let reshape_still_running = mdadm.sync_action(&md_name)? != "idle";
         state.groups[group_idx].bands[band_pos].resize_pending = reshape_still_running;
-        // Persist the priority chosen for THIS reshape so the periodic
-        // tick (`tick_active_reshapes`, a brand-new process every fire) can
-        // recover it instead of silently defaulting to `Balanced`. Cleared
-        // in `reconcile` alongside `resize_pending` once the reshape is
-        // actually done.
-        if reshape_still_running {
-            state.groups[group_idx].bands[band_pos].reshape_priority =
-                Some(reshape_priority_to_str(self.priority).to_string());
-        }
+        // This band just gained a member, so whatever it was measured doing
+        // before describes a different array.
+        Self::discard_capability_estimate(&mut state.groups[group_idx].bands[band_pos]);
         *crossed_ponr = true;
+        // `start_sync_throttle` persists the profile, which is what the
+        // periodic tick reads back instead of silently defaulting.
         if reshape_still_running && !self.runner.is_dry_run() {
-            self.start_reshape_throttle(state, group_idx, band_pos)?;
+            self.start_sync_throttle(state, group_idx, band_pos, self.priority)?;
         }
         if !self.runner.is_dry_run() {
             // NOTE: `state` here is the whole `StateFile` -- every group,
@@ -4605,12 +4773,7 @@ impl<'a> OrchestrationEngine<'a> {
             md_uuid: mdadm.read_uuid(&md_name).ok(), // best-effort, see execute_grow
             member_partitions: member_part_uuids,
             usable_bytes: band.usable_bytes(),
-            resize_pending: false,
-            last_smart_reallocated: None,
-            last_scrub: None,
-            scrub_in_progress: false,
-            pending_member_removal: None,
-            reshape_priority: None,
+            ..Default::default()
         });
         *crossed_ponr = true;
         if !self.runner.is_dry_run() {
@@ -4868,28 +5031,6 @@ fn raid_level_str(level: RaidLevel) -> &'static str {
         RaidLevel::Raid1 => "raid1",
         RaidLevel::Raid5 => "raid5",
         RaidLevel::Raid6 => "raid6",
-    }
-}
-
-/// `StateBand::reshape_priority`'s on-disk string form, round-tripping
-/// through the same lowercase names `shr-cli`'s `PriorityArg` uses.
-fn reshape_priority_to_str(p: ReshapePriority) -> &'static str {
-    match p {
-        ReshapePriority::Background => "background",
-        ReshapePriority::Balanced => "balanced",
-        ReshapePriority::Max => "max",
-    }
-}
-
-/// The inverse of `reshape_priority_to_str`. Returns `None` for anything
-/// unrecognized (including a field left `None`) -- callers fall back to
-/// `self.priority` in that case, same as a older `state.toml`.
-fn parse_reshape_priority(s: &str) -> Option<ReshapePriority> {
-    match s {
-        "background" => Some(ReshapePriority::Background),
-        "balanced" => Some(ReshapePriority::Balanced),
-        "max" => Some(ReshapePriority::Max),
-        _ => None,
     }
 }
 

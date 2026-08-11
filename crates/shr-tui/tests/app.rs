@@ -115,6 +115,7 @@ fn sample_report_with_groups() -> StatusReport {
                 last_scrub: None,
                 scrub_in_progress: false,
                 pending_member_removal: None,
+                ..Default::default()
             }],
         },
         GroupStatus {
@@ -151,6 +152,7 @@ fn sample_report_with_groups() -> StatusReport {
                 last_scrub: None,
                 scrub_in_progress: false,
                 pending_member_removal: None,
+                ..Default::default()
             }],
         },
     ];
@@ -485,6 +487,7 @@ mod add_disk_wizard {
                 last_scrub: None,
                 scrub_in_progress: false,
                 pending_member_removal: None,
+                ..Default::default()
             }],
         }];
         report

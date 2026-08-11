@@ -56,6 +56,27 @@ pub trait Inspector: Send + Sync {
     fn recent_log_lines(&self, _max_lines: usize) -> Result<Vec<String>, InspectError> {
         Ok(Vec::new())
     }
+    /// What one md array's sync speed and its limits currently read.
+    /// Default: nothing known, which `status` reports as absent rather than
+    /// as a number. Real systems override.
+    fn md_sync_limits(&self, _md_name: &str) -> MdSyncLimits {
+        MdSyncLimits::default()
+    }
+}
+
+/// One array's live sync rate and the limits in force on it, in KB/s.
+/// Every field is `Option` because each is read independently and any of
+/// them can be absent: md reports `none` for `sync_speed` when nothing is
+/// syncing, and a kernel without the per-array attributes has no
+/// `sync_speed_min`/`sync_speed_max` at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct MdSyncLimits {
+    pub speed_kb: Option<u64>,
+    pub min_kb: Option<u64>,
+    pub max_kb: Option<u64>,
+    /// Whether the limits above came from this array's own attributes
+    /// rather than the host-wide `/proc/sys/dev/raid/speed_limit_*`.
+    pub per_array: bool,
 }
 
 /// The lsblk columns shr-rs relies on.
@@ -116,6 +137,34 @@ impl Inspector for SystemInspector {
         )?;
         Ok(stdout.lines().map(str::to_string).collect())
     }
+
+    /// Reads the array's own attributes, falling back to the host-wide
+    /// parameters for the two limits when this kernel has no per-array
+    /// ones. `sync_speed` has no host-wide equivalent, so it stays absent.
+    fn md_sync_limits(&self, md_name: &str) -> MdSyncLimits {
+        let per_array_min = read_kb(&format!("/sys/block/{md_name}/md/sync_speed_min"));
+        let per_array_max = read_kb(&format!("/sys/block/{md_name}/md/sync_speed_max"));
+        let per_array = per_array_min.is_some() || per_array_max.is_some();
+        MdSyncLimits {
+            speed_kb: read_kb(&format!("/sys/block/{md_name}/md/sync_speed")),
+            min_kb: per_array_min.or_else(|| read_kb("/proc/sys/dev/raid/speed_limit_min")),
+            max_kb: per_array_max.or_else(|| read_kb("/proc/sys/dev/raid/speed_limit_max")),
+            per_array,
+        }
+    }
+}
+
+/// First whitespace-separated field of `path`, parsed as KB/s. The
+/// per-array attributes report their origin alongside the number
+/// (`200000 (local)`), and `sync_speed` reads `none` when nothing is
+/// syncing -- both yield `None` here rather than a fabricated value.
+fn read_kb(path: &str) -> Option<u64> {
+    std::fs::read_to_string(path)
+        .ok()?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
 }
 
 /// Run a command, returning stdout. If `fail_on_nonzero`, a nonzero exit is an

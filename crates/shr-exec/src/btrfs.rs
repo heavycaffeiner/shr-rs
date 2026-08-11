@@ -219,7 +219,7 @@ impl<'a> BtrfsExecutor<'a> {
     /// Start a Btrfs scrub. Deliberately NOT `-B` (foreground/blocking)
     /// -- like `mdadm --grow`, this must return promptly so it never freezes
     /// the CLI/TUI/Cockpit-spawned process for however long the scrub takes
-    /// (same "no blocking loop" rule `start_reshape_throttle`'s doc comment
+    /// (same "no blocking loop" rule `start_sync_throttle`'s doc comment
     /// documents for reshape). The scrub runs in the kernel; `scrub_status`
     /// is how a caller checks on it afterward.
     pub fn scrub_start(&self, mount_point: &str) -> Result<(), ExecError> {

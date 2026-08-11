@@ -22,12 +22,7 @@ fn healthy_band() -> StateBand {
         md_uuid: Some("a1b2c3d4:e5f6a7b8:c9d0e1f2:a3b4c5d6".to_string()),
         member_partitions: vec!["11111111-1111-1111-1111-111111111111".to_string()],
         usable_bytes: 4_000_000_000_000,
-        resize_pending: false,
-        last_smart_reallocated: None,
-        last_scrub: None,
-        scrub_in_progress: false,
-        pending_member_removal: None,
-        reshape_priority: None,
+        ..Default::default()
     }
 }
 

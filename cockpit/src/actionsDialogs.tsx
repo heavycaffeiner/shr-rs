@@ -82,7 +82,7 @@
  * PatternFly React components.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import {
     ActionList,
@@ -1838,8 +1838,31 @@ const SnapshotDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onC
 
 // --- schedule install --------------------------------------------------------
 
+/** What the schedule dialog's speed control offers, same shape and same
+ * default as `scrubSpeedOptions`: `""` is not a fourth profile, it means
+ * "pass no `--scrub-priority`", leaving `policy.toml`'s own setting (and, if
+ * that is unset too, the scheduled check's "touch no kernel parameter"
+ * behaviour) alone. */
+const schedulePriorityOptions = (): { value: ReshapePriority | ""; label: string }[] => [
+    { value: "", label: _("dialogs.schedule.priority.unset") },
+    { value: "balanced", label: _("dialogs.schedule.priority.balanced") },
+    { value: "background", label: _("dialogs.schedule.priority.background") },
+    { value: "max", label: _("dialogs.schedule.priority.max") },
+];
+
 const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) => {
-    const [controller] = useState(() => new SimpleActionController(cockpit.spawn.bind(cockpit), undefined, scheduleInstallArgs, parseTextResult));
+    const [priority, setPriority] = useState<ReshapePriority | "">("");
+    // The controller is built once but `buildCall` runs at execute time, so
+    // the selection has to reach it through a ref rather than through the
+    // input captured at construction.
+    const priorityRef = useRef<ReshapePriority | "">("");
+    priorityRef.current = priority;
+    const [controller] = useState(() => new SimpleActionController(
+        cockpit.spawn.bind(cockpit),
+        undefined,
+        () => scheduleInstallArgs(priorityRef.current || undefined),
+        parseTextResult,
+    ));
     const [state, setState] = useState<SimpleActionState<string>>(() => controller.proceedToConfirm());
     const [busy, setBusy] = useState(false);
     // See ScrubDialog's identical comment above.
@@ -1872,7 +1895,21 @@ const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged
                             <p>{_("dialogs.schedule.body")}</p>
                         </StackItem>
                         <StackItem>
-                            <CommandPreview commands={["shr-rs schedule install"]} />
+                            <FormGroup label={_("dialogs.schedule.priorityLabel")} fieldId="schedule-priority">
+                                <span className="pf-v6-c-form-control">
+                                    <select
+                                        id="schedule-priority"
+                                        value={priority}
+                                        onChange={e => setPriority(e.target.value as ReshapePriority | "")}
+                                        disabled={busy}
+                                    >
+                                        {schedulePriorityOptions().map(o => <option value={o.value} key={o.value || "unset"}>{o.label}</option>)}
+                                    </select>
+                                </span>
+                            </FormGroup>
+                        </StackItem>
+                        <StackItem>
+                            <CommandPreview commands={[scheduleInstallArgs(priority || undefined).argv.join(" ")]} />
                         </StackItem>
                         {state.step === "error" && (
                             <StackItem>

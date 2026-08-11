@@ -20,7 +20,11 @@ pub struct StateDisk {
     pub partitions: Vec<StatePartition>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// `Default` exists so the several construction sites across this workspace
+/// spell out only the fields they actually decide (`..Default::default()`
+/// for the rest) -- every field added since the original six is optional,
+/// defaulted, and set later by whichever code path learns its value.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StateBand {
     pub index: u8,
     pub level: String,
@@ -78,37 +82,73 @@ pub struct StateBand {
     /// loads (`None` -- nothing pending).
     #[serde(default)]
     pub pending_member_removal: Option<String>,
-    /// The reshape speed profile (`expand --priority`) chosen for this
-    /// band's currently-running reshape, stored as the same lowercase string
-    /// `shr-cli`'s `PriorityArg`/`shr_exec::ReshapePriority` round-trip
-    /// through. `expand()`'s handler already knows the operator's
-    /// choice and applies it in-process for the reshape's FIRST tick
-    /// (`start_reshape_throttle`) -- but the periodic tick
-    /// (`OrchestrationEngine::tick_active_reshapes`, driven by a systemd
-    /// timer) runs in a brand-new process every fire and has no other way to
+    /// The speed profile (`--priority`) governing this band's
+    /// currently-running md sync, stored as the same lowercase string
+    /// `shr-cli`'s `PriorityArg`/`shr_exec::SyncPriority` round-trip through.
+    /// The command that started the sync knows the operator's choice and
+    /// applies it in-process for the FIRST tick -- but the periodic tick
+    /// (`OrchestrationEngine::tick_active_sync`, driven by a systemd timer)
+    /// runs in a brand-new process every fire and has no other way to
     /// recover it. Without this field that tick silently fell back to
-    /// `ReshapePriority::Balanced` from the first fire onward, discarding
-    /// `background`'s tighter braking or `max`'s unlimited ceiling for the
-    /// rest of a multi-hour reshape.
+    /// `Balanced` from the first fire onward, discarding `background`'s
+    /// tighter braking or `max`'s unlimited ceiling for the rest of a
+    /// multi-hour operation.
     ///
-    /// Per-band, not per-group: a reshape is a per-band kernel operation
-    /// (`tick_active_reshapes` iterates bands, checking each one's own
-    /// `sync_action`), and different bands -- even different GROUPS -- can
-    /// have independent reshapes in flight with different chosen priorities
-    /// at once (`expand()` only refuses a SECOND concurrent reshape within
-    /// the SAME group; see its an earlier review comment). A single
+    /// Per-band, not per-group: an md sync is a per-band kernel operation,
+    /// and different bands -- even different GROUPS -- can have independent
+    /// ones in flight under different profiles at once. A single
     /// engine-wide value could not represent that.
     ///
-    /// Set alongside `resize_pending` (same "started here, finished there"
-    /// shape) whenever `execute_grow` leaves a real reshape running, and
-    /// cleared alongside it in `reconcile` once the reshape reaches `idle` --
-    /// a stale value surviving past its own reshape would silently govern
-    /// the band's NEXT one. `#[serde(default)]` so a older `state.toml`
-    /// still loads (`None`, and `tick_active_reshapes` falls back to the
-    /// engine's own `self.priority`, i.e. `Balanced` unless a caller opts
-    /// in -- identical to today's behavior for such a file).
+    /// Also the marker for "this project wrote this band's speed limits":
+    /// set when a sync this project started leaves one running, cleared
+    /// together with those limits once the band reads `idle` again. A stale
+    /// value surviving past its own operation would silently govern the
+    /// band's NEXT one.
+    ///
+    /// `serde(alias)` reads the pre-rename `reshape_priority` written by an
+    /// older binary, back when only a reshape had a profile at all.
+    #[serde(default, alias = "reshape_priority")]
+    pub sync_priority: Option<String>,
+    /// What this band's md sync has actually been measured doing, in KB/s
+    /// (`/sys/block/<md>/md/sync_speed`) -- every `balanced`/`background`
+    /// limit is a fraction of this, so the profiles mean the same thing on a
+    /// 2-disk SATA array and a 12-disk SAS one instead of sharing three
+    /// absolute constants that fit neither.
+    ///
+    /// Persisted so the next operation starts from it rather than relearning
+    /// it, and discarded when band membership changes: adding or removing a
+    /// member changes what the array can do.
     #[serde(default)]
-    pub reshape_priority: Option<String>,
+    pub sync_capability_kb: Option<u64>,
+    /// RFC3339 timestamp of the observation `sync_capability_kb` came from,
+    /// so `status` can show how old the estimate is rather than presenting a
+    /// month-old number as current.
+    #[serde(default)]
+    pub sync_capability_observed_at: Option<String>,
+    /// Consecutive ticks whose observed speed sat below 0.7 of the written
+    /// ceiling -- the counter behind the capability estimate's decay rule.
+    /// Carried here because each periodic tick is a brand-new process, the
+    /// same reason `last_smart_reallocated` is.
+    #[serde(default)]
+    pub sync_capability_uncapped_ticks: u32,
+    /// Whether this band's kernel supports the per-array
+    /// `/sys/block/<md>/md/sync_speed_{min,max}` attributes, probed once and
+    /// recorded so every later tick doesn't re-probe. `None` means not
+    /// probed yet; `Some(false)` selects the host-wide
+    /// `/proc/sys/dev/raid/speed_limit_*` fallback and the
+    /// save-and-restore machinery that goes with it.
+    #[serde(default)]
+    pub sync_limits_per_array: Option<bool>,
+    /// What the last throttle tick decided (`emergency-brake`, `decrease`,
+    /// `increase`, `hold`), the signal that decided it, and the ceiling it
+    /// left in force. Without these there is no way to learn that a sync is
+    /// running at its floor, or why, short of reading sysfs by hand.
+    #[serde(default)]
+    pub last_throttle_decision: Option<String>,
+    #[serde(default)]
+    pub last_throttle_reason: Option<String>,
+    #[serde(default)]
+    pub last_throttle_speed_kb: Option<u64>,
 }
 
 /// The outcome of the most recent scrub (`mdadm --action=check` / `btrfs

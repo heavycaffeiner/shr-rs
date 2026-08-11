@@ -23,7 +23,7 @@ pub mod smart;
 
 pub use diskref::{resolve_disk_ref, resolve_disk_refs, DiskRef, ResolvedDisk};
 pub use identity::{fallback_disk_id, resolve_disk_path, ByIdIndex, IdentityError};
-pub use inspector::{InspectError, Inspector, StaticInspector, SystemInspector};
+pub use inspector::{InspectError, Inspector, MdSyncLimits, StaticInspector, SystemInspector};
 pub use lsblk::{parse_lsblk, BlockDevice, LsblkOutput};
 pub use mdstat::{parse_mdstat, MdArray, MdMember, MdStat, SyncStatus};
 pub use safety::{

@@ -37,6 +37,43 @@ pub struct PolicyFile {
     /// module doc comment.
     #[serde(default)]
     pub snapshot: SnapshotPolicy,
+    /// What the SCHEDULED scrub runs at. Same shared file, same reasoning.
+    #[serde(default)]
+    pub scrub: ScrubPolicy,
+}
+
+/// Scheduled-scrub policy. Without this, the generated timer unit could not
+/// carry a `--priority` at all, so every scheduled scrub took the "touch no
+/// kernel parameter" path and ran under whatever limit happened to be in
+/// place -- which after a throttled reshape was that reshape's decayed
+/// floor. An operator who picked `max` in Cockpit got it for one manual run
+/// and never again.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ScrubPolicy {
+    /// `"background"`, `"balanced"` or `"max"`. Omitted (the default) keeps
+    /// today's meaning exactly: the timer passes no `--priority` and the
+    /// scrub changes no kernel parameter.
+    #[serde(default, deserialize_with = "deserialize_scrub_priority")]
+    pub priority: Option<String>,
+}
+
+/// An unrecognised profile is a load error, not a silent fallback: silently
+/// scrubbing at the wrong speed is the failure this field exists to fix.
+/// Validated against the same three variants `shr-cli` parses, spelled out
+/// here rather than reaching for `shr-exec` -- `shr-state` does not depend
+/// on it, and the set is the enum's own definition either way.
+fn deserialize_scrub_priority<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value = Option::<String>::deserialize(deserializer)?;
+    match value.as_deref() {
+        None | Some("background") | Some("balanced") | Some("max") => Ok(value),
+        Some(other) => Err(D::Error::custom(format!(
+            "unknown scrub priority `{other}` (expected background, balanced or max)"
+        ))),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -240,6 +277,33 @@ mod tests {
         assert!(policy.snapshot.enabled);
         assert_eq!(policy.snapshot.schedule, "daily");
         assert_eq!(policy.snapshot.keep, 7);
+    }
+
+    #[test]
+    fn a_scrub_priority_loads_and_a_missing_one_keeps_todays_no_op_meaning() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("policy.toml");
+        std::fs::write(&path, "[scrub]\npriority = \"max\"\n").unwrap();
+        assert_eq!(
+            PolicyStore::new(&path).load().unwrap().scrub.priority.as_deref(),
+            Some("max")
+        );
+
+        std::fs::write(&path, "[notify]\nsystemd_notify = true\n").unwrap();
+        assert_eq!(PolicyStore::new(&path).load().unwrap().scrub.priority, None);
+    }
+
+    #[test]
+    fn an_unknown_scrub_priority_is_a_load_error_not_a_silent_fallback() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("policy.toml");
+        std::fs::write(&path, "[scrub]\npriority = \"fastest\"\n").unwrap();
+
+        let err = PolicyStore::new(&path).load().unwrap_err().to_string();
+        assert!(
+            err.contains("fastest"),
+            "the error must name the bad value: {err}"
+        );
     }
 
     #[test]

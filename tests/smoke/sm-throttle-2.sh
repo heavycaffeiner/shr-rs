@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# when a safety threshold is exceeded during a real reshape,
-# `internal reshape-throttle-tick` must actually lower
-# /proc/sys/dev/raid/speed_limit_max, not merely report a decision.
+# SM-THROTTLE-2: when a safety threshold is exceeded during a real reshape,
+# `internal reshape-throttle-tick` must actually lower that band's own
+# `sync_speed_max`, not merely report a decision -- and must stop at the
+# profile's own floor rather than decaying past the rate at which the sync
+# still streams.
 #
 # HOW THE CONDITION IS HONESTLY INJECTED ON THIS FIXTURE (read before editing
 # thresholds below):
@@ -24,13 +26,18 @@
 # a clear reason recorded, rather than faking a PASS off a signal this
 # fixture cannot honestly control.
 #
-# cpu_load is different: `read_cpu_load` reads /proc/loadavg's real 1-minute
-# average, unrelated to any disk -- this IS something a script can honestly
-# push past `SafetyThresholds::default().max_cpu_load` (0.85) by starting
-# real, CPU-bound background processes on the guest and independently
-# confirming (via `cat /proc/loadavg`, not shr-rs) that the threshold is
-# genuinely exceeded before ever invoking shr-rs. That is what this script
-# actually tests as its PASS/FAIL verdict.
+# cpu_load is different: the sampler reads /proc/loadavg's real 1-minute
+# average and divides it by the online CPU count, unrelated to any disk --
+# this IS something a script can honestly push past
+# `SafetyThresholds::default().max_cpu_load` (0.85, a fraction of the whole
+# machine) by starting real, CPU-bound background processes on the guest and
+# independently confirming (via `cat /proc/loadavg` and `nproc`, not shr-rs)
+# that the threshold is genuinely exceeded before ever invoking shr-rs. That
+# is what this script actually tests as its PASS/FAIL verdict.
+#
+# The divisor is the point of D4: the raw average counts uninterruptible
+# sleepers, so during a reshape it sits at 2 to 6 on any real machine and,
+# compared against 0.85 directly, was true on effectively every tick.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=lib/fixture.sh
@@ -38,7 +45,9 @@ source lib/fixture.sh
 
 SHR_RS="${SHR_RS:-/tmp/shr-rs}"
 MOUNT_POINT=/mnt/shr-smoke
-CPU_LOAD_THRESHOLD=0.85  # SafetyThresholds::default().max_cpu_load
+# SafetyThresholds::default().max_cpu_load, as a fraction of the machine.
+# The raw 1-minute average has to beat this times the core count.
+CPU_LOAD_FRACTION=0.85
 WORKER_PIDS=()
 RESULT=PASS
 FAILURES=()
@@ -116,13 +125,17 @@ if ! smoke_wait_sync_action "$MD_NAME" reshape 12 5; then
     exit 2
 fi
 
-BASELINE_SPEED="$(sudo cat /proc/sys/dev/raid/speed_limit_max)"
-echo "baseline speed_limit_max (set by apply_initial when the reshape started): $BASELINE_SPEED"
+BASELINE_SPEED="$(smoke_sync_limit "$MD_NAME" max)"
+BASELINE_FLOOR="$(smoke_sync_limit "$MD_NAME" min)"
+echo "baseline sync limits (set by apply_initial when the reshape started): max=$BASELINE_SPEED min=$BASELINE_FLOOR"
 
 echo "== SM-THROTTLE-2: act, part 1 -- inject a genuine CPU-load threshold breach =="
 NPROC="$(nproc 2>/dev/null || echo 2)"
 WORKER_COUNT=$(( NPROC * 4 ))
-echo "starting $WORKER_COUNT real busy-loop workers (nproc=$NPROC) to push /proc/loadavg past $CPU_LOAD_THRESHOLD..."
+# The sampler divides by the same core count, so this is the raw average the
+# threshold actually corresponds to on this machine.
+CPU_LOAD_THRESHOLD="$(awk -v f="$CPU_LOAD_FRACTION" -v n="$NPROC" 'BEGIN { printf "%.2f", f * n }')"
+echo "starting $WORKER_COUNT real busy-loop workers (nproc=$NPROC) to push /proc/loadavg past $CPU_LOAD_THRESHOLD (= $CPU_LOAD_FRACTION of $NPROC cores)..."
 for _ in $(seq 1 "$WORKER_COUNT"); do
     ( while :; do :; done ) &
     WORKER_PIDS+=("$!")
@@ -156,18 +169,37 @@ echo "reshape-throttle-tick exit code: $TICK_EXIT"
 [[ "$TICK_EXIT" -eq 0 ]] || fail "internal reshape-throttle-tick should have succeeded (exit 0) even when it decides to decelerate"
 
 echo "== SM-THROTTLE-2: assert (independent kernel state observation) =="
-AFTER_SPEED="$(sudo cat /proc/sys/dev/raid/speed_limit_max)"
+AFTER_SPEED="$(smoke_sync_limit "$MD_NAME" max)"
+AFTER_FLOOR="$(smoke_sync_limit "$MD_NAME" min)"
 LOAD_AT_TICK="$(cat /proc/loadavg)"
-echo "speed_limit_max: baseline=$BASELINE_SPEED after-tick=$AFTER_SPEED (load at tick time: $LOAD_AT_TICK)"
+echo "sync_speed_max: baseline=$BASELINE_SPEED after-tick=$AFTER_SPEED (load at tick time: $LOAD_AT_TICK)"
 
-[[ "$AFTER_SPEED" -lt "$BASELINE_SPEED" ]] || \
-    fail "speed_limit_max did not decrease under a genuine cpu_load threshold breach: baseline=$BASELINE_SPEED after=$AFTER_SPEED"
-
-if [[ "$BASELINE_SPEED" == 100000 ]]; then
-    EXPECTED_AFTER=70000
-    [[ "$AFTER_SPEED" == "$EXPECTED_AFTER" ]] || \
-        fail "speed_limit_max is $AFTER_SPEED, expected exactly $EXPECTED_AFTER (baseline 100000 * Decrease(0.7) factor from ThrottleDecision::Decrease)"
+# The floor is where a decrease stops. A baseline already sitting on it has
+# nowhere left to go, and demanding a further drop would be demanding the
+# defect this design replaced -- decay all the way to an absolute 10 MB/s.
+if [[ "$BASELINE_SPEED" -gt "$BASELINE_FLOOR" ]]; then
+    [[ "$AFTER_SPEED" -lt "$BASELINE_SPEED" ]] || \
+        fail "sync_speed_max did not decrease under a genuine cpu_load threshold breach: baseline=$BASELINE_SPEED after=$AFTER_SPEED"
+    # The exact figure is only predictable while the profile's band is
+    # unchanged. The same tick also folds this array's live `sync_speed`
+    # into its capability estimate, and a first real observation moves both
+    # limits -- which is the model working, not a miss.
+    if [[ "$AFTER_FLOOR" == "$BASELINE_FLOOR" ]]; then
+        EXPECTED_AFTER="$(awk -v b="$BASELINE_SPEED" -v f="$BASELINE_FLOOR" \
+            'BEGIN { d = int(b * 0.7 + 0.5); print (d < f ? f : d) }')"
+        [[ "$AFTER_SPEED" == "$EXPECTED_AFTER" ]] || \
+            fail "sync_speed_max is $AFTER_SPEED, expected exactly $EXPECTED_AFTER (baseline $BASELINE_SPEED * the 0.7 decrease factor, floored at the profile's own $BASELINE_FLOOR)"
+    else
+        echo "the capability estimate moved this band's limits during the tick ($BASELINE_FLOOR -> $AFTER_FLOOR), so only the direction and the floor are asserted"
+    fi
+else
+    echo "baseline was already at the profile floor ($BASELINE_FLOOR) -- nothing left to decrease"
 fi
+
+# The structural fix behind the reported multi-day reshape: a decrease can
+# reach the profile's floor and stop there, never the old absolute 10 MB/s.
+[[ "$AFTER_SPEED" -ge "$AFTER_FLOOR" ]] || \
+    fail "sync_speed_max ($AFTER_SPEED) fell below this band's own floor ($AFTER_FLOOR) -- at that rate md stutters instead of streaming"
 
 echo "== SM-THROTTLE-2: EmergencyBrake via disk temperature / SMART reallocated-sector count =="
 skip "cannot honestly inject a genuine over-temperature or increasing-reallocated-sectors reading: /dev/loop* devices have no real SMART data at all, so smartctl fails identically regardless of any condition this script could set up. That failure already forces a Decrease every tick on this fixture (see this script's header comment on 'unknown never means safe') -- indistinguishable from a real injected threshold breach, so it cannot be used as evidence FOR this specific safety path without lying about what was tested. A real EmergencyBrake-via-temperature/SMART test needs either a scsi_debug/nbd device that answers smartctl, or a MetricsSampler test double wired at the unit-test layer (already covered there, see crates/shr-exec/src/throttle.rs's own tests: tick_emergency_brakes_when_disk_temperature_hits_the_threshold, tick_emergency_brakes_when_smart_reallocated_count_increases) -- not this guest's loopback fixture."

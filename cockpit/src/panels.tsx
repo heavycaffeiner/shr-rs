@@ -409,11 +409,48 @@ const toleranceTone = ({ nominal, remaining }: GroupToleranceStatus): Tone["tone
     return "good";
 };
 
+// The current sync rate against what this array has been measured able to
+// do, plus the profile whose fractions of that capability set the limits.
+// Empty when nothing is syncing and no estimate exists yet -- an idle band
+// has nothing to say here.
+const formatSyncSpeed = (band: GroupBandStatus): string => {
+    const rate = band.sync_speed_kb ?? null;
+    const capability = band.sync_capability_kb ?? null;
+    if (rate === null && capability === null)
+        return "";
+    const profile = band.sync_priority ? ` (${band.sync_priority})` : "";
+    if (rate === null)
+        return format(_("panels.band.speed.capabilityOnly"), formatKbPerSec(capability!)) + profile;
+    if (capability === null)
+        return formatKbPerSec(rate) + profile;
+    return format(_("panels.band.speed.ofCapability"), formatKbPerSec(rate), formatKbPerSec(capability)) + profile;
+};
+
+// Why the throttle last did something. Deliberately silent on `hold`: the
+// normal case is not worth a line, and a reason shown every poll would stop
+// meaning anything.
+const formatThrottleReason = (band: GroupBandStatus): string => {
+    const decision = band.sync_priority ? band.last_throttle_decision : null;
+    if (!decision || decision === "hold")
+        return "";
+    return band.last_throttle_reason
+        ? format(_("panels.band.speed.lastDecisionReason"), decision, band.last_throttle_reason)
+        : format(_("panels.band.speed.lastDecision"), decision);
+};
+
+// KB/s as reported by md, rendered in MB/s once it is large enough for that
+// to read better -- the raw number is what sysfs holds, but 183296 KB/s is
+// not a figure anyone parses at a glance.
+const formatKbPerSec = (kb: number): string =>
+    kb >= 1000 ? format(_("panels.band.speed.mb"), (kb / 1000).toFixed(1)) : format(_("panels.band.speed.kb"), kb);
+
 const BandRow = ({ band, arrays }: { band: GroupBandStatus; arrays: ArrayStatus[] }) => {
     // Geometry comes from the array's configured raid_disks, not from
     // any live/healthy member count -- see computeBandCapacity's doc comment.
     const capacity = computeBandCapacity(band, raidDisksForBand(band, arrays));
     const scrub = formatScrub(band.last_scrub, band.scrub_in_progress);
+    const speedText = formatSyncSpeed(band);
+    const throttleReason = formatThrottleReason(band);
 
     return (
         <Tr>
@@ -469,6 +506,8 @@ const BandRow = ({ band, arrays }: { band: GroupBandStatus; arrays: ArrayStatus[
                         ? _("common.noLiveArrayInfo")
                         : band.sync ? formatSyncProgress(band.sync) : _("common.idle")}
                 </CellSub>
+                {speedText && <CellSub className={MONO}>{speedText}</CellSub>}
+                {throttleReason && <CellSub><Muted>{throttleReason}</Muted></CellSub>}
                 <CellSub><Badge tone={{ label: scrub.text, tone: scrub.tone }} /></CellSub>
             </Td>
         </Tr>

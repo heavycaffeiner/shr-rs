@@ -4,7 +4,7 @@
 |------------|----------------------------------|
 | Author     | heavycaffeiner(Dong Hyun Kim)    |
 | Created    | 2026-08-11                       |
-| Status     | **Draft** / In Review / Approved |
+| Status     | Draft / In Review / **Implemented** |
 | Reviewers  |                                  |
 
 ---
@@ -196,9 +196,10 @@ fallback path, for a kernel where the per-array attributes are absent. Presence
 is probed once per band and recorded; the fallback keeps today's behaviour
 exactly.
 
-**Open item.** Confirm both attributes exist and accept `system` on the Rocky
-10.2 guest before Phase 1 lands. If they do not, the whole proposal still stands
-with the host-wide parameters and the existing restore path.
+**Open item, since closed.** Both attributes exist on the Rocky 10.2 guest and
+accept `system`; see 9.1 for the measurement. They report their origin
+alongside the value (`200000 (local)`), so every reader parses the first field
+only.
 
 ### 3.3 Measuring capability
 
@@ -489,6 +490,81 @@ regardless of any setting here.
 
 ## 9. Verification
 
-To be filled in after implementation, recording measured `sync_speed` traces over
-a real reshape and a real `--priority max` scrub on the guest, the capability
-estimate each band converged to, and the before and after wall-clock for each.
+Measured on the Rocky 10.2 guest (`shr-dev`, kernel 7.1.6, 4 vCPU / 3 GB),
+against the real `tank` group's `md0` (6-member RAID5 over Hyper-V virtual
+disks) and against loopback fixtures for the smoke cases.
+
+### 9.1 The open item in 3.2 is closed
+
+Both per-array attributes exist and behave as the proposal assumed:
+
+```
+$ cat /sys/block/md0/md/sync_speed_max      # 200000 (system)
+$ echo 200000 | sudo tee .../sync_speed_max # reads back: 200000 (local)
+$ echo system | sudo tee .../sync_speed_max # reads back: 200000 (system)
+$ cat /sys/block/md0/md/sync_speed          # none, when nothing is syncing
+```
+
+The `(local)`/`(system)` suffix is the only surprise: every reader parses the
+first field only. `sync_speed` reads `none` between operations, which the
+capability estimate treats as "no observation this tick", never as zero.
+
+### 9.2 A real `balanced` scrub, sampled every tick
+
+`fs scrub start --name tank --priority balanced`, then one throttle tick
+every 12 seconds (production fires every two minutes; the short interval
+compresses the same sequence into something observable in one sitting):
+
+| time     | `sync_speed` | `sync_speed_min` | `sync_speed_max` | `sync_capability_kb` |
+|----------|--------------|------------------|------------------|----------------------|
+| 12:58:05 | 154624       | 36826            | 73500            | 105216               |
+| 12:58:19 | 73618        | 36826            | 51450            | 105216               |
+| 12:58:32 | 53883        | 36826            | 36826            | 105216               |
+| 12:58:45 | 38035        | 36826            | 36826            | 105216               |
+| 12:59:11 | 41851        | 36826            | 36826            | 105216               |
+| 13:00:04 | 38019        | 36826            | 36826            | 105216               |
+
+The band converged to a capability estimate of **105216 KB/s**, from which
+`Balanced` derived `0.35 * C = 36826` as its floor: the exact value the
+ceiling then stopped at and stayed at. Every tick decided `decrease`, because
+Hyper-V virtual disks report no SMART temperature and an unreadable
+safety-critical signal decreases under every profile by design.
+
+That is the whole point. Under the previous model the same sequence of
+decreases would have run 100000 -> 70000 -> ... -> 10000 and stayed at the
+absolute floor for the rest of the operation; here it stops at the rate the
+array still streams at, three and a half times higher, chosen from what this
+particular array was measured doing rather than from a constant.
+
+`status --detail` and the Cockpit band panel both reported it live:
+`38.2 MB/s / 최대 약 105.2 MB/s (balanced)` with
+`마지막 속도 조절: decrease (disk temperature unreadable)`, verified in a
+browser against the real group.
+
+### 9.3 Smoke cases
+
+Run on the guest against loopback fixtures, judged by independent `cat` of
+the kernel files:
+
+| case | result | what it measured |
+|------|--------|------------------|
+| SM-THROTTLE-1 | PASS | `expand --priority background` wrote `max=42000 min=25000 (local)` to the band's own attributes. The floor is the profile's, not the fixed 1000 it used to be. |
+| SM-THROTTLE-3 | PASS | The host-wide `speed_limit_max` stayed at the operator's 137000 throughout a `--priority max` scrub; the band's own limits were cleared to `(system)` afterwards, and nothing was recorded as borrowed. |
+| SM-THROTTLE-4 | PASS | With `smartctl` moved aside, a `--priority max` reshape's limits were `10000000/10000000` before and after three ticks: unchanged. |
+| SM-THROTTLE-5 | PASS (climb-back skipped) | A genuine CPU-load breach decreased 105000 -> 73500 -> 51450 -> 41166 and stopped at the floor the capability estimate derived. The climb-back itself cannot be observed on loopback (no SMART temperature, so every tick decreases); it is covered at the unit layer. |
+| SM-THROTTLE-6 | PASS | `fs scrub start --priority max` wrote `10000000` to BOTH attributes, and both read `(system)` again once the check ended. |
+| SM-THROTTLE-7 | PASS | Two groups scrubbing at once: alpha `10000000/10000000`, beta `42000/25000`, simultaneously. The host-wide parameter could not express this at all. |
+
+SM-THROTTLE-2 was not re-run on the guest for this change; its assertions
+were updated for the per-array files and the normalised load threshold.
+
+### 9.4 Two defects found by running it
+
+Both were found by SM-THROTTLE-7 against real arrays, not by any unit test:
+
+- `apply_initial` wrote `stripe_cache_size`, which does not exist on a RAID1
+  array, so a RAID1 band's scrub aborted before it started. That write is
+  RAID456 write-path tuning and is now best-effort.
+- `scrub_start` wrote the limits and only persisted the profile afterwards,
+  so a failure in between left limits in force with nothing recording that
+  this project had put them there. The record is now written first.

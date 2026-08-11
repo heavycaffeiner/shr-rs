@@ -545,8 +545,21 @@ export const snapshotCreateArgs = (input: SnapshotInput): SpawnCall => {
 
 // --- Schedule install (scrub/health-check systemd timers) --------------
 
-export const scheduleInstallArgs = (): SpawnCall => ({
-    argv: ["shr-rs", "schedule", "install"],
+// `scrubPriority` sets what the SCHEDULED check runs at. Omitted (the
+// default) passes no flag, so `policy.toml`'s `[scrub] priority` decides,
+// and with that unset too the scheduled check changes no kernel parameter --
+// exactly what every scheduled scrub did before the flag existed.
+//
+// The generated unit file is where the choice lives: `policy.toml` is
+// operator-authored and shr-rs never writes it, so a later `schedule
+// install` without the flag goes back to whatever that file says.
+export const scheduleInstallArgs = (scrubPriority?: ReshapePriority): SpawnCall => ({
+    argv: [
+        "shr-rs",
+        "schedule",
+        "install",
+        ...(scrubPriority ? ["--scrub-priority", scrubPriority] : []),
+    ],
     options: SPAWN_OPTIONS,
 });
 

@@ -1,31 +1,30 @@
 #!/usr/bin/env bash
-# SM-THROTTLE-3: the host-wide RAID speed limit is BORROWED, not taken.
+# SM-THROTTLE-3: a band's speed limits are BORROWED, not taken.
 #
-# `/proc/sys/dev/raid/speed_limit_max` is one setting for the whole host,
-# and shr-rs writes it from two places: the reshape throttle
-# (`expand --priority`) and, now, `fs scrub start --priority`. Until this
-# was fixed nothing ever put it back, so an `expand --priority background`
-# left the cap at 20000 KB/s (or lower, once the adaptive throttle had
-# decayed it) for every array on the machine until somebody rebooted --
-# which then throttled whatever read it next, most visibly a scrub, for a
-# reason nothing in shr-rs ever reported.
+# Every limit shr-rs writes now goes to the band's own
+# `/sys/block/<md>/md/sync_speed_{min,max}`, which shadow the host-wide
+# `/proc/sys/dev/raid/speed_limit_*` for that array alone. Two things follow,
+# and this case judges both against an independent `cat` of the real kernel
+# files rather than shr-rs's own report (R1):
 #
-# Three facts, each judged by an INDEPENDENT `cat` of the real kernel file
-# or a real read of state.toml, never by shr-rs's own exit code or report
-# (R1: judge by the observed change):
+#   1. The operator's own host-wide setting is untouched throughout. Before
+#      this, `expand --priority background` left the host-wide cap at
+#      20000 KB/s (lower still once the adaptive throttle had decayed it) for
+#      every array on the machine until somebody rebooted, which then
+#      throttled whatever read it next.
+#   2. Once the work is over, the band's limits are handed back exactly: a
+#      write of the literal `system`, which clears the local value, not a
+#      restore of a remembered number. A floor left behind silently governs
+#      every later operation on that array.
 #
-#   1. `fs scrub start --priority max` writes the profile's ceiling
-#      (RESHAPE_SPEED_CEILING_KB = 500000) and the mdadm `check` really
-#      starts.
-#   2. The value that was there BEFORE is recorded in state.toml
-#      (`saved_speed_limit_max_kb`), which is the only thing that makes
-#      step 3 possible from a different process minutes later.
-#   3. Once the scrub is over, a throttle tick puts the operator's own
-#      number back and clears the slot.
+# Step 2 is the one that could not be tested anywhere else: the clear is
+# driven by `shr-rs internal reshape-throttle-tick`, a separate process fired
+# by a systemd timer, working purely from what is on disk.
 #
-# Step 3 is the one that could not be tested anywhere else: the restore is
-# driven by `shr-rs internal reshape-throttle-tick`, a separate process
-# fired by a systemd timer, reading a value this process wrote to disk.
+# On a kernel with no per-array attributes shr-rs falls back to the host-wide
+# pair and to `state.toml`'s `saved_speed_limit_max_kb` save-and-restore.
+# That path is detected and reported as SKIPPED here rather than asserted
+# against, because this guest has the attributes and cannot exercise it.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=lib/fixture.sh
@@ -35,19 +34,23 @@ SHR_RS="${SHR_RS:-/tmp/shr-rs}"
 MOUNT_POINT=/mnt/shr-smoke
 STATE=/var/lib/shr-rs/state.toml
 SPEED_MAX=/proc/sys/dev/raid/speed_limit_max
-# A deliberately odd number, nowhere near any profile's own value
-# (Background 20000, Balanced 100000, Max 500000) and nowhere near the
-# kernel default 200000. If this exact figure comes back at the end, it
-# came back from the saved slot and from nowhere else.
+# A deliberately odd number, nowhere near any profile's own value and nowhere
+# near the kernel default 200000. If this exact figure is still there at the
+# end, nothing shr-rs did went host-wide.
 SENTINEL_KB=137000
-EXPECTED_CEILING_KB=500000  # ReshapePriority::Max.initial_speed_kb()
 RESULT=PASS
 FAILURES=()
+SKIPPED=()
 
 fail() {
     RESULT=FAIL
     FAILURES+=("$1")
     echo "FAIL: $1" >&2
+}
+
+skip() {
+    SKIPPED+=("$1")
+    echo "SKIPPED: $1" >&2
 }
 
 # The host's own pre-test value, put back on the way out no matter how this
@@ -95,6 +98,13 @@ if [[ -z "$MD_NAME" ]]; then
 fi
 echo "band0 is /dev/$MD_NAME"
 
+PER_ARRAY="$(smoke_sync_limit_origin "$MD_NAME" max)"
+if [[ "$PER_ARRAY" == absent ]]; then
+    skip "this kernel has no /sys/block/$MD_NAME/md/sync_speed_max, so shr-rs takes the host-wide fallback path and there is nothing per-array to borrow or hand back. The fallback's own save-and-restore is covered by state.toml's saved_speed_limit_max_kb, which this case cannot exercise here."
+    echo "SM-THROTTLE-3: SKIPPED (no per-array limit attributes on this kernel)"
+    exit 0
+fi
+
 # A scrub is refused while anything else is running, so the initial resync
 # has to finish first -- same constraint sm-scrub-3.sh documents.
 if ! smoke_wait_sync_idle "$MD_NAME"; then
@@ -102,11 +112,11 @@ if ! smoke_wait_sync_idle "$MD_NAME"; then
     exit 2
 fi
 
-# Establish the operator's "own" setting AFTER create, so nothing in the
-# arrange phase can be what puts it there.
+# Establish the operator's "own" host-wide setting AFTER create, so nothing
+# in the arrange phase can be what puts it there.
 echo "$SENTINEL_KB" | sudo tee "$SPEED_MAX" >/dev/null
 BEFORE_MAX="$(cat "$SPEED_MAX")"
-echo "-- operator's speed_limit_max before the scrub: $BEFORE_MAX --"
+echo "-- operator's host-wide speed_limit_max before the scrub: $BEFORE_MAX --"
 if [[ "$BEFORE_MAX" != "$SENTINEL_KB" ]]; then
     echo "SM-THROTTLE-3: BLOCKED (could not set the sentinel value; got $BEFORE_MAX)"
     exit 2
@@ -119,12 +129,15 @@ echo "$SCRUB_OUTPUT"
 echo "exit code: $SCRUB_EXIT"
 [[ "$SCRUB_EXIT" -eq 0 ]] || fail "fs scrub start --priority max should have succeeded"
 
-echo "== SM-THROTTLE-3: assert 1 (the ceiling reached the kernel) =="
-DURING_MAX="$(cat "$SPEED_MAX")"
-echo "speed_limit_max during the scrub: $DURING_MAX"
-[[ "$DURING_MAX" == "$EXPECTED_CEILING_KB" ]] || \
-    fail "speed_limit_max is $DURING_MAX during a --priority max scrub, expected exactly \
-$EXPECTED_CEILING_KB (was $BEFORE_MAX before)"
+echo "== SM-THROTTLE-3: assert 1 (the band's own limits moved, the host's did not) =="
+DURING_MAX="$(smoke_sync_limit "$MD_NAME" max)"
+DURING_ORIGIN="$(smoke_sync_limit_origin "$MD_NAME" max)"
+HOST_DURING="$(cat "$SPEED_MAX")"
+echo "band sync_speed_max during the scrub: $DURING_MAX ($DURING_ORIGIN); host-wide: $HOST_DURING"
+[[ "$DURING_ORIGIN" == local ]] || \
+    fail "the band's ceiling reads '$DURING_ORIGIN' during its own scrub -- shr-rs wrote somewhere else"
+[[ "$HOST_DURING" == "$SENTINEL_KB" ]] || \
+    fail "the host-wide speed_limit_max is $HOST_DURING, expected the operator's own $SENTINEL_KB untouched -- a per-band profile must not reach every other array on the machine"
 
 # The scrub itself has to have really started -- a test that only proved
 # the kernel parameter moved would pass just as happily if `--priority`
@@ -134,21 +147,20 @@ echo "sync_action after scrub start: $SYNC_ACTION"
 [[ "$SYNC_ACTION" == "check" ]] || \
     fail "sync_action is '$SYNC_ACTION' right after 'fs scrub start', expected 'check'"
 
-echo "== SM-THROTTLE-3: assert 2 (the operator's value was recorded, not discarded) =="
+echo "== SM-THROTTLE-3: assert 2 (nothing host-wide was borrowed at all) =="
 SAVED_LINE="$(sudo grep -E '^saved_speed_limit_max_kb' "$STATE" 2>/dev/null || true)"
 echo "state.toml: ${SAVED_LINE:-<absent>}"
-[[ "$SAVED_LINE" == *"$SENTINEL_KB"* ]] || \
-    fail "state.toml does not record the pre-scrub speed_limit_max ($SENTINEL_KB); without it \
-nothing can ever put the operator's own value back (line was: ${SAVED_LINE:-<absent>})"
+[[ -z "$SAVED_LINE" ]] || \
+    fail "state.toml recorded a host-wide value to restore (${SAVED_LINE}) even though this kernel has per-array limits -- the fallback path ran when it should not have"
 
 echo "== SM-THROTTLE-3: act 2 (let the scrub end, then run one throttle tick) =="
 # Cancelling is a legitimate end to a scrub and takes seconds instead of
-# minutes; what step 3 is about is what happens once no band is busy, not
+# minutes; what step 2 is about is what happens once no band is busy, not
 # how the work finished. `scrub cancel` writes `idle` to the same
 # sync_action file the kernel would have reached on its own.
 sudo "$SHR_RS" --json fs scrub cancel >/dev/null 2>&1 || true
 if ! smoke_wait_sync_idle "$MD_NAME" 30 2; then
-    echo "SM-THROTTLE-3: BLOCKED (the scrub never went back to idle, so there is nothing to restore yet)"
+    echo "SM-THROTTLE-3: BLOCKED (the scrub never went back to idle, so there is nothing to hand back yet)"
     exit 2
 fi
 
@@ -158,17 +170,22 @@ fi
 TICK_OUTPUT="$(sudo "$SHR_RS" --json internal reshape-throttle-tick 2>&1)"
 echo "$TICK_OUTPUT"
 
-echo "== SM-THROTTLE-3: assert 3 (the borrowed value was handed back) =="
-AFTER_MAX="$(cat "$SPEED_MAX")"
-echo "speed_limit_max after the tick: $AFTER_MAX"
-[[ "$AFTER_MAX" == "$SENTINEL_KB" ]] || \
-    fail "speed_limit_max is $AFTER_MAX after the work finished, expected the operator's own \
-$SENTINEL_KB back (it was $EXPECTED_CEILING_KB during the scrub)"
+echo "== SM-THROTTLE-3: assert 3 (the band's limits were handed back) =="
+for which in min max; do
+    ORIGIN="$(smoke_sync_limit_origin "$MD_NAME" "$which")"
+    VALUE="$(smoke_sync_limit "$MD_NAME" "$which")"
+    echo "sync_speed_$which after the tick: $VALUE ($ORIGIN)"
+    [[ "$ORIGIN" == system ]] || \
+        fail "sync_speed_$which still reads '$ORIGIN' after the work finished -- a limit left behind silently governs every later operation on this array"
+done
 
-SAVED_AFTER="$(sudo grep -cE '^saved_speed_limit_max_kb' "$STATE" 2>/dev/null || true)"
-[[ "$SAVED_AFTER" == "0" ]] || \
-    fail "state.toml still carries saved_speed_limit_max_kb after the restore; every later tick \
-would keep rewriting the same value over whatever the operator set next"
+AFTER_HOST="$(cat "$SPEED_MAX")"
+[[ "$AFTER_HOST" == "$SENTINEL_KB" ]] || \
+    fail "the host-wide speed_limit_max is $AFTER_HOST, expected the operator's own $SENTINEL_KB still untouched"
+
+PRIORITY_LEFT="$(sudo grep -cE '^sync_priority' "$STATE" 2>/dev/null || true)"
+[[ "$PRIORITY_LEFT" == "0" ]] || \
+    fail "state.toml still records a sync_priority for a band with nothing running; that stale profile would govern this band's NEXT operation"
 
 echo "== SM-THROTTLE-3: cleanup + verify teardown (R4) =="
 sudo umount "$MOUNT_POINT" 2>/dev/null || true
@@ -177,6 +194,9 @@ if ! assert_clean; then
 fi
 
 echo "== SM-THROTTLE-3: verdict =="
+if [[ "${#SKIPPED[@]}" -gt 0 ]]; then
+    printf '  skipped: %s\n' "${SKIPPED[@]}"
+fi
 if [[ "$RESULT" == PASS ]]; then
     echo "SM-THROTTLE-3: PASS"
 else
