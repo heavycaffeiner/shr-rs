@@ -73,7 +73,8 @@ impl<'a> LiveMetricsSampler<'a> {
 
 impl MetricsSampler for LiveMetricsSampler<'_> {
     fn sample(&self) -> Option<ThrottleMetrics> {
-        let cpu_load = read_cpu_load(self.runner);
+        let cpu_count = read_cpu_count(self.runner);
+        let cpu_load = read_normalised_cpu_load(self.runner, cpu_count);
         let io_wait_pct = read_io_wait_pct(self.runner, self.sample_interval);
         let (disk_temp_max, smart_total) = read_smart_signals(self.runner, &self.member_disks);
 
@@ -88,6 +89,7 @@ impl MetricsSampler for LiveMetricsSampler<'_> {
 
         Some(ThrottleMetrics {
             cpu_load,
+            cpu_count,
             io_wait_pct,
             // Not in this sampler's data sources (the design lists it,
             // but no `/proc`/`smartctl` source approximates p99 user IO
@@ -97,14 +99,40 @@ impl MetricsSampler for LiveMetricsSampler<'_> {
             user_io_latency_p99_ms: None,
             disk_temp_max,
             smart_delta_reallocated,
+            // No previous total means nothing to diff against, which on an
+            // operation's first tick is expected rather than a failed read.
+            first_sample: self.previous_smart_total.is_none(),
         })
     }
 }
 
-/// `/proc/loadavg`'s first field: the 1-minute load average.
-fn read_cpu_load(runner: &dyn CommandRunner) -> Option<f64> {
+/// `/proc/loadavg`'s 1-minute load average divided by the online CPU count,
+/// which is the shape `SafetyThresholds::max_cpu_load` (0.85) has always
+/// implied: a fraction of the machine.
+///
+/// The raw average counts uninterruptible-sleep tasks, so during a sync it
+/// sits at roughly 2 to 6 on any real machine and compared against 0.85 was
+/// true on effectively every tick. A CPU count that cannot be read yields
+/// `None` -- an unknown contention signal, handled by profile in
+/// `ReshapeThrottle::tick` -- rather than a silent fall back to the raw
+/// value.
+fn read_normalised_cpu_load(runner: &dyn CommandRunner, cpu_count: Option<u32>) -> Option<f64> {
+    let cpu_count = cpu_count?;
     let output = runner.run("cat", &["/proc/loadavg"]).ok()?;
-    output.stdout.split_whitespace().next()?.parse().ok()
+    let load: f64 = output.stdout.split_whitespace().next()?.parse().ok()?;
+    Some(load / f64::from(cpu_count))
+}
+
+/// Online CPUs, counted from `/proc/cpuinfo`'s `processor` lines. `None`
+/// (never a fabricated 1) when the file can't be read or holds no such line.
+fn read_cpu_count(runner: &dyn CommandRunner) -> Option<u32> {
+    let output = runner.run("cat", &["/proc/cpuinfo"]).ok()?;
+    let count = output
+        .stdout
+        .lines()
+        .filter(|l| l.starts_with("processor"))
+        .count();
+    u32::try_from(count).ok().filter(|&c| c > 0)
 }
 
 /// Two `/proc/stat` samples `sample_interval` apart, diffed to get the
@@ -254,6 +282,13 @@ mod tests {
         }
     }
 
+    /// `/proc/cpuinfo` reduced to the only thing `read_cpu_count` looks at.
+    fn cpuinfo(cores: usize) -> String {
+        (0..cores)
+            .map(|i| format!("processor\t: {i}\nmodel name\t: test\n\n"))
+            .collect()
+    }
+
     fn smart_json(temp: i64, realloc: u64) -> String {
         format!(
             r#"{{"smart_status":{{"passed":true}},"temperature":{{"current":{temp}}},
@@ -261,11 +296,15 @@ mod tests {
         )
     }
 
+    /// D4: the raw 1-minute average counts uninterruptible-sleep tasks, so
+    /// during a sync it sits well above the 0.85 per-core threshold it used
+    /// to be compared against and decreased on every tick.
     #[test]
-    fn reads_cpu_load_from_proc_loadavg() {
+    fn cpu_load_is_normalised_by_core_count() {
         let runner = ScriptedRunner {
             cat_responses: StdMutex::new(vec![
-                "0.42 0.30 0.25 1/523 12345\n".to_string(),  // loadavg
+                cpuinfo(4),
+                "3.20 0.30 0.25 1/523 12345\n".to_string(), // loadavg
                 "cpu  100 0 100 800 20 0 0 0\n".to_string(), // stat #1
                 "cpu  110 0 110 880 22 0 0 0\n".to_string(), // stat #2
             ]),
@@ -274,7 +313,31 @@ mod tests {
         };
         let sampler = LiveMetricsSampler::new(&runner, vec![], None).with_sample_interval(Duration::ZERO);
         let m = sampler.sample().unwrap();
-        assert_eq!(m.cpu_load, Some(0.42));
+        assert_eq!(
+            m.cpu_load,
+            Some(0.80),
+            "3.20 across 4 cores is 80% of the machine"
+        );
+        assert_eq!(m.cpu_count, Some(4), "the divisor must be reportable too");
+    }
+
+    #[test]
+    fn an_unreadable_core_count_yields_an_unknown_load_not_the_raw_average() {
+        let runner = ScriptedRunner {
+            cat_responses: StdMutex::new(vec![
+                // cpuinfo with no `processor` line -- `/proc/loadavg` is
+                // then never read at all, so no response is queued for it.
+                String::new(),
+                "cpu  100 0 100 800 20 0 0 0\n".to_string(),
+                "cpu  110 0 110 880 22 0 0 0\n".to_string(),
+            ]),
+            smartctl_responses: StdMutex::new(vec![]),
+            recorded: StdMutex::new(vec![]),
+        };
+        let sampler = LiveMetricsSampler::new(&runner, vec![], None).with_sample_interval(Duration::ZERO);
+        let m = sampler.sample().unwrap();
+        assert_eq!(m.cpu_load, None);
+        assert_eq!(m.cpu_count, None);
     }
 
     #[test]
@@ -283,6 +346,7 @@ mod tests {
         // iowait delta = 22-20 = 2 -> 2/102*100 ≈ 1.96%
         let runner = ScriptedRunner {
             cat_responses: StdMutex::new(vec![
+                cpuinfo(4),
                 "0.1 0.1 0.1 1/1 1\n".to_string(),
                 "cpu  100 0 100 800 20 0 0 0\n".to_string(),
                 "cpu  110 0 110 880 22 0 0 0\n".to_string(),
@@ -302,6 +366,7 @@ mod tests {
     fn reads_max_temperature_and_sums_reallocated_sectors_across_member_disks() {
         let runner = ScriptedRunner {
             cat_responses: StdMutex::new(vec![
+                cpuinfo(4),
                 "0.1 0.1 0.1 1/1 1\n".to_string(),
                 "cpu  1 0 1 1 0 0 0 0\n".to_string(),
                 "cpu  2 0 2 2 0 0 0 0\n".to_string(),
@@ -338,6 +403,7 @@ mod tests {
     fn a_disk_whose_smartctl_call_fails_is_skipped_not_treated_as_zero() {
         let runner = ScriptedRunner {
             cat_responses: StdMutex::new(vec![
+                cpuinfo(4),
                 "0.1 0.1 0.1 1/1 1\n".to_string(),
                 "cpu  1 0 1 1 0 0 0 0\n".to_string(),
                 "cpu  2 0 2 2 0 0 0 0\n".to_string(),
@@ -368,6 +434,7 @@ mod tests {
     fn every_smart_read_failing_reports_unknown_not_healthy() {
         let runner = ScriptedRunner {
             cat_responses: StdMutex::new(vec![
+                cpuinfo(4),
                 "0.1 0.1 0.1 1/1 1\n".to_string(),
                 "cpu  1 0 1 1 0 0 0 0\n".to_string(),
                 "cpu  2 0 2 2 0 0 0 0\n".to_string(),
@@ -391,6 +458,7 @@ mod tests {
     fn no_previous_smart_total_yields_an_unknown_delta_not_a_zero_delta() {
         let runner = ScriptedRunner {
             cat_responses: StdMutex::new(vec![
+                cpuinfo(4),
                 "0.1 0.1 0.1 1/1 1\n".to_string(),
                 "cpu  1 0 1 1 0 0 0 0\n".to_string(),
                 "cpu  2 0 2 2 0 0 0 0\n".to_string(),
@@ -406,7 +474,31 @@ mod tests {
             m.smart_delta_reallocated, None,
             "first-ever tick has nothing to diff against"
         );
+        assert!(
+            m.first_sample,
+            "and it must say so, or the throttle brakes an opening tick on a \
+             condition that is None by construction"
+        );
         assert_eq!(sampler.last_smart_total(), Some(9));
+    }
+
+    #[test]
+    fn a_sampler_with_a_previous_total_is_not_a_first_sample() {
+        let runner = ScriptedRunner {
+            cat_responses: StdMutex::new(vec![
+                cpuinfo(4),
+                "0.1 0.1 0.1 1/1 1\n".to_string(),
+                "cpu  1 0 1 1 0 0 0 0\n".to_string(),
+                "cpu  2 0 2 2 0 0 0 0\n".to_string(),
+            ]),
+            smartctl_responses: StdMutex::new(vec![Ok(smart_json(40, 9))]),
+            recorded: StdMutex::new(vec![]),
+        };
+        let sampler =
+            LiveMetricsSampler::new(&runner, vec!["/dev/disk/by-id/ata-DISK1".to_string()], Some(9))
+                .with_sample_interval(Duration::ZERO);
+
+        assert!(!sampler.sample().unwrap().first_sample);
     }
 
     #[test]
@@ -421,6 +513,7 @@ mod tests {
         // runner for something else.
         let runner = ScriptedRunner {
             cat_responses: StdMutex::new(vec![
+                cpuinfo(4),
                 "0.1 0.1 0.1 1/1 1\n".to_string(),
                 "cpu  1 0 1 1 0 0 0 0\n".to_string(),
                 "cpu  2 0 2 2 0 0 0 0\n".to_string(),

@@ -82,7 +82,7 @@
  * PatternFly React components.
  */
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import {
     ActionList,
@@ -137,6 +137,7 @@ import {
     replaceArgs,
     scheduleInstallArgs,
     scrubCancelArgs,
+    scrubSpeedArgs,
     scrubStartArgs,
     scrubStatusArgs,
     snapshotCreateArgs,
@@ -344,6 +345,16 @@ const scrubSpeedOptions = (): { value: ReshapePriority | ""; label: string }[] =
     { value: "max", label: _("dialogs.scrub.priority.max") },
 ];
 
+/** What this group's bands report they are currently syncing under, for the
+ * running-check speed selector to open on. Falls back to `"balanced"` when
+ * no band carries a profile -- a check started with no `--priority` at all
+ * runs under whatever the system already had, which is not one of the three
+ * and cannot be shown as one. */
+const runningPriority = (group: GroupStatus): ReshapePriority => {
+    const reported = group.bands.map(b => b.sync_priority).find(Boolean);
+    return (reported === "background" || reported === "balanced" || reported === "max") ? reported : "balanced";
+};
+
 const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClose: () => void; onChanged: () => void }) => {
     const [status, setStatus] = useState<ScrubStatusReport | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -352,6 +363,15 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
     const [actionState, setActionState] = useState<SimpleActionState<string> | null>(null);
     const [busy, setBusy] = useState(false);
     const [speed, setSpeed] = useState<ReshapePriority | "">("");
+    // The running check's speed is a separate control with a separate
+    // in-flight flag: it is not one of the two confirmed actions (start,
+    // cancel) this dialog otherwise drives, and it needs no confirmation --
+    // nothing is destroyed, nothing is restarted, and the opposite choice is
+    // one click away. Seeded from what the bands report they are running at,
+    // so the selector opens showing the truth rather than a guess.
+    const [liveSpeed, setLiveSpeed] = useState<ReshapePriority>(runningPriority(group));
+    const [speedBusy, setSpeedBusy] = useState(false);
+    const [speedError, setSpeedError] = useState<string | null>(null);
     // `onChanged` is app.tsx's `refresh`, which synchronously sets
     // `state.kind = "loading"` -- that unmounts this whole dialog (via
     // `Dashboard`) in the same React batch as any setState this dialog's own
@@ -385,6 +405,25 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
             setAction(controller);
         } catch (error) {
             setLoadError(spawnErrorMessage(error));
+        }
+    };
+
+    const applySpeed = async () => {
+        setSpeedBusy(true);
+        setSpeedError(null);
+        try {
+            const { argv, options } = scrubSpeedArgs({ groupName: group.name, priority: liveSpeed });
+            await cockpit.spawn(argv, options);
+            setChanged(true);
+            // The band panel behind this dialog shows the limits and the
+            // last throttle decision, so a change here has somewhere to be
+            // seen -- reload so it is not stale by the time the dialog
+            // closes.
+            load();
+        } catch (error) {
+            setSpeedError(spawnErrorMessage(error));
+        } finally {
+            setSpeedBusy(false);
         }
     };
 
@@ -444,10 +483,46 @@ const ScrubDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onClos
                     </StackItem>
                 )}
 
+                {/* The mirror of the selector below, for a check that is
+                    ALREADY running: the kernel re-reads these limits as it
+                    goes, so a running check can be re-aimed without being
+                    stopped, and cancelling one just to run it faster throws
+                    away the work already done. Its own button, because
+                    unlike start/cancel there is nothing here to confirm. */}
+                {!loading && status && status.running && !action && (
+                    <StackItem>
+                        <FormGroup label={_("dialogs.scrub.speedLabel")} fieldId="scrub-live-speed">
+                            <span className="pf-v6-c-form-control">
+                                <select
+                                    id="scrub-live-speed"
+                                    value={liveSpeed}
+                                    disabled={speedBusy}
+                                    onChange={e => setLiveSpeed(e.target.value as ReshapePriority)}
+                                >
+                                    {priorityOptions().map(o => <option value={o.value} key={o.value}>{o.label}</option>)}
+                                </select>
+                            </span>
+                            <HelperText><HelperTextItem>{_("dialogs.scrub.speedHint")}</HelperTextItem></HelperText>
+                        </FormGroup>
+                        <ActionList className={ACTION_ROW}>
+                            <ActionListItem>
+                                <button
+                                    className="pf-v6-c-button pf-m-secondary" type="button"
+                                    disabled={speedBusy} onClick={applySpeed}
+                                >
+                                    {speedBusy ? _("dialogs.scrub.speedBusy") : _("dialogs.scrub.speedApply")}
+                                </button>
+                            </ActionListItem>
+                        </ActionList>
+                        {speedError && (
+                            <HelperText><HelperTextItem variant="error" className={MONO}>{speedError}</HelperTextItem></HelperText>
+                        )}
+                    </StackItem>
+                )}
+
                 {/* Shown under exactly the condition that makes the Start
                     button available, so the control is never offered for a
-                    run it cannot affect (a scrub already under way reads its
-                    ceiling from the kernel, not from this dialog). */}
+                    run it cannot affect. */}
                 {!loading && status && !status.running && !action && (
                     <StackItem>
                         <FormGroup label={_("dialogs.scrub.priorityLabel")} fieldId="scrub-priority">
@@ -1838,8 +1913,31 @@ const SnapshotDialog = ({ group, onClose, onChanged }: { group: GroupStatus; onC
 
 // --- schedule install --------------------------------------------------------
 
+/** What the schedule dialog's speed control offers, same shape and same
+ * default as `scrubSpeedOptions`: `""` is not a fourth profile, it means
+ * "pass no `--scrub-priority`", leaving `policy.toml`'s own setting (and, if
+ * that is unset too, the scheduled check's "touch no kernel parameter"
+ * behaviour) alone. */
+const schedulePriorityOptions = (): { value: ReshapePriority | ""; label: string }[] => [
+    { value: "", label: _("dialogs.schedule.priority.unset") },
+    { value: "balanced", label: _("dialogs.schedule.priority.balanced") },
+    { value: "background", label: _("dialogs.schedule.priority.background") },
+    { value: "max", label: _("dialogs.schedule.priority.max") },
+];
+
 const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) => {
-    const [controller] = useState(() => new SimpleActionController(cockpit.spawn.bind(cockpit), undefined, scheduleInstallArgs, parseTextResult));
+    const [priority, setPriority] = useState<ReshapePriority | "">("");
+    // The controller is built once but `buildCall` runs at execute time, so
+    // the selection has to reach it through a ref rather than through the
+    // input captured at construction.
+    const priorityRef = useRef<ReshapePriority | "">("");
+    priorityRef.current = priority;
+    const [controller] = useState(() => new SimpleActionController(
+        cockpit.spawn.bind(cockpit),
+        undefined,
+        () => scheduleInstallArgs(priorityRef.current || undefined),
+        parseTextResult,
+    ));
     const [state, setState] = useState<SimpleActionState<string>>(() => controller.proceedToConfirm());
     const [busy, setBusy] = useState(false);
     // See ScrubDialog's identical comment above.
@@ -1872,7 +1970,21 @@ const ScheduleDialog = ({ onClose, onChanged }: { onClose: () => void; onChanged
                             <p>{_("dialogs.schedule.body")}</p>
                         </StackItem>
                         <StackItem>
-                            <CommandPreview commands={["shr-rs schedule install"]} />
+                            <FormGroup label={_("dialogs.schedule.priorityLabel")} fieldId="schedule-priority">
+                                <span className="pf-v6-c-form-control">
+                                    <select
+                                        id="schedule-priority"
+                                        value={priority}
+                                        onChange={e => setPriority(e.target.value as ReshapePriority | "")}
+                                        disabled={busy}
+                                    >
+                                        {schedulePriorityOptions().map(o => <option value={o.value} key={o.value || "unset"}>{o.label}</option>)}
+                                    </select>
+                                </span>
+                            </FormGroup>
+                        </StackItem>
+                        <StackItem>
+                            <CommandPreview commands={[scheduleInstallArgs(priority || undefined).argv.join(" ")]} />
                         </StackItem>
                         {state.step === "error" && (
                             <StackItem>

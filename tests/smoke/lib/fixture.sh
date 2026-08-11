@@ -234,3 +234,37 @@ smoke_wait_sync_action() {
 smoke_wait_sync_idle() {
     smoke_wait_sync_action "$1" idle "${2:-90}" "${3:-10}"
 }
+
+# smoke_sync_limit MD_NAME min|max: one array's currently-written sync speed
+# limit in KB/s, with md's `(local)`/`(system)` origin suffix stripped.
+#
+# `/sys/block/<md>/md/sync_speed_{min,max}` shadow the host-wide
+# `/proc/sys/dev/raid/speed_limit_{min,max}` for that array alone; a kernel
+# without them falls back to the host-wide pair, which is the same fallback
+# shr-rs itself takes. Prints nothing and returns 1 when neither can be read.
+smoke_sync_limit() {
+    local md_name="$1" which="$2" raw
+    raw="$(cat "/sys/block/$md_name/md/sync_speed_$which" 2>/dev/null || true)"
+    if [[ -z "$raw" ]]; then
+        raw="$(cat "/proc/sys/dev/raid/speed_limit_$which" 2>/dev/null || true)"
+    fi
+    [[ -n "$raw" ]] || return 1
+    awk '{print $1}' <<<"$raw"
+}
+
+# smoke_sync_limit_origin MD_NAME min|max: `local` when this array carries
+# its own value, `system` when it is deferring to the host-wide one, or
+# `absent` on a kernel with no per-array attributes at all. This is the
+# difference between "shr-rs set this array's limit" and "something set the
+# whole host's".
+smoke_sync_limit_origin() {
+    local md_name="$1" which="$2" raw
+    raw="$(cat "/sys/block/$md_name/md/sync_speed_$which" 2>/dev/null || true)"
+    if [[ -z "$raw" ]]; then
+        echo absent
+    elif [[ "$raw" == *"(local)"* ]]; then
+        echo local
+    else
+        echo system
+    fi
+}

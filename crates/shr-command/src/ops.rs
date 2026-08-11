@@ -66,7 +66,7 @@ pub fn build_status(inspector: &dyn Inspector, state: Option<&StateFile>) -> Res
         .map(|s| {
             s.groups
                 .iter()
-                .map(|g| group_status(g, &arrays, &lsblk))
+                .map(|g| group_status(inspector, g, &arrays, &lsblk))
                 .collect()
         })
         .unwrap_or_default();
@@ -131,8 +131,17 @@ pub fn build_status(inspector: &dyn Inspector, state: Option<&StateFile>) -> Res
 /// `build_status`'s own already-fetched inventory, threaded through so
 /// `band_status` can resolve `pending_member_removal`'s by-partuuid path
 /// without a second `lsblk` call.
-fn group_status(g: &ArrayState, arrays: &[ArrayStatus], lsblk: &LsblkOutput) -> GroupStatus {
-    let bands: Vec<GroupBandStatus> = g.bands.iter().map(|b| band_status(b, arrays, lsblk)).collect();
+fn group_status(
+    inspector: &dyn Inspector,
+    g: &ArrayState,
+    arrays: &[ArrayStatus],
+    lsblk: &LsblkOutput,
+) -> GroupStatus {
+    let bands: Vec<GroupBandStatus> = g
+        .bands
+        .iter()
+        .map(|b| band_status(inspector, b, arrays, lsblk))
+        .collect();
     let usable_bytes = bands.iter().map(|b| b.usable_bytes).sum();
     let resize_pending = bands.iter().any(|b| b.resize_pending);
 
@@ -159,8 +168,18 @@ fn group_status(g: &ArrayState, arrays: &[ArrayStatus], lsblk: &LsblkOutput) -> 
 /// from `state.toml` itself (mdstat has no scrub history). `None`/empty when
 /// no live array with this name exists right now (e.g. between a crash and
 /// `reconcile` re-assembling it) -- never guessed.
-fn band_status(b: &StateBand, arrays: &[ArrayStatus], lsblk: &LsblkOutput) -> GroupBandStatus {
+fn band_status(
+    inspector: &dyn Inspector,
+    b: &StateBand,
+    arrays: &[ArrayStatus],
+    lsblk: &LsblkOutput,
+) -> GroupBandStatus {
     let live = arrays.iter().find(|a| a.name == b.md_name);
+    // Read live rather than mirrored from `state.toml`: what the kernel
+    // actually has in force is the thing an operator needs, and it can
+    // differ from what this project last wrote (an operator's own `echo`,
+    // a host-wide value left behind by something else).
+    let limits = inspector.md_sync_limits(&b.md_name);
     GroupBandStatus {
         index: b.index,
         level: b.level.clone(),
@@ -177,6 +196,15 @@ fn band_status(b: &StateBand, arrays: &[ArrayStatus], lsblk: &LsblkOutput) -> Gr
             .pending_member_removal
             .as_deref()
             .map(|raw| resolve_pending_removal(lsblk, raw)),
+        sync_speed_kb: limits.speed_kb,
+        sync_speed_min_kb: limits.min_kb,
+        sync_speed_max_kb: limits.max_kb,
+        sync_priority: b.sync_priority.clone(),
+        sync_capability_kb: b.sync_capability_kb,
+        sync_capability_observed_at: b.sync_capability_observed_at.clone(),
+        last_throttle_decision: b.last_throttle_decision.clone(),
+        last_throttle_reason: b.last_throttle_reason.clone(),
+        last_throttle_speed_kb: b.last_throttle_speed_kb,
     }
 }
 

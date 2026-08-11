@@ -109,6 +109,18 @@ export interface GroupBandStatus {
     sync: SyncSummary | null;
     last_scrub: ScrubSummary | null;
     scrub_in_progress: boolean;
+    // Speed control. All `#[serde(skip_serializing_if = "Option::is_none")]`
+    // on the Rust side, so absent rather than null when unknown -- which is
+    // the difference between "nothing is syncing" and "syncing at 0 KB/s".
+    // `sync_capability_kb` is what the array has actually been measured
+    // doing; every balanced/background limit is a fraction of it.
+    sync_speed_kb?: number | null;
+    sync_speed_min_kb?: number | null;
+    sync_speed_max_kb?: number | null;
+    sync_priority?: string | null;
+    sync_capability_kb?: number | null;
+    last_throttle_decision?: string | null;
+    last_throttle_reason?: string | null;
 }
 
 export interface GroupStatus {
@@ -404,8 +416,28 @@ const parseGroupBand = (value: unknown, groupName: string, index: number): Group
         scrub_in_progress: band.scrub_in_progress === undefined
             ? false
             : requireBoolean(band.scrub_in_progress, invalidField(subject, _("parse.field.scrubInProgressFlag"))),
+        // Optional throughout: a partial rollout of the CLI/cockpit pair
+        // must never blank the whole dashboard, so an absent or
+        // wrong-typed field reads as "not known" rather than throwing.
+        sync_speed_kb: optionalNumber(band.sync_speed_kb),
+        sync_speed_min_kb: optionalNumber(band.sync_speed_min_kb),
+        sync_speed_max_kb: optionalNumber(band.sync_speed_max_kb),
+        sync_priority: optionalString(band.sync_priority),
+        sync_capability_kb: optionalNumber(band.sync_capability_kb),
+        last_throttle_decision: optionalString(band.last_throttle_decision),
+        last_throttle_reason: optionalString(band.last_throttle_reason),
     };
 };
+
+// A reported number, or null when the backend omitted it or sent something
+// that isn't a usable one. Never throws: these fields are informational, and
+// losing the dashboard over a missing speed reading would be a worse outcome
+// than not showing it.
+const optionalNumber = (value: unknown): number | null =>
+    (typeof value === "number" && Number.isFinite(value) && value >= 0) ? value : null;
+
+const optionalString = (value: unknown): string | null =>
+    (typeof value === "string" && value.length > 0) ? value : null;
 
 const parseGroup = (value: unknown, index: number): GroupStatus => {
     const entry = format(_("parse.subject.groupEntry"), index + 1);

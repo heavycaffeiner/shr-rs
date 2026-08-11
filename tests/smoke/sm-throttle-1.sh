@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# SM-THROTTLE-1: `expand --priority` actually changes the kernel's reshape
-# speed parameters, not just something in state.toml or a log line.
+# SM-THROTTLE-1: `expand --priority` actually changes the kernel's sync speed
+# parameters for that band, not just something in state.toml or a log line.
 #
 # `ThrottleController::apply_initial` (crates/shr-exec/src/throttle.rs)
-# writes /proc/sys/dev/raid/speed_limit_max and speed_limit_min right after
-# `mdadm --grow` succeeds, seeded from the chosen priority profile's
-# `initial_speed_kb()` (Background=20000, Balanced=100000 (also the
-# default), Max=500000 -- the RESHAPE_SPEED_CEILING_KB constant) and a fixed
-# speed_limit_min=1000 (SPEED_LIMIT_MIN_DEFAULT_KB). Judgment here is a
-# real, independent `cat` of those two /proc/sys files before and after a
-# real `expand --priority background` -- Background's 20000 is far from any
-# plausible kernel/system default, so an exact-value match after the call
-# is strong, non-coincidental evidence the write actually happened (R1:
-# judge by the observed change, not by the tool's own report).
+# writes the band's own `/sys/block/<md>/md/sync_speed_{min,max}` right after
+# `mdadm --grow` succeeds, both of them, derived from the chosen profile:
+# `Background` claims 0.35 of what the array has been measured able to do and
+# floors at 0.20 of it, and until an estimate exists it uses the bootstrap
+# pair (60000 / 25000 KB/s).
+#
+# BOTH limits matter, and that is the point of this case. Writing only a
+# ceiling is what made `--priority max` slower than it asked for: the kernel
+# reduces the sync rate toward `sync_speed_min` whenever non-sync IO touches
+# the members, and on a live NAS there always is some, so a 1 MB/s floor
+# governed every operation regardless of the ceiling above it.
+#
+# Judgment is a real, independent `cat` of those two files before and after a
+# real `expand --priority background` (R1: judge by the observed change, not
+# by the tool's own report).
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=lib/fixture.sh
@@ -20,8 +25,13 @@ source lib/fixture.sh
 
 SHR_RS="${SHR_RS:-/tmp/shr-rs}"
 MOUNT_POINT=/mnt/shr-smoke
-EXPECTED_MAX_KB=20000  # ReshapePriority::Background.initial_speed_kb()
-EXPECTED_MIN_KB=1000   # SPEED_LIMIT_MIN_DEFAULT_KB
+# SyncPriority::Background.limits(None) -- the bootstrap pair, used until
+# this band has a measured capability estimate.
+EXPECTED_MAX_KB=60000
+EXPECTED_MIN_KB=25000
+# throttle.rs's STREAM_FLOOR_ABS_KB: below this md stutters rather than
+# streams, so no profile's floor is ever allowed under it.
+STREAM_FLOOR_KB=15000
 RESULT=PASS
 FAILURES=()
 
@@ -64,9 +74,10 @@ if ! smoke_wait_sync_idle "$MD_NAME"; then
     exit 2
 fi
 
-BEFORE_MAX="$(sudo cat /proc/sys/dev/raid/speed_limit_max)"
-BEFORE_MIN="$(sudo cat /proc/sys/dev/raid/speed_limit_min)"
-echo "-- before expand: speed_limit_max=$BEFORE_MAX speed_limit_min=$BEFORE_MIN --"
+BEFORE_MAX="$(smoke_sync_limit "$MD_NAME" max)"
+BEFORE_MIN="$(smoke_sync_limit "$MD_NAME" min)"
+BEFORE_ORIGIN="$(smoke_sync_limit_origin "$MD_NAME" max)"
+echo "-- before expand: max=$BEFORE_MAX min=$BEFORE_MIN origin=$BEFORE_ORIGIN --"
 
 echo "== SM-THROTTLE-1: act (expand --priority background) =="
 # `--skip-scrub-check` is required, not a convenience: the fixture group was
@@ -90,41 +101,46 @@ MDSTAT="$(cat /proc/mdstat)"
 echo "$MDSTAT"
 echo "$MDSTAT" | grep -q "raid5" || fail "array did not promote to raid5 -- expand may not have actually run"
 
-AFTER_MAX="$(sudo cat /proc/sys/dev/raid/speed_limit_max)"
-AFTER_MIN="$(sudo cat /proc/sys/dev/raid/speed_limit_min)"
-echo "-- after expand: speed_limit_max=$AFTER_MAX speed_limit_min=$AFTER_MIN --"
+AFTER_MAX="$(smoke_sync_limit "$MD_NAME" max)"
+AFTER_MIN="$(smoke_sync_limit "$MD_NAME" min)"
+AFTER_ORIGIN="$(smoke_sync_limit_origin "$MD_NAME" max)"
+echo "-- after expand: max=$AFTER_MAX min=$AFTER_MIN origin=$AFTER_ORIGIN --"
 
-# Why this is not `== $EXPECTED_MAX_KB`. Measured on the guest: after
-# `--priority background` the kernel read 14000, not 20000 -- and that is the
-# shipped design working, not a miss. `--priority` writes the Background
-# profile's cap (20000), and then the adaptive throttle's first tick multiplies
-# it by 0.7 (throttle.rs's `ThrottleDecision::Decrease(0.7)`), because
-# `any_signal_unreadable` is true on loopback devices: they have no SMART
-# identity, so `smartctl` cannot be read, and the engine deliberately treats an
-# unreadable health signal as a reason to slow down rather than to assume
-# health (see throttle.rs's own comment at the `disk_temp_max`/SMART fields --
-# that posture is deliberate). 20000 * 0.7 = 14000 exactly.
-#
-# So the honest assertion is: the value must be the Background cap or the cap
-# decayed by whole 0.7 ticks -- never some other profile's number, and never
-# unchanged. Accepting any value <= 20000 would also pass if a different
-# profile had been applied and then throttled hard, which is the thing this
-# case exists to rule out.
+# Why this is not `== $EXPECTED_MAX_KB`. `--priority` writes the Background
+# profile's ceiling, and then the throttle's first tick may already have
+# scaled it by 0.7: loopback devices have no SMART identity, so `smartctl`
+# cannot be read, and an unreadable safety signal is deliberately a reason to
+# slow down rather than to assume health. So the honest assertion is: the
+# ceiling must be the profile's own or that ceiling decayed by whole 0.7
+# ticks -- never some other profile's number, and never unchanged. Accepting
+# anything <= 60000 would also pass if a different profile had been applied
+# and then throttled hard, which is what this case exists to rule out.
 matches_background_profile() {
     local observed="$1" candidate="$EXPECTED_MAX_KB"
     for _ in 0 1 2 3 4 5; do
         # bash has no floats; compare against the same round() the controller uses.
         [[ "$observed" == "$candidate" ]] && return 0
         candidate="$(awk -v c="$candidate" 'BEGIN { printf "%d", int(c * 0.7 + 0.5) }')"
+        # A decrease is floored at the profile's own minimum, never below it.
+        (( candidate < EXPECTED_MIN_KB )) && candidate="$EXPECTED_MIN_KB"
     done
     return 1
 }
 matches_background_profile "$AFTER_MAX" || \
-    fail "speed_limit_max is $AFTER_MAX after 'expand --priority background' -- expected the Background cap $EXPECTED_MAX_KB, or that cap decayed by whole adaptive-throttle 0.7 ticks (before was $BEFORE_MAX)"
+    fail "sync_speed_max is $AFTER_MAX after 'expand --priority background' -- expected the Background ceiling $EXPECTED_MAX_KB, or that ceiling decayed by whole adaptive-throttle 0.7 ticks and floored at $EXPECTED_MIN_KB (before was $BEFORE_MAX)"
 [[ "$AFTER_MIN" == "$EXPECTED_MIN_KB" ]] || \
-    fail "speed_limit_min is $AFTER_MIN after 'expand --priority background', expected exactly $EXPECTED_MIN_KB (before was $BEFORE_MIN)"
+    fail "sync_speed_min is $AFTER_MIN after 'expand --priority background', expected exactly the profile's own floor $EXPECTED_MIN_KB (before was $BEFORE_MIN)"
+# The defect this replaced: the floor was written as a fixed 1000 KB/s for
+# every profile, and the kernel pulls the sync rate toward it under any
+# non-sync IO.
+(( AFTER_MIN >= STREAM_FLOOR_KB )) || \
+    fail "sync_speed_min is $AFTER_MIN, below the $STREAM_FLOOR_KB streaming bound -- at that floor md bursts and backs off instead of streaming, and both the sync and everyday IO pay the seek"
 [[ "$AFTER_MAX" != "$BEFORE_MAX" || "$BEFORE_MAX" == "$EXPECTED_MAX_KB" ]] || \
-    fail "speed_limit_max did not change at all (before=$BEFORE_MAX after=$AFTER_MAX) -- expected --priority to actually write the kernel parameter"
+    fail "sync_speed_max did not change at all (before=$BEFORE_MAX after=$AFTER_MAX) -- expected --priority to actually write the kernel parameter"
+if [[ "$AFTER_ORIGIN" != absent ]]; then
+    [[ "$AFTER_ORIGIN" == local ]] || \
+        fail "this kernel HAS per-array limits but $MD_NAME's ceiling still reads '$AFTER_ORIGIN' -- the write went host-wide, which cannot express a per-band profile"
+fi
 
 echo "== SM-THROTTLE-1: cleanup + verify teardown (R4) =="
 sudo umount "$MOUNT_POINT" 2>/dev/null || true

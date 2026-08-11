@@ -138,7 +138,9 @@ pub struct ScrubSummary {
 /// `shr-state`'s type directly would couple the JSON contract's shape to
 /// `state.toml`'s internal representation (a state.toml field rename would
 /// then silently become a Cockpit-breaking change).
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// `Default` exists so construction sites (and the several test fixtures
+/// across this workspace) spell out only the fields they actually decide.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct GroupBandStatus {
     pub index: u8,
     pub level: String,
@@ -180,6 +182,31 @@ pub struct GroupBandStatus {
     /// this band.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_scrub: Option<ScrubSummary>,
+    /// This band's speed control: what the array is syncing at right now,
+    /// the limits actually in force, the profile that put them there, and
+    /// what the last throttle tick decided and why. Additive optional
+    /// fields, same precedent as `md_uuid` -- absent rather than null when
+    /// unknown, so "nothing is syncing" reads differently from "syncing at
+    /// 0 KB/s". Without these there is no way to learn that a sync is
+    /// running at its floor, or why, short of reading sysfs by hand.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync_speed_kb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync_speed_min_kb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync_speed_max_kb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync_priority: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync_capability_kb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync_capability_observed_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_throttle_decision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_throttle_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_throttle_speed_kb: Option<u64>,
     /// Mirrors `StateBand::scrub_in_progress`.
     #[serde(default)]
     pub scrub_in_progress: bool,

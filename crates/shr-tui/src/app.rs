@@ -1200,6 +1200,7 @@ mod tests {
             last_scrub: None,
             scrub_in_progress,
             pending_member_removal: None,
+            ..Default::default()
         }
     }
 

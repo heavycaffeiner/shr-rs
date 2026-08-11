@@ -139,6 +139,16 @@ const validStatus = {
                         error_count: 0,
                     },
                     scrub_in_progress: false,
+                    // Speed control, as a band mid-scrub under `balanced`
+                    // reports it: syncing at 140 MB/s of a measured 400,
+                    // inside limits derived from that estimate.
+                    sync_speed_kb: 140_000,
+                    sync_speed_min_kb: 140_000,
+                    sync_speed_max_kb: 300_000,
+                    sync_priority: "balanced",
+                    sync_capability_kb: 400_000,
+                    last_throttle_decision: "decrease",
+                    last_throttle_reason: "io wait 42.0% > 30.0%",
                 },
                 {
                     index: 1,
@@ -155,6 +165,13 @@ const validStatus = {
                     sync: { action: "resync", percent: 42.5, finish_min: 8.2 },
                     last_scrub: null,
                     scrub_in_progress: false,
+                    sync_speed_kb: null,
+                    sync_speed_min_kb: null,
+                    sync_speed_max_kb: null,
+                    sync_priority: null,
+                    sync_capability_kb: null,
+                    last_throttle_decision: null,
+                    last_throttle_reason: null,
                 },
             ],
         },
@@ -187,6 +204,13 @@ const validStatus = {
                         error_count: 3,
                     },
                     scrub_in_progress: true,
+                    sync_speed_kb: null,
+                    sync_speed_min_kb: null,
+                    sync_speed_max_kb: null,
+                    sync_priority: null,
+                    sync_capability_kb: null,
+                    last_throttle_decision: null,
+                    last_throttle_reason: null,
                 },
             ],
         },
@@ -230,6 +254,16 @@ describe("parseStatusOutput", () => {
             sync: null,
             last_scrub: null,
             scrub_in_progress: false,
+            // Speed control, absent on any payload predating it: null, which
+            // the band panel reads as "nothing to show" rather than as a
+            // rate of zero.
+            sync_speed_kb: null,
+            sync_speed_min_kb: null,
+            sync_speed_max_kb: null,
+            sync_priority: null,
+            sync_capability_kb: null,
+            last_throttle_decision: null,
+            last_throttle_reason: null,
         });
     });
 

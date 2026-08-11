@@ -54,12 +54,7 @@ fn band(index: u8, md_name: &str, md_uuid: Option<&str>) -> StateBand {
         md_uuid: md_uuid.map(|s| s.to_string()),
         member_partitions: vec![],
         usable_bytes: 1,
-        resize_pending: false,
-        last_smart_reallocated: None,
-        last_scrub: None,
-        scrub_in_progress: false,
-        pending_member_removal: None,
-        reshape_priority: None,
+        ..Default::default()
     }
 }
 
@@ -480,7 +475,7 @@ fn write_scrub_timer_units_writes_a_service_and_timer_named_after_the_group() {
         None,
     );
 
-    let written = write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
+    let written = write_scrub_timer_units(dir.path(), &state, test_exe_path(), None).unwrap();
     assert_eq!(written.len(), 2, "{written:?}");
 
     let service = std::fs::read_to_string(dir.path().join("shr-rs-scrub-default.service")).unwrap();
@@ -494,12 +489,37 @@ fn write_scrub_timer_units_writes_a_service_and_timer_named_after_the_group() {
     assert!(timer.contains("WantedBy=timers.target"), "{timer}");
 }
 
+/// D5: without this the generated unit could carry no `--priority` at all,
+/// so every scheduled scrub ran under whatever limit happened to be in place
+/// -- which after a throttled reshape was that reshape's decayed floor.
+#[test]
+fn scrub_timer_unit_carries_the_policy_priority() {
+    let dir = tempdir().unwrap();
+    let state = state_with_bands(
+        vec![band(0, "md0", Some("aaaaaaaa:aaaaaaaa:aaaaaaaa:aaaaaaaa"))],
+        None,
+    );
+
+    write_scrub_timer_units(dir.path(), &state, test_exe_path(), Some("max")).unwrap();
+    let service = std::fs::read_to_string(dir.path().join("shr-rs-scrub-default.service")).unwrap();
+    assert!(
+        service.contains("fs scrub start --name default --priority max"),
+        "{service}"
+    );
+
+    // And omitted keeps today's meaning exactly: no flag, so the scheduled
+    // scrub changes no kernel parameter.
+    write_scrub_timer_units(dir.path(), &state, test_exe_path(), None).unwrap();
+    let service = std::fs::read_to_string(dir.path().join("shr-rs-scrub-default.service")).unwrap();
+    assert!(!service.contains("--priority"), "{service}");
+}
+
 #[test]
 fn write_scrub_timer_units_skips_a_group_with_no_bands() {
     let dir = tempdir().unwrap();
     let state = state_with_bands(vec![], None);
 
-    let written = write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
+    let written = write_scrub_timer_units(dir.path(), &state, test_exe_path(), None).unwrap();
     assert!(written.is_empty(), "{written:?}");
 }
 
@@ -510,7 +530,7 @@ fn write_scrub_timer_units_sanitizes_unsafe_characters_in_the_group_name() {
     g.filesystem.mount_point = "/mnt/data".to_string();
     let state = StateFile::new(vec![g]);
 
-    let written = write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
+    let written = write_scrub_timer_units(dir.path(), &state, test_exe_path(), None).unwrap();
     assert!(
         written
             .iter()
@@ -556,7 +576,7 @@ fn write_scrub_timer_units_never_overwrites_another_groups_units_across_four_gro
     // finishes.
     for i in 0..groups.len() {
         let partial_state = StateFile::new(groups[..=i].to_vec());
-        write_scrub_timer_units(dir.path(), &partial_state, test_exe_path()).unwrap();
+        write_scrub_timer_units(dir.path(), &partial_state, test_exe_path(), None).unwrap();
     }
 
     for i in 0..4 {
@@ -580,8 +600,8 @@ fn write_scrub_timer_units_is_idempotent_on_rewrite() {
     let dir = tempdir().unwrap();
     let state = state_with_bands(vec![band(0, "md0", None)], None);
 
-    write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
-    write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
+    write_scrub_timer_units(dir.path(), &state, test_exe_path(), None).unwrap();
+    write_scrub_timer_units(dir.path(), &state, test_exe_path(), None).unwrap();
 
     let service = std::fs::read_to_string(dir.path().join("shr-rs-scrub-default.service")).unwrap();
     assert_eq!(
@@ -662,7 +682,7 @@ fn every_generated_unit_kind_is_recognized_as_shr_rs_owned() {
     let dir = tempdir().unwrap();
     let state = state_with_bands(vec![band(0, "md0", None)], None);
 
-    for path in write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap() {
+    for path in write_scrub_timer_units(dir.path(), &state, test_exe_path(), None).unwrap() {
         assert!(is_shr_rs_owned_unit(&path), "{path:?} must be recognized as ours");
     }
     for path in write_throttle_timer_unit(dir.path(), test_exe_path()).unwrap() {
@@ -710,7 +730,7 @@ fn find_orphaned_scrub_units_reports_only_the_group_missing_from_state() {
         group("grp-b", "ata-B", vec![band(0, "md1", None)], None),
         group("grp-w1", "ata-C", vec![band(0, "md2", None)], None),
     ]);
-    write_scrub_timer_units(dir.path(), &all_three, test_exe_path()).unwrap();
+    write_scrub_timer_units(dir.path(), &all_three, test_exe_path(), None).unwrap();
 
     // `grp-b` was destroyed -- state.toml now only knows about the other two.
     let after_destroy = StateFile::new(vec![
@@ -764,7 +784,7 @@ fn remove_owned_unit_file_deletes_ours_but_refuses_a_hand_written_lookalike() {
     let dir = tempdir().unwrap();
     let state = state_with_bands(vec![band(0, "md0", None)], None);
     let (ours_service, _) = scrub_unit_paths(dir.path(), "default");
-    write_scrub_timer_units(dir.path(), &state, test_exe_path()).unwrap();
+    write_scrub_timer_units(dir.path(), &state, test_exe_path(), None).unwrap();
     assert!(ours_service.exists());
 
     assert!(

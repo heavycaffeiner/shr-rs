@@ -1928,3 +1928,67 @@ msgid "wizard.commands.toggle.one"
 msgid_plural "wizard.commands.toggle.other"
 msgstr[0] "$0 command to run"
 msgstr[1] "$0 commands to run"
+
+#: src/panels.tsx
+msgid "panels.band.speed.ofCapability"
+msgstr "$0 of ~$1"
+
+#: src/panels.tsx
+msgid "panels.band.speed.capabilityOnly"
+msgstr "measured up to ~$0"
+
+#: src/panels.tsx
+msgid "panels.band.speed.lastDecision"
+msgstr "last throttle: $0"
+
+#: src/panels.tsx
+msgid "panels.band.speed.lastDecisionReason"
+msgstr "last throttle: $0 ($1)"
+
+#: src/panels.tsx
+msgid "panels.band.speed.kb"
+msgstr "$0 KB/s"
+
+#: src/panels.tsx
+msgid "panels.band.speed.mb"
+msgstr "$0 MB/s"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priorityLabel"
+msgstr "Scheduled check speed"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priority.unset"
+msgstr "Leave the configured setting alone"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priority.balanced"
+msgstr "Balanced: a generous share of the array"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priority.background"
+msgstr "Background: as little as still runs smoothly"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.schedule.priority.max"
+msgstr "Maximum: everyday file access will be slower"
+
+#: src/actions.ts
+msgid "actions.error.scrubSpeedNoName"
+msgstr "No group name to change a scrub's speed on."
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedLabel"
+msgstr "Speed of the running check"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedApply"
+msgstr "Apply speed"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedBusy"
+msgstr "Applying…"
+
+#: src/actionsDialogs.tsx
+msgid "dialogs.scrub.speedHint"
+msgstr "Takes effect on the check already in progress. Nothing is restarted and no progress is lost."

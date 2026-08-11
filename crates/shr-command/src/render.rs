@@ -364,6 +364,41 @@ pub fn annotated_members(members: &[String], member_states: &[MemberStatus]) -> 
         .collect()
 }
 
+/// The speed-control half of a band's detail line: what it is syncing at
+/// against what the array has been measured able to do, the limits in
+/// force, and -- only when the last tick did something other than hold --
+/// what it did and why. Empty when nothing is known, so a band that has
+/// never been throttled adds no noise.
+fn render_band_throttle(b: &GroupBandStatus) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(speed) = b.sync_speed_kb {
+        parts.push(match b.sync_capability_kb {
+            Some(c) => format!("{speed} of ~{c} KB/s"),
+            None => format!("{speed} KB/s"),
+        });
+    }
+    if let (Some(min), Some(max)) = (b.sync_speed_min_kb, b.sync_speed_max_kb) {
+        let profile = b
+            .sync_priority
+            .as_deref()
+            .map(|p| format!(" {p}"))
+            .unwrap_or_default();
+        parts.push(format!("limits{profile} {min}-{max} KB/s"));
+    }
+    if let Some(decision) = b.last_throttle_decision.as_deref().filter(|d| *d != "hold") {
+        let reason = b
+            .last_throttle_reason
+            .as_deref()
+            .map(|r| format!(" ({r})"))
+            .unwrap_or_default();
+        parts.push(format!("last {decision}{reason}"));
+    }
+    if parts.is_empty() {
+        return String::new();
+    }
+    format!("  speed: {}", parts.join("; "))
+}
+
 /// One band's line in [`render_status_detail`]: level, mdadm device, usable
 /// capacity, live members, live sync progress, and scrub history/in-progress
 /// flag. `b.members.is_empty()` is read as "no live mdadm array with this
@@ -430,13 +465,14 @@ fn render_band_detail_row(b: &GroupBandStatus) -> String {
         None => String::new(),
     };
     format!(
-        "band{:<3}{:<7}{:<10}{:>12}{}  members: {}  [{live}]  {scrub}{pending_removal}",
+        "band{:<3}{:<7}{:<10}{:>12}{}  members: {}  [{live}]  {scrub}{pending_removal}{}",
         b.index,
         b.level,
         b.md_name,
         human_bytes(b.usable_bytes),
         resize,
         members,
+        render_band_throttle(b),
     )
 }
 
@@ -1078,6 +1114,7 @@ mod tests {
                     last_scrub: None,
                     scrub_in_progress: false,
                     pending_member_removal: None,
+                    ..Default::default()
                 }],
             }],
             // Not under test here -- rendering doesn't read this field.
@@ -1380,6 +1417,7 @@ mod tests {
                         }),
                         scrub_in_progress: false,
                         pending_member_removal: None,
+                        ..Default::default()
                     },
                     // A band with a FAULTY member -- the exact repro
                     // this fixture must render distinguishably (`sdd1(F)`),
@@ -1413,6 +1451,7 @@ mod tests {
                         }),
                         scrub_in_progress: true,
                         pending_member_removal: Some("sdd1".to_string()),
+                        ..Default::default()
                     },
                 ],
             }],

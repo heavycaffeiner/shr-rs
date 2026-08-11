@@ -37,12 +37,7 @@ fn base_state(md_uuid: Option<String>, fs_uuid: Option<String>) -> ArrayState {
             md_uuid,
             member_partitions: vec!["00000000-0000-4000-8000-000000000001".to_string()],
             usable_bytes: 3999865774080,
-            resize_pending: false,
-            last_smart_reallocated: None,
-            last_scrub: None,
-            scrub_in_progress: false,
-            pending_member_removal: None,
-            reshape_priority: None,
+            ..Default::default()
         }],
         filesystem: StateFilesystem {
             fs_uuid,
@@ -89,12 +84,7 @@ fn save_and_load_state_roundtrip() {
             md_uuid: Some("12345678:abcdef01:23456789:0abcdef1".to_string()),
             member_partitions: vec!["00000000-0000-4000-8000-000000000001".to_string()],
             usable_bytes: 3999865774080,
-            resize_pending: false,
-            last_smart_reallocated: None,
-            last_scrub: None,
-            scrub_in_progress: false,
-            pending_member_removal: None,
-            reshape_priority: None,
+            ..Default::default()
         }],
         filesystem: StateFilesystem {
             fs_uuid: Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee".to_string()),
@@ -330,6 +320,63 @@ description = "expansion starting: 2 step(s) planned"
     assert!(
         !group.bands[0].scrub_in_progress,
         "an omitted scrub_in_progress key must default to false, not fail to parse"
+    );
+    assert_eq!(
+        group.bands[0].sync_capability_kb, None,
+        "an omitted capability estimate must default to None, which the bootstrap constants cover"
+    );
+}
+
+/// The field was `reshape_priority` back when only a reshape had a profile
+/// at all. A `state.toml` written by that build must keep governing its
+/// band's in-flight operation, not silently fall back to `Balanced` for the
+/// rest of a multi-hour reshape.
+#[test]
+fn a_bands_pre_rename_reshape_priority_still_loads_as_its_sync_priority() {
+    let dir = tempdir().unwrap();
+    let state_file = dir.path().join("state.toml");
+    std::fs::write(
+        &state_file,
+        r#"
+schema_version = 2
+
+[[groups]]
+name = "default"
+mode = "shr"
+created_at = "2026-07-25T12:00:00Z"
+layout_version = 1
+disks = []
+
+[[groups.bands]]
+index = 0
+level = "raid5"
+md_name = "md0"
+md_uuid = "12345678:abcdef01:23456789:0abcdef1"
+member_partitions = []
+usable_bytes = 3999865774080
+reshape_priority = "background"
+
+[groups.filesystem]
+fs_uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+mount_point = "/mnt/data"
+vg_name = "shr_vg"
+lv_name = "data"
+compression = "zstd:3"
+
+[groups.expansion]
+in_progress = false
+"#,
+    )
+    .unwrap();
+
+    let loaded = StateStore::new(&state_file)
+        .load()
+        .unwrap()
+        .expect("a pre-rename state.toml must still load");
+
+    assert_eq!(
+        loaded.groups[0].bands[0].sync_priority.as_deref(),
+        Some("background")
     );
 }
 

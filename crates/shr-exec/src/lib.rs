@@ -16,7 +16,8 @@ pub use notify::NotifyExecutor;
 pub use parted::{partition_dev_path, PartedExecutor};
 pub use safety::SafetyGuard;
 pub use throttle::{
-    read_speed_limit_max, write_speed_limit_max, MetricsSampler, NullMetricsSampler, ReshapePriority,
-    ReshapeThrottle, SafetyThresholds, ThrottleController, ThrottleDecision, ThrottleMetrics,
-    RESHAPE_SPEED_CEILING_KB, RESHAPE_SPEED_FLOOR_KB, RESHAPE_SPEED_INITIAL_KB, STRIPE_CACHE_DEFAULT,
+    probe_limit_scope, read_speed_limit_max, read_sync_speed_kb, write_speed_limit_max, CapabilityEstimate,
+    LimitScope, MetricsSampler, NullMetricsSampler, ReshapeThrottle, SafetyThresholds, SyncLimits,
+    SyncPriority, ThrottleController, ThrottleDecision, ThrottleMetrics, ThrottleTick, STREAM_FLOOR_ABS_KB,
+    STRIPE_CACHE_DEFAULT, UNBOUNDED_SPEED_KB,
 };

@@ -29,6 +29,7 @@ import {
     replaceArgs,
     scheduleInstallArgs,
     scrubCancelArgs,
+    scrubSpeedArgs,
     scrubStartArgs,
     scrubStatusArgs,
     snapshotCreateArgs,
@@ -158,6 +159,7 @@ describe("every spawn arg builder requires superuser, never try", () => {
         assert.equal(scrubStartArgs("shr1").options.superuser, "require");
         assert.equal(scrubStatusArgs("shr1").options.superuser, "require");
         assert.equal(scrubCancelArgs("shr1").options.superuser, "require");
+        assert.equal(scrubSpeedArgs({ groupName: "shr1", priority: "max" }).options.superuser, "require");
         assert.equal(scheduleInstallArgs().options.superuser, "require");
         assert.equal(reconcileArgs().options.superuser, "require");
         assert.equal(destroyArgs({ groupName: "shr1", zeroSuperblocks: false }).options.superuser, "require");
@@ -275,6 +277,18 @@ describe("scrub speed (--priority pass-through)", () => {
 
     it("still refuses an empty group name, profile or not", () => {
         assert.throws(() => scrubStartArgs("", "max"));
+    });
+
+    it("re-aims a check that is already running, without stopping it", () => {
+        // A separate verb, not `start` with a flag: `start` on a running
+        // check is an error, and cancelling one just to run it faster throws
+        // away the work already done.
+        assert.deepEqual(scrubSpeedArgs({ groupName: "shr1", priority: "max" }).argv, [
+            "shr-rs", "fs", "scrub", "speed", "--name", "shr1", "--priority", "max",
+        ]);
+        for (const p of ["background", "balanced", "max"] as const)
+            assert.deepEqual(scrubSpeedArgs({ groupName: "shr1", priority: p }).argv.slice(-2), ["--priority", p]);
+        assert.throws(() => scrubSpeedArgs({ groupName: "", priority: "max" }));
     });
 });
 

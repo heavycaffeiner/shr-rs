@@ -190,12 +190,18 @@ fn write_managed_block(path: &Path, block_content: &str) -> Result<(), StateErro
 /// "correct" than the other, so this function stays pure and takes
 /// whatever path the caller resolved (`std::env::current_exe()`, which
 /// knows where THIS running binary actually lives) rather than guessing.
+///
+/// `priority` is `PolicyFile`'s `[scrub].priority`, appended to `ExecStart=`
+/// when set. `None` emits no flag, which keeps a scheduled scrub's original
+/// meaning: change no kernel parameter.
 pub fn write_scrub_timer_units(
     dir: &Path,
     state: &StateFile,
     exe_path: &Path,
+    priority: Option<&str>,
 ) -> Result<Vec<std::path::PathBuf>, StateError> {
     let exe = exe_path.display();
+    let priority_flag = priority.map(|p| format!(" --priority {p}")).unwrap_or_default();
     let mut written = Vec::new();
     for group in &state.groups {
         if group.bands.is_empty() {
@@ -210,7 +216,7 @@ pub fn write_scrub_timer_units(
              \n\
              [Service]\n\
              Type=oneshot\n\
-             ExecStart={exe} fs scrub start --name {name}\n",
+             ExecStart={exe} fs scrub start --name {name}{priority_flag}\n",
             name = group.name
         );
         let timer = format!(
@@ -331,10 +337,10 @@ pub fn find_orphaned_scrub_units(dir: &Path, state: &StateFile) -> Result<Orphan
 }
 
 /// ONE global timer (not per-group -- `OrchestrationEngine::
-/// tick_active_reshapes` already iterates every group/band itself) that
+/// tick_active_sync` already iterates every group/band itself) that
 /// periodically ticks the adaptive reshape throttle so a running reshape
 /// keeps reacting to changing conditions for its whole (potentially
-/// many-hour) duration, not just the one-shot tick `start_reshape_throttle`
+/// many-hour) duration, not just the one-shot tick `start_sync_throttle`
 /// makes when the reshape starts. Every 2 minutes -- frequent enough to
 /// react to a worsening SMART/temperature signal promptly, infrequent
 /// enough that a `shr-rs internal reshape-throttle-tick` invocation

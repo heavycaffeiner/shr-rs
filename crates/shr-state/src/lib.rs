@@ -5,7 +5,7 @@ pub mod schema;
 pub mod store;
 
 pub use error::StateError;
-pub use policy::{NotifyPolicy, PolicyFile, PolicyStore};
+pub use policy::{NotifyPolicy, PolicyFile, PolicyStore, ScrubPolicy};
 pub use schema::{
     ArrayState, ScrubOutcome, StateBand, StateCheckpoint, StateDisk, StateExpansion, StateFile,
     StateFilesystem, StatePartition, StatePendingDisk, StateRetiredArray, StateScrubResult,

@@ -334,12 +334,7 @@ fn sample_group(name: &str) -> ArrayState {
                 md_uuid: Some("12345678:9abcdef0:12345678:9abcdef0".to_string()),
                 member_partitions: vec!["ata-WD_A-part1".to_string(), "ata-WD_B-part1".to_string()],
                 usable_bytes: 4 * TB,
-                resize_pending: false,
-                last_smart_reallocated: None,
-                last_scrub: None,
-                scrub_in_progress: false,
-                pending_member_removal: None,
-                reshape_priority: None,
+                ..Default::default()
             },
             StateBand {
                 index: 1,
@@ -349,11 +344,7 @@ fn sample_group(name: &str) -> ArrayState {
                 member_partitions: vec!["ata-WD_B-part2".to_string()],
                 usable_bytes: 2 * TB,
                 resize_pending: true,
-                last_smart_reallocated: None,
-                last_scrub: None,
-                scrub_in_progress: false,
-                pending_member_removal: None,
-                reshape_priority: None,
+                ..Default::default()
             },
         ],
         filesystem: StateFilesystem {

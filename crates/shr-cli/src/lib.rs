@@ -480,6 +480,20 @@ enum ScrubCmd {
         #[arg(long, value_enum)]
         priority: Option<PriorityArg>,
     },
+    // The kernel re-reads these limits as it goes, so there is nothing to
+    // restart -- and cancelling a half-finished check just to run it faster
+    // throws away the work already done.
+    /// Change the speed of a check that is already running.
+    Speed {
+        /// Which group's running check to re-aim. Optional only while there
+        /// is exactly one group.
+        #[arg(long)]
+        name: Option<String>,
+        /// How much of the disks' speed the check may take from everyday
+        /// file access from now on.
+        #[arg(long, value_enum)]
+        priority: PriorityArg,
+    },
     /// Show how far the check has got, and record the result once it ends.
     Status {
         /// Which group to report on. Optional only while there is exactly
@@ -507,16 +521,28 @@ enum ScheduleCmd {
     // never touched.
     /// Create or refresh the background schedule for every group. Safe to
     /// re-run after adding or removing a group.
-    Install,
+    Install {
+        // The generated unit file IS the record: `policy.toml` is
+        // operator-authored and shr-rs never writes it, so re-running this
+        // without the flag goes back to whatever that file says (by default,
+        // no `--priority` at all).
+        /// How much of the disks' speed a SCHEDULED check may take from
+        /// everyday file access. Left out, `policy.toml`'s `[scrub]
+        /// priority` decides, and with that unset too the scheduled check
+        /// changes no kernel parameter.
+        #[arg(long, value_enum)]
+        scrub_priority: Option<PriorityArg>,
+    },
 }
 
 #[derive(Subcommand)]
 enum InternalCmd {
-    /// Apply one adaptive-throttle tick to every currently-reshaping band,
-    /// across every group. Invoked periodically by the
+    /// Apply one adaptive-throttle tick to every band with an md sync
+    /// running, across every group, and hand back the limits of every band
+    /// that has finished one. Invoked periodically by the
     /// `shr-rs-throttle-tick.timer` unit `schedule install` creates -- a
     /// brand-new process each time, by design (see
-    /// `OrchestrationEngine::tick_active_reshapes`'s doc comment).
+    /// `OrchestrationEngine::tick_active_sync`'s doc comment).
     ReshapeThrottleTick,
     /// Poll every group for notification triggers (scrub errors, degraded,
     /// worsening SMART) and fire enabled channels. Invoked periodically by
@@ -582,12 +608,12 @@ enum PriorityArg {
     Max,
 }
 
-impl From<PriorityArg> for shr_exec::ReshapePriority {
+impl From<PriorityArg> for shr_exec::SyncPriority {
     fn from(p: PriorityArg) -> Self {
         match p {
-            PriorityArg::Background => shr_exec::ReshapePriority::Background,
-            PriorityArg::Balanced => shr_exec::ReshapePriority::Balanced,
-            PriorityArg::Max => shr_exec::ReshapePriority::Max,
+            PriorityArg::Background => shr_exec::SyncPriority::Background,
+            PriorityArg::Balanced => shr_exec::SyncPriority::Balanced,
+            PriorityArg::Max => shr_exec::SyncPriority::Max,
         }
     }
 }
@@ -659,10 +685,15 @@ fn dispatch(cli: Cli) -> Result<()> {
                     // `--detail --json` and plain `--json` are byte-identical,
                     // deliberately.
                     println!("{}", serde_json::to_string_pretty(&report)?);
-                } else if detail {
-                    print!("{}", render::render_status_detail(&report));
                 } else {
-                    print!("{}", render::render_status(&report));
+                    if detail {
+                        print!("{}", render::render_status_detail(&report));
+                    } else {
+                        print!("{}", render::render_status(&report));
+                    }
+                    if let Some(warning) = stale_speed_limit_warning(state.as_ref(), &report) {
+                        println!("{warning}");
+                    }
                 }
             }
         }
@@ -1215,22 +1246,43 @@ fn dispatch(cli: Cli) -> Result<()> {
                         anyhow!("another shr-rs create/expand/reconcile is already running (lock: {STATE_LOCK_PATH})")
                     })?;
                     let group = resolve_group_name_for_report(&state_store, name.as_deref());
-                    let speed = priority.map(shr_exec::ReshapePriority::from);
+                    let speed = priority.map(shr_exec::SyncPriority::from);
                     engine.scrub_start(name.as_deref(), speed)?;
-                    // Reported because it is a real, host-wide kernel change
-                    // this command made -- an operator who passed
-                    // `--priority` and saw only "scrub started" would have no
-                    // way to tell it took effect. `speed_limit_kb` is absent
-                    // from the JSON (rather than null) when no profile was
-                    // given, matching "no parameter was touched".
-                    let speed_kb = speed.map(|p| p.initial_speed_kb());
+                    // Reported because it is a real kernel change this
+                    // command made -- an operator who passed `--priority`
+                    // and saw only "scrub started" would have no way to tell
+                    // it took effect. The profile rather than a KB/s number:
+                    // the limits are a fraction of each band's own measured
+                    // capability, so there is no single number to name here.
+                    // Absent from the JSON (rather than null) when no
+                    // profile was given, matching "no parameter was
+                    // touched".
+                    let priority_name = speed.map(|p| p.as_str());
                     if cli.json {
-                        println!("{}", scrub_start_report_json(&group, speed_kb));
+                        println!("{}", scrub_start_report_json(&group, priority_name));
                     } else {
-                        match speed_kb {
-                            Some(kb) => println!("scrub started (speed limit {kb} KB/s)"),
+                        match priority_name {
+                            Some(p) => println!("scrub started (priority {p})"),
                             None => println!("scrub started"),
                         }
+                    }
+                }
+                ScrubCmd::Speed { name, priority } => {
+                    let mut lock = acquire_state_lock()?;
+                    let _guard = lock.try_write().map_err(|_| {
+                        anyhow!("another shr-rs create/expand/reconcile is already running (lock: {STATE_LOCK_PATH})")
+                    })?;
+                    let group = resolve_group_name_for_report(&state_store, name.as_deref());
+                    let speed = shr_exec::SyncPriority::from(priority);
+                    // The band count is the observable part: this writes to
+                    // each syncing band's own attributes, so "3 bands" and
+                    // "1 band" are genuinely different outcomes, and zero is
+                    // an error rather than a quiet success.
+                    let bands = engine.set_sync_priority(name.as_deref(), speed)?;
+                    if cli.json {
+                        println!("{}", scrub_speed_report_json(&group, speed.as_str(), bands));
+                    } else {
+                        println!("check speed set to {} on {bands} band(s)", speed.as_str());
                     }
                 }
                 ScrubCmd::Status { name } => {
@@ -1501,7 +1553,7 @@ fn dispatch(cli: Cli) -> Result<()> {
             }
         }
         Command::Schedule {
-            command: ScheduleCmd::Install,
+            command: ScheduleCmd::Install { scrub_priority },
         } => {
             let state = StateStore::new(STATE_PATH)
                 .load()
@@ -1522,7 +1574,12 @@ fn dispatch(cli: Cli) -> Result<()> {
                 "resolving the running shr-rs binary's own path via current_exe() \
                           to embed in the generated systemd units",
             )?;
-            let policy = load_policy_file();
+            let mut policy = load_policy_file();
+            // The flag wins over the file for this install, and the
+            // generated unit is what carries it afterward.
+            if let Some(p) = scrub_priority {
+                policy.scrub.priority = Some(shr_exec::SyncPriority::from(p).as_str().to_string());
+            }
             let (installed_timers, pruned, warnings) =
                 install_schedule_units(&unit_dir, &state, &exe_path, &policy, &sys_runner)?;
             // Mutation-testing follow-up: warnings are
@@ -1558,11 +1615,11 @@ fn dispatch(cli: Cli) -> Result<()> {
             let sys_runner = SystemRunner::new();
             let engine =
                 OrchestrationEngine::new(&sys_runner, state_store).with_confirm_sink(&AlwaysConfirmSink);
-            let ticked = engine.tick_active_reshapes()?;
+            let ticked = engine.tick_active_sync()?;
             if cli.json {
                 println!("{}", serde_json::json!({ "bands_ticked": ticked }));
             } else {
-                println!("ticked {ticked} reshaping band(s)");
+                println!("ticked {ticked} syncing band(s)");
             }
         }
         Command::Internal {
@@ -1736,8 +1793,9 @@ fn install_schedule_units(
         ));
     }
 
-    let mut units = shr_state::conf::write_scrub_timer_units(unit_dir, state, exe_path)
-        .context("writing scrub timer units")?;
+    let mut units =
+        shr_state::conf::write_scrub_timer_units(unit_dir, state, exe_path, policy.scrub.priority.as_deref())
+            .context("writing scrub timer units")?;
     units.extend(
         shr_state::conf::write_throttle_timer_unit(unit_dir, exe_path)
             .context("writing throttle timer unit")?,
@@ -1926,17 +1984,56 @@ fn scrub_action_report_json(group: &str, status: &str) -> serde_json::Value {
     serde_json::json!({ "group": group, "status": status })
 }
 
+/// "This project borrowed the host-wide speed limit and nothing has handed
+/// it back, even though nothing is syncing anymore." Only the periodic timer
+/// and `reconcile` restore it, and on a host where `schedule install` was
+/// never run there is no timer -- so the borrowed value silently governs
+/// every later md sync until someone notices. Naming the command that fixes
+/// it is the point; reporting only the fact would leave an operator to
+/// guess.
+///
+/// `None` (nothing to say) whenever no value is saved, or any band is still
+/// syncing, where the limit is doing exactly what it should be.
+fn stale_speed_limit_warning(
+    state: Option<&shr_state::StateFile>,
+    report: &shr_command::StatusReport,
+) -> Option<String> {
+    let saved_kb = state?.saved_speed_limit_max_kb?;
+    let any_syncing = report
+        .groups
+        .iter()
+        .flat_map(|g| g.bands.iter())
+        .any(|b| b.sync.is_some());
+    if any_syncing {
+        return None;
+    }
+    Some(format!(
+        "warning: shr-rs still holds the host-wide sync speed limit ({saved_kb} KB/s was here \
+         before), but nothing is syncing -- run `shr-rs reconcile` to put it back"
+    ))
+}
+
 /// `scrub start`'s `--json` shape: `scrub_action_report_json`'s object plus
-/// the speed ceiling, when `--priority` asked for one.
+/// the speed profile, when `--priority` asked for one.
 ///
 /// The key is OMITTED rather than set to null when no profile was given, so
 /// a caller can tell "the scrub runs under whatever limit was already in
-/// place" apart from any particular number -- the same distinction
-/// `OrchestrationEngine::scrub_start`'s `Option<ReshapePriority>` draws.
-fn scrub_start_report_json(group: &str, speed_kb: Option<u64>) -> serde_json::Value {
+/// place" apart from any particular profile -- the same distinction
+/// `OrchestrationEngine::scrub_start`'s `Option<SyncPriority>` draws.
+/// `scrub speed`'s `--json` shape. Carries the band count because the
+/// limits are per array: how many bands actually took the new profile is
+/// the part a caller cannot infer from the group name alone.
+fn scrub_speed_report_json(group: &str, priority: &str, bands: usize) -> serde_json::Value {
+    let mut value = scrub_action_report_json(group, "speed-changed");
+    value["priority"] = serde_json::json!(priority);
+    value["bands"] = serde_json::json!(bands);
+    value
+}
+
+fn scrub_start_report_json(group: &str, priority: Option<&str>) -> serde_json::Value {
     let mut value = scrub_action_report_json(group, "started");
-    if let Some(kb) = speed_kb {
-        value["speed_limit_kb"] = serde_json::json!(kb);
+    if let Some(p) = priority {
+        value["priority"] = serde_json::json!(p);
     }
     value
 }
@@ -3085,7 +3182,7 @@ mod tests {
             "ScrubCmd::Start never branches on cli.json"
         );
         assert!(
-            start_arm.contains("scrub_start_report_json(&group, speed_kb)"),
+            start_arm.contains("scrub_start_report_json(&group, priority_name)"),
             "ScrubCmd::Start doesn't emit the JSON report"
         );
         // The no-`--priority` wording, unchanged: the flag is opt-in, so the
@@ -3101,8 +3198,8 @@ mod tests {
             "ScrubCmd::Start doesn't forward --priority to the engine"
         );
         assert!(
-            start_arm.contains("println!(\"scrub started (speed limit {kb} KB/s)\")"),
-            "ScrubCmd::Start's human text never reports the speed it just set"
+            start_arm.contains("println!(\"scrub started (priority {p})\")"),
+            "ScrubCmd::Start's human text never reports the profile it just set"
         );
 
         let cancel_arm = block.arm("ScrubCmd::Cancel { name } =>", None);
@@ -3171,7 +3268,10 @@ mod tests {
             .split("mod tests")
             .next()
             .expect("source before the test module");
-        let handler = find_handler(dispatch, "Command::Schedule { command: ScheduleCmd::Install }");
+        let handler = find_handler(
+            dispatch,
+            "Command::Schedule { command: ScheduleCmd::Install { scrub_priority } }",
+        );
         assert!(
             handler.contains("if cli.json"),
             "ScheduleCmd::Install never branches on cli.json"
@@ -3279,12 +3379,7 @@ mod tests {
             md_uuid: None,
             member_partitions: vec![],
             usable_bytes: 1,
-            resize_pending: false,
-            last_smart_reallocated: None,
-            last_scrub: None,
-            scrub_in_progress: false,
-            pending_member_removal: None,
-            reshape_priority: None,
+            ..Default::default()
         }];
         state
     }
@@ -3308,7 +3403,7 @@ mod tests {
         // below no longer has -- exactly what a destroyed/renamed group
         // leaves behind.
         let orphan_state = shr_state::StateFile::new(vec![scrub_state_fixture("gone")]);
-        shr_state::conf::write_scrub_timer_units(&unit_dir, &orphan_state, &exe_path).unwrap();
+        shr_state::conf::write_scrub_timer_units(&unit_dir, &orphan_state, &exe_path, None).unwrap();
         let (orphan_service, orphan_timer) = shr_state::conf::scrub_unit_paths(&unit_dir, "gone");
         assert!(orphan_service.exists() && orphan_timer.exists());
 
@@ -3389,7 +3484,7 @@ mod tests {
         let exe_path = dir.path().join("shr-rs");
 
         let orphan_state = shr_state::StateFile::new(vec![scrub_state_fixture("gone")]);
-        shr_state::conf::write_scrub_timer_units(&unit_dir, &orphan_state, &exe_path).unwrap();
+        shr_state::conf::write_scrub_timer_units(&unit_dir, &orphan_state, &exe_path, None).unwrap();
         let (orphan_service, orphan_timer) = shr_state::conf::scrub_unit_paths(&unit_dir, "gone");
 
         let current_state = shr_state::StateFile::new(vec![scrub_state_fixture("shr1")]);

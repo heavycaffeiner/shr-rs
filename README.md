@@ -202,6 +202,7 @@ Routine upkeep:
 sudo shr-rs schedule install --name tank   # error-check + health timers
 sudo shr-rs fs scrub start --name tank     # mdadm check + Btrfs scrub
 sudo shr-rs fs scrub start --priority max  # ... as fast as the disks allow
+sudo shr-rs fs scrub speed --priority max  # ... or change one already running
 sudo shr-rs disk list                      # inventory with SMART health
 sudo shr-rs fs df                          # real Btrfs used/free
 sudo shr-rs snapshot create --name tank

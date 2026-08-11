@@ -773,6 +773,7 @@ mod tests {
             last_scrub: None,
             scrub_in_progress,
             pending_member_removal: None,
+            ..Default::default()
         }
     }
 
@@ -1561,11 +1562,7 @@ mod tests {
                     member_partitions: vec![],
                     usable_bytes: 4_000_000_000_000,
                     resize_pending,
-                    last_smart_reallocated: None,
-                    last_scrub: None,
-                    scrub_in_progress: false,
-                    pending_member_removal: None,
-                    reshape_priority: None,
+                    ..Default::default()
                 }],
                 filesystem: StateFilesystem {
                     fs_uuid: None,

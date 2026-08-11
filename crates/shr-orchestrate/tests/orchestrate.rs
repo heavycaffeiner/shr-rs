@@ -1,9 +1,8 @@
 use shr_command::{AlwaysConfirmSink, AlwaysRejectConfirmSink, RecordingConfirmSink, RecordingProgressSink};
 use shr_core::{DiskId, ExpansionStep, RaidLevel, RedundancyMode, RedundantBand};
 use shr_exec::{
-    CommandOutput, CommandRunner, DryRunRunner, ExecError, MetricsSampler, ReshapePriority, ReshapeThrottle,
-    ThrottleDecision, ThrottleMetrics, RESHAPE_SPEED_CEILING_KB, RESHAPE_SPEED_FLOOR_KB,
-    RESHAPE_SPEED_INITIAL_KB,
+    CommandOutput, CommandRunner, DryRunRunner, ExecError, MetricsSampler, ReshapeThrottle, SyncPriority,
+    ThrottleDecision, ThrottleMetrics, UNBOUNDED_SPEED_KB,
 };
 use shr_inspect::{resolve_disk_ref, ByIdIndex, DiskRef, ResolvedDisk};
 use shr_orchestrate::{
@@ -116,6 +115,21 @@ struct FailingRunner {
     /// a test opts into simulating a fully healthy, readable system via
     /// `healthy_with_live_metrics`.
     loadavg_response: String,
+    /// What `cat /sys/block/<md>/md/sync_speed_{min,max}` reports, as
+    /// `(min, max)`. `None` (the default) is a kernel with no such
+    /// attributes: the read fails to parse, so the engine records this band
+    /// as host-wide and writes `/proc/sys/dev/raid/speed_limit_*` instead.
+    per_array_limits: Option<(u64, u64)>,
+    /// What `cat /sys/block/<md>/md/sync_speed` reports -- the observation
+    /// the capability estimate is learned from. Empty (unparseable, so "no
+    /// observation this tick", exactly like md's own `none`) by default.
+    sync_speed_response: String,
+    /// What `cat /proc/cpuinfo` reports -- the divisor `LiveMetricsSampler`
+    /// normalises the load average by. Empty by default (no `processor`
+    /// line, so `cpu_count` and therefore `cpu_load` come back `None`, and
+    /// `/proc/loadavg` is never even read), unless a test opts into
+    /// simulating a fully readable system.
+    cpuinfo_response: String,
     /// Successive `cat /proc/stat` responses, one per call --
     /// `LiveMetricsSampler::sample` reads it TWICE (to diff), so a test that
     /// wants a specific `io_wait_pct` must supply two distinct lines here.
@@ -252,6 +266,9 @@ impl FailingRunner {
             grow_seen: Mutex::new(false),
             mdstat_content: Mutex::new(String::new()),
             loadavg_response: String::new(),
+            per_array_limits: None,
+            sync_speed_response: String::new(),
+            cpuinfo_response: String::new(),
             stat_responses: Mutex::new(Vec::new()),
             smartctl_response: String::new(),
             scrubbing_mds: Mutex::new(std::collections::HashSet::new()),
@@ -432,9 +449,29 @@ impl FailingRunner {
     }
 
     fn reshaping() -> Self {
+        Self::syncing("reshape")
+    }
+
+    /// An array whose grown/replacing md reports `action` -- md has five
+    /// words for work in progress and this project governs the speed of all
+    /// of them, not just `reshape`.
+    fn syncing(action: &str) -> Self {
         Self {
-            sync_action_response: "reshape".to_string(),
+            sync_action_response: action.to_string(),
             ..Self::healthy()
+        }
+    }
+
+    /// A kernel that DOES expose the per-array limit attributes, reporting
+    /// `(min, max)` for every array, plus a live `sync_speed` of
+    /// `speed_kb` -- the shape every real Linux since long before this
+    /// project has, and the one the host-wide fallback exists to survive
+    /// the absence of.
+    fn syncing_per_array(action: &str, limits: (u64, u64), speed_kb: u64) -> Self {
+        Self {
+            per_array_limits: Some(limits),
+            sync_speed_response: format!("{speed_kb}\n"),
+            ..Self::syncing(action)
         }
     }
 
@@ -466,14 +503,14 @@ impl FailingRunner {
     fn reshaping_with_healthy_live_metrics() -> Self {
         Self {
             sync_action_response: "reshape".to_string(),
-            // cpu_load = 0.60 -- squarely in ReshapeThrottle::tick's "Hold"
-            // band (not `< 0.5`, so the idle/Increase branch never fires;
-            // not `> 0.85`, so Decrease never fires from load alone).
+            // 0.60 across the 4 cores below is 15% of the machine, well
+            // under Balanced's 0.85 decelerate threshold -- readable and
+            // healthy, which is the whole point of this fixture.
             loadavg_response: "0.60 0.58 0.55 1/1 1\n".to_string(),
+            cpuinfo_response: "processor\t: 0\nprocessor\t: 1\nprocessor\t: 2\nprocessor\t: 3\n".to_string(),
             // total delta = (1010+1010+8080+220) - (1000+1000+8000+200) = 120
-            // iowait delta = 220-200 = 20 -> 20/120*100 ~= 16.67%, inside
-            // [15, 30]: not `< 15` (so not idle) and not `> 30` (so not
-            // over-threshold) -- also squarely in the Hold band.
+            // iowait delta = 220-200 = 20 -> 20/120*100 ~= 16.67%, under
+            // Balanced's 30% decelerate threshold.
             stat_responses: Mutex::new(vec![
                 "cpu  1000 0 1000 8000 200 0 0 0\n".to_string(),
                 "cpu  1010 0 1010 8080 220 0 0 0\n".to_string(),
@@ -874,6 +911,20 @@ impl CommandRunner for FailingRunner {
             self.rendered_mdstat()
         } else if program == "cat" && args.contains(&"/proc/loadavg") {
             self.loadavg_response.clone()
+        } else if program == "cat" && args.contains(&"/proc/cpuinfo") {
+            self.cpuinfo_response.clone()
+        } else if program == "cat" && args.iter().any(|a| a.ends_with("/md/sync_speed")) {
+            self.sync_speed_response.clone()
+        } else if program == "cat" && args.iter().any(|a| a.ends_with("/md/sync_speed_min")) {
+            // `(local)`/`(system)` is what md actually appends, measured on
+            // the Rocky 10.2 guest -- only the first field is a number.
+            self.per_array_limits
+                .map(|(min, _)| format!("{min} (local)\n"))
+                .unwrap_or_default()
+        } else if program == "cat" && args.iter().any(|a| a.ends_with("/md/sync_speed_max")) {
+            self.per_array_limits
+                .map(|(_, max)| format!("{max} (local)\n"))
+                .unwrap_or_default()
         } else if program == "cat" && args.contains(&"/proc/stat") {
             let mut queue = self.stat_responses.lock().unwrap();
             if queue.is_empty() {
@@ -1737,14 +1788,31 @@ impl MetricsSampler for FixedMetricsSampler {
     }
 }
 
+/// Deliberately inside `Balanced`'s hysteresis band -- below every decrease
+/// threshold, above every increase one -- so a test that changes one signal
+/// is testing that signal.
 fn benign_metrics() -> ThrottleMetrics {
     ThrottleMetrics {
-        cpu_load: Some(0.6),
-        io_wait_pct: Some(20.0),
-        user_io_latency_p99_ms: Some(50),
+        cpu_load: Some(0.75),
+        cpu_count: Some(4),
+        io_wait_pct: Some(27.0),
+        user_io_latency_p99_ms: Some(90),
         disk_temp_max: Some(40),
         smart_delta_reallocated: Some(0),
+        first_sample: false,
     }
+}
+
+/// What a band with no capability estimate yet runs under, read from the
+/// profile table itself rather than repeated here as a literal.
+fn bootstrap_max_kb(priority: SyncPriority) -> u64 {
+    priority.limits(None).max_kb
+}
+
+/// Where `EmergencyBrake` aims with no estimate: `Background`'s own floor,
+/// under every profile.
+fn emergency_target_kb() -> u64 {
+    SyncPriority::emergency_target_kb(None)
 }
 
 #[test]
@@ -1789,22 +1857,22 @@ fn expand_reshape_throttle_emergency_brakes_the_moment_smart_reallocated_rises()
         .filter(|c| c.starts_with("sh -c") && c.contains("speed_limit_max"))
         .collect();
     // Two writes are expected: `apply_initial`'s own profile-based write
-    // (Balanced's 100_000 KB/s), immediately followed by the one-shot
-    // danger tick overriding it down to the floor -- proving the decision
-    // actually changed the kernel parameter a second time, not merely that
-    // a `ThrottleDecision::EmergencyBrake` was computed and discarded.
+    // (Balanced's bootstrap ceiling, no capability estimate yet),
+    // immediately followed by the one-shot danger tick overriding it down --
+    // proving the decision actually changed the kernel parameter a second
+    // time, not merely that an `EmergencyBrake` was computed and discarded.
     assert_eq!(
         speed_writes.len(),
         2,
         "expected an initial write plus one overriding brake: {cmds:?}"
     );
     assert!(
-        speed_writes[0].contains(&RESHAPE_SPEED_INITIAL_KB.to_string()),
+        speed_writes[0].contains(&bootstrap_max_kb(SyncPriority::Balanced).to_string()),
         "{speed_writes:?}"
     );
     assert!(
-        speed_writes[1].contains(&RESHAPE_SPEED_FLOOR_KB.to_string()),
-        "an emergency brake must actually write the floor speed to speed_limit_max, not just log \
+        speed_writes[1].contains(&emergency_target_kb().to_string()),
+        "an emergency brake must actually write the background floor to the kernel, not just log \
          a decision: {speed_writes:?}"
     );
 }
@@ -1819,7 +1887,7 @@ fn expand_reshape_throttle_with_no_sampler_override_uses_a_real_live_sampler_by_
     // `.with_metrics_sampler(...)` override -- must issue REAL `smartctl`/
     // `/proc` reads (see `crates/shr-orchestrate/src/engine.rs`'s
     // `tick_throttle_decision`, which builds a `LiveMetricsSampler` exactly
-    // when `self.metrics_sampler` is `None`, and `start_reshape_throttle`,
+    // when `self.metrics_sampler` is `None`, and `start_sync_throttle`,
     // which calls it right after `mdadm --grow` succeeds).
     //
     // This mock host's `/proc/loadavg`/`/proc/stat`/`smartctl` are
@@ -1837,7 +1905,12 @@ fn expand_reshape_throttle_with_no_sampler_override_uses_a_real_live_sampler_by_
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter().any(|c| c == "cat /proc/loadavg"),
+        cmds.iter().any(|c| c == "cat /proc/cpuinfo"),
+        // The load path starts here: the average is normalised by the core
+        // count, and an unreadable count means an unknown load rather than
+        // a raw average compared against a per-core threshold. This mock's
+        // cpuinfo is unscripted, so `/proc/loadavg` is never reached --
+        // which is itself the honest "couldn't measure it" path.
         "no live CPU-load read: {cmds:?}"
     );
     assert!(
@@ -1870,10 +1943,10 @@ fn expand_reshape_throttle_with_no_sampler_override_uses_a_real_live_sampler_by_
          (or silently exceed) the initial speed as if everything were confirmed healthy: {cmds:?}"
     );
     assert!(
-        speed_max_writes[0].contains(&RESHAPE_SPEED_INITIAL_KB.to_string()),
+        speed_max_writes[0].contains(&bootstrap_max_kb(SyncPriority::Balanced).to_string()),
         "{speed_max_writes:?}"
     );
-    let decelerated: u64 = (RESHAPE_SPEED_INITIAL_KB as f64 * 0.7).round() as u64;
+    let decelerated: u64 = (bootstrap_max_kb(SyncPriority::Balanced) as f64 * 0.7).round() as u64;
     assert!(
         speed_max_writes[1].contains(&decelerated.to_string()),
         "must actually write the decelerated speed to the kernel parameter, not just decide it: \
@@ -1918,7 +1991,7 @@ fn expand_reshape_throttle_holds_when_the_live_sampler_reads_a_healthy_system_wi
         "a healthy, fully-readable system with a known SMART baseline must hold, not decelerate: {cmds:?}"
     );
     assert!(
-        speed_max_writes[0].contains(&RESHAPE_SPEED_INITIAL_KB.to_string()),
+        speed_max_writes[0].contains(&bootstrap_max_kb(SyncPriority::Balanced).to_string()),
         "{speed_max_writes:?}"
     );
 
@@ -1937,7 +2010,7 @@ fn expand_reshape_throttle_holds_when_the_live_sampler_reads_a_healthy_system_wi
 /// `ThrottleController` surviving between fires the way there is within one
 /// `expand()` call.
 #[test]
-fn tick_active_reshapes_seeds_from_the_kernels_real_current_speed_and_applies_a_fresh_decision() {
+fn tick_active_sync_seeds_from_the_kernels_real_current_speed_and_applies_a_fresh_decision() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::reshaping();
@@ -1946,7 +2019,7 @@ fn tick_active_reshapes_seeds_from_the_kernels_real_current_speed_and_applies_a_
     engine.expand(expand_req(vec![new_disk])).unwrap();
     let mark = runner.get_recorded().len();
 
-    let ticked = engine.tick_active_reshapes().unwrap();
+    let ticked = engine.tick_active_sync().unwrap();
     assert_eq!(ticked, 1, "exactly the one reshaping band must be ticked");
 
     let cmds = &runner.get_recorded()[mark..];
@@ -1961,6 +2034,222 @@ fn tick_active_reshapes_seeds_from_the_kernels_real_current_speed_and_applies_a_
     );
 }
 
+/// The capability estimate is a closed loop -- it is learned by the same
+/// tick that uses it -- so a scrub cannot keep the old set-once model and
+/// still be capability-relative. Widening the predicate is also what closes
+/// the two silent gaps: the resync after `create` and the recovery after
+/// `replace_disk` were governed by no profile at all.
+#[test]
+fn tick_acts_on_check_repair_resync_and_recover_as_well_as_reshape() {
+    for action in ["reshape", "check", "repair", "resync", "recover"] {
+        let dir = tempdir().unwrap();
+        let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+        let runner = FailingRunner::syncing(action);
+        let engine = seeded_engine(&runner, state_store, three_disks());
+        let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+        engine.expand(expand_req(vec![new_disk])).unwrap();
+        let mark = runner.get_recorded().len();
+
+        let ticked = engine.tick_active_sync().unwrap();
+
+        assert_eq!(ticked, 1, "sync_action={action} was not ticked");
+        let cmds = &runner.get_recorded()[mark..];
+        assert!(
+            cmds.iter()
+                .any(|c| c.starts_with("sh -c") && c.contains("speed_limit_max")),
+            "sync_action={action} decided but never applied anything: {cmds:?}"
+        );
+    }
+}
+
+/// The limits are ordinary kernel parameters md re-reads as it goes, so a
+/// running operation can be re-aimed without being stopped -- and cancelling
+/// a half-finished check just to run it faster throws away the work already
+/// done.
+#[test]
+fn set_sync_priority_re_aims_a_running_sync_without_restarting_it() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::syncing_per_array("check", (60_000, 150_000), 180_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    // A scrub started at `background`, the way an operator who wanted to
+    // stay out of the way would.
+    engine.scrub_start(None, Some(SyncPriority::Background)).unwrap();
+    let mark = runner.get_recorded().len();
+
+    let bands = engine.set_sync_priority(None, SyncPriority::Max).unwrap();
+
+    assert_eq!(bands, 1, "the one syncing band must be re-aimed");
+    let cmds = &runner.get_recorded()[mark..];
+    for leaf in ["sync_speed_min", "sync_speed_max"] {
+        assert!(
+            cmds.iter()
+                .any(|c| c.contains(&format!("/md/{leaf}")) && c.contains(&UNBOUNDED_SPEED_KB.to_string())),
+            "{leaf} did not take the new profile: {cmds:?}"
+        );
+    }
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| c.contains("sync_action") && c.starts_with("sh -c")),
+        "nothing may be written to sync_action -- the check must not be stopped or restarted: {cmds:?}"
+    );
+    assert_eq!(
+        state_store.load().unwrap().unwrap().groups[0].bands[0]
+            .sync_priority
+            .as_deref(),
+        Some("max"),
+        "the periodic tick reads this back, so it has to carry the NEW profile"
+    );
+}
+
+/// Writing limits to an idle array is the leftover this design exists to
+/// prevent, and "your scrub finished a minute ago" is something the operator
+/// needs told rather than silently absorbed.
+#[test]
+fn set_sync_priority_refuses_when_nothing_is_syncing() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::healthy();
+    let engine = seeded_engine(&runner, state_store, three_disks());
+    let mark = runner.get_recorded().len();
+
+    let err = engine
+        .set_sync_priority(None, SyncPriority::Max)
+        .expect_err("an idle group has no speed to change");
+
+    assert!(err.to_string().contains("is syncing"), "{err}");
+    let cmds = &runner.get_recorded()[mark..];
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| c.starts_with("sh -c") && c.contains("sync_speed")),
+        "a refusal must write nothing at all: {cmds:?}"
+    );
+}
+
+/// Adding a member changes what the array can do, so an estimate learned on
+/// the old membership would derive every limit from a number that no longer
+/// describes it.
+#[test]
+fn capability_estimate_is_discarded_when_band_membership_changes() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::reshaping();
+    let create_engine =
+        OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
+    let mut created = create_engine.create(create_req(three_disks())).unwrap();
+    created.bands[0].sync_capability_kb = Some(400_000);
+    created.bands[0].sync_capability_uncapped_ticks = 2;
+    state_store.save(&StateFile::new(vec![created])).unwrap();
+
+    let engine = OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    engine.expand(expand_req(vec![new_disk])).unwrap();
+
+    let band = &state_store.load().unwrap().unwrap().groups[0].bands[0];
+    assert_eq!(band.sync_capability_kb, None);
+    assert_eq!(band.sync_capability_uncapped_ticks, 0);
+}
+
+/// On a kernel with the per-array attributes, nothing host-wide is touched
+/// at all -- which is what makes a per-band profile mean something, and what
+/// lets two groups sync at different profiles at once.
+#[test]
+fn a_per_array_kernel_gets_its_limits_written_to_the_bands_own_attributes() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::syncing_per_array("reshape", (1_000, 200_000), 180_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    engine.expand(expand_req(vec![new_disk])).unwrap();
+
+    let cmds = runner.get_recorded();
+    assert!(
+        cmds.iter()
+            .any(|c| c.starts_with("sh -c") && c.contains("/sys/block/md0/md/sync_speed_max")),
+        "the band's own ceiling must be written: {cmds:?}"
+    );
+    assert!(
+        cmds.iter()
+            .any(|c| c.starts_with("sh -c") && c.contains("/sys/block/md0/md/sync_speed_min")),
+        "and its own floor, which is the half that was missing: {cmds:?}"
+    );
+    assert!(
+        !cmds.iter().any(|c| c.contains("/proc/sys/dev/raid")),
+        "nothing host-wide may be read or written on a per-array kernel: {cmds:?}"
+    );
+    assert_eq!(
+        state_store.load().unwrap().unwrap().saved_speed_limit_max_kb,
+        None,
+        "there is nothing host-wide to save, so nothing to put back later"
+    );
+}
+
+/// The estimate is learned by the control loop itself: one tick reads
+/// `sync_speed`, and every derived limit moves with it. Without this the
+/// profiles would stay three absolute constants that mean nothing on any
+/// particular machine.
+#[test]
+fn a_tick_learns_the_arrays_capability_from_its_live_sync_speed() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::syncing_per_array("reshape", (60_000, 150_000), 180_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    engine.expand(expand_req(vec![new_disk])).unwrap();
+
+    engine.tick_active_sync().unwrap();
+
+    let band = &state_store.load().unwrap().unwrap().groups[0].bands[0];
+    assert_eq!(
+        band.sync_capability_kb,
+        Some(180_000),
+        "an observation above the estimate replaces it -- the array demonstrably sustained it"
+    );
+    assert!(
+        band.sync_capability_observed_at.is_some(),
+        "an estimate with no observation time cannot be told apart from a month-old one"
+    );
+    assert_eq!(band.sync_priority.as_deref(), Some("balanced"));
+    assert!(
+        band.last_throttle_decision.is_some() && band.last_throttle_reason.is_some(),
+        "the decision and its trigger must be reportable, or a band at its floor has no explanation"
+    );
+}
+
+/// The teardown half of per-array limits: `system` clears the local value
+/// exactly, with no remembered number to restore. A floor left behind
+/// silently governs every later operation on that array.
+#[test]
+fn a_band_whose_sync_has_finished_has_its_limits_handed_back() {
+    let dir = tempdir().unwrap();
+    let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
+    let runner = FailingRunner::syncing_per_array("reshape", (60_000, 150_000), 180_000);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks());
+    let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
+    engine.expand(expand_req(vec![new_disk])).unwrap();
+    runner.finish_reshape();
+    let mark = runner.get_recorded().len();
+
+    let ticked = engine.tick_active_sync().unwrap();
+
+    assert_eq!(ticked, 0, "nothing is syncing anymore");
+    let cmds = &runner.get_recorded()[mark..];
+    for leaf in ["sync_speed_min", "sync_speed_max"] {
+        assert!(
+            cmds.iter()
+                .any(|c| c == &format!("sh -c echo system > /sys/block/md0/md/{leaf}")),
+            "{leaf} was not handed back: {cmds:?}"
+        );
+    }
+    assert_eq!(
+        state_store.load().unwrap().unwrap().groups[0].bands[0].sync_priority,
+        None,
+        "a stale profile would silently govern this band's NEXT operation"
+    );
+}
+
 /// The leak this whole mechanism exists to close: `expand` lowers the
 /// host-wide `speed_limit_max` and, before this, nothing ever put it back --
 /// so the cap outlived its reshape and silently throttled whatever read it
@@ -1971,7 +2260,7 @@ fn expand_saves_the_operators_speed_limit_before_the_throttle_overwrites_it() {
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::reshaping_with_speed_limit(250_000);
     let engine =
-        seeded_engine(&runner, state_store.clone(), three_disks()).with_priority(ReshapePriority::Background);
+        seeded_engine(&runner, state_store.clone(), three_disks()).with_priority(SyncPriority::Background);
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     engine.expand(expand_req(vec![new_disk])).unwrap();
 
@@ -2000,7 +2289,7 @@ fn expand_saves_the_operators_speed_limit_before_the_throttle_overwrites_it() {
 /// that runs unprompted, so it is what makes the restore automatic rather
 /// than something an operator has to know to ask for.
 #[test]
-fn tick_active_reshapes_restores_the_saved_speed_limit_once_every_band_is_idle() {
+fn tick_active_sync_restores_the_saved_speed_limit_once_every_band_is_idle() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::reshaping_with_speed_limit(250_000);
@@ -2013,7 +2302,7 @@ fn tick_active_reshapes_restores_the_saved_speed_limit_once_every_band_is_idle()
     runner.finish_reshape();
     let mark = runner.get_recorded().len();
 
-    let ticked = engine.tick_active_reshapes().unwrap();
+    let ticked = engine.tick_active_sync().unwrap();
     assert_eq!(ticked, 0, "nothing is reshaping anymore, so no band is throttled");
 
     let cmds = &runner.get_recorded()[mark..];
@@ -2033,7 +2322,7 @@ fn tick_active_reshapes_restores_the_saved_speed_limit_once_every_band_is_idle()
 /// back mid-reshape would undo the throttle that a safety signal may have
 /// just applied.
 #[test]
-fn tick_active_reshapes_leaves_the_saved_speed_limit_alone_while_a_band_is_still_busy() {
+fn tick_active_sync_leaves_the_saved_speed_limit_alone_while_a_band_is_still_busy() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::reshaping_with_speed_limit(250_000);
@@ -2042,7 +2331,7 @@ fn tick_active_reshapes_leaves_the_saved_speed_limit_alone_while_a_band_is_still
     engine.expand(expand_req(vec![new_disk])).unwrap();
     let mark = runner.get_recorded().len();
 
-    engine.tick_active_reshapes().unwrap();
+    engine.tick_active_sync().unwrap();
 
     let cmds = &runner.get_recorded()[mark..];
     assert!(
@@ -2115,7 +2404,7 @@ fn reconcile_never_touches_the_speed_limit_when_nothing_was_ever_borrowed() {
 }
 
 #[test]
-fn tick_active_reshapes_ignores_bands_that_are_not_reshaping() {
+fn tick_active_sync_ignores_bands_that_are_not_reshaping() {
     // A band merely doing a post-create resync, or idle, or scrubbing
     // (`sync_action == "check"`) must never have its speed_limit_max
     // touched by the reshape throttle -- ticking is scoped to
@@ -2125,7 +2414,7 @@ fn tick_active_reshapes_ignores_bands_that_are_not_reshaping() {
     let runner = FailingRunner::healthy();
     let engine = seeded_engine(&runner, state_store, three_disks());
 
-    let ticked = engine.tick_active_reshapes().unwrap();
+    let ticked = engine.tick_active_sync().unwrap();
     assert_eq!(ticked, 0, "an idle band must not be throttled");
     assert!(
         !runner
@@ -2148,22 +2437,22 @@ fn expand_reshape_throttle_honors_a_non_default_priority_profile() {
 
     let engine = OrchestrationEngine::new(&runner, state_store)
         .with_confirm_sink(&ALWAYS_CONFIRM)
-        .with_priority(ReshapePriority::Background);
+        .with_priority(SyncPriority::Background);
 
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     engine.expand(expand_req(vec![new_disk])).unwrap();
 
     let cmds = runner.get_recorded();
     assert!(
-        cmds.iter()
-            .any(|c| c.contains("speed_limit_max") && c.contains("20000")),
-        "background priority's 20 MB/s initial speed must actually be written: {cmds:?}"
+        cmds.iter().any(|c| c.contains("speed_limit_max")
+            && c.contains(&bootstrap_max_kb(SyncPriority::Background).to_string())),
+        "background priority's own ceiling must actually be written: {cmds:?}"
     );
 }
 
 /// `expand --priority background` is honored once (by
-/// `start_reshape_throttle`, in-process, right after `mdadm --grow`) but the
-/// PERIODIC tick (`tick_active_reshapes`, driven by a systemd timer) runs in
+/// `start_sync_throttle`, in-process, right after `mdadm --grow`) but the
+/// PERIODIC tick (`tick_active_sync`, driven by a systemd timer) runs in
 /// a brand-new process every fire with no memory of the original CLI flag --
 /// it must read the priority back from `state.toml`, not silently fall back
 /// to `OrchestrationEngine::new`'s `Balanced` default.
@@ -2172,18 +2461,18 @@ fn expand_reshape_throttle_honors_a_non_default_priority_profile() {
 /// persisted field: `FailingRunner::reshaping()`'s unparseable proc/smartctl
 /// signals make `tick()` always decide `Decrease(0.7)` (the
 /// unknown-must-decelerate rule), and `ThrottleController::resume` falls back
-/// to the PRIORITY PROFILE's own initial speed (its `cat speed_limit_max` is
+/// to the PRIORITY PROFILE's own ceiling (its `cat speed_limit_max` is
 /// also unparseable) before scaling by 0.7. So Background's math
-/// (20_000 * 0.7 = 14_000) is measurably different from Balanced's
-/// (100_000 * 0.7 = 70_000) -- what today's bug (tick always defaults to
+/// (60_000 * 0.7 = 42_000) is measurably different from Balanced's
+/// (150_000 * 0.7 = 105_000) -- what today's bug (tick always defaults to
 /// Balanced, ignoring what was persisted) would actually write.
 #[test]
-fn tick_active_reshapes_uses_the_bands_own_persisted_priority_not_the_engines_default() {
+fn tick_active_sync_uses_the_bands_own_persisted_priority_not_the_engines_default() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::reshaping();
     let engine =
-        seeded_engine(&runner, state_store.clone(), three_disks()).with_priority(ReshapePriority::Background);
+        seeded_engine(&runner, state_store.clone(), three_disks()).with_priority(SyncPriority::Background);
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     engine.expand(expand_req(vec![new_disk])).unwrap();
     let mark = runner.get_recorded().len();
@@ -2194,7 +2483,7 @@ fn tick_active_reshapes_uses_the_bands_own_persisted_priority_not_the_engines_de
     // background` invocation.
     let tick_engine =
         OrchestrationEngine::new(&runner, state_store.clone()).with_confirm_sink(&ALWAYS_CONFIRM);
-    let ticked = tick_engine.tick_active_reshapes().unwrap();
+    let ticked = tick_engine.tick_active_sync().unwrap();
     assert_eq!(ticked, 1);
 
     let cmds = &runner.get_recorded()[mark..];
@@ -2204,9 +2493,9 @@ fn tick_active_reshapes_uses_the_bands_own_persisted_priority_not_the_engines_de
         .collect();
     assert_eq!(writes.len(), 1, "{cmds:?}");
     assert!(
-        writes[0].contains("14000"),
-        "the tick must apply BACKGROUND's profile (20000 * 0.7 = 14000), not balanced's \
-         (100000 * 0.7 = 70000) which is what today's bug (no persisted priority, tick \
+        writes[0].contains("42000"),
+        "the tick must apply BACKGROUND's profile (60000 * 0.7 = 42000), not balanced's \
+         (150000 * 0.7 = 105000) which is what today's bug (no persisted priority, tick \
          defaults to Balanced) would write: {writes:?}"
     );
 }
@@ -2218,16 +2507,16 @@ fn tick_active_reshapes_uses_the_bands_own_persisted_priority_not_the_engines_de
 /// the thresholds specifically (not the ceiling, which the earlier test above
 /// already covers): an injected sample is healthy on every emergency-brake
 /// axis (temperature, SMART) but has `cpu_load` over BALANCED's 0.85
-/// decelerate threshold. `max`'s own thresholds are infinite for
-/// cpu_load/io_wait/latency, so a band persisted as `max` must `Hold` (no
-/// kernel write at all); under the bug it would `Decrease(0.7)` instead.
+/// decelerate threshold. `max`'s own thresholds are saturating for
+/// cpu_load/io_wait/latency, so a band persisted as `max` stays at its
+/// unbounded ceiling (no kernel write at all); under the bug it would
+/// `Decrease(0.7)` instead.
 #[test]
-fn tick_active_reshapes_uses_the_bands_own_persisted_priority_for_decision_thresholds_too() {
+fn tick_active_sync_uses_the_bands_own_persisted_priority_for_decision_thresholds_too() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::reshaping();
-    let engine =
-        seeded_engine(&runner, state_store.clone(), three_disks()).with_priority(ReshapePriority::Max);
+    let engine = seeded_engine(&runner, state_store.clone(), three_disks()).with_priority(SyncPriority::Max);
     let new_disk = resolved_disk("ata-DISK4", "sde", 4_000_000_000_000);
     engine.expand(expand_req(vec![new_disk])).unwrap();
     let mark = runner.get_recorded().len();
@@ -2242,15 +2531,19 @@ fn tick_active_reshapes_uses_the_bands_own_persisted_priority_for_decision_thres
     // readable -- otherwise the "unknown must decelerate" rule, not the
     // priority profile, would be what's under test here, proving nothing.
     assert_eq!(
-        ReshapeThrottle::new(ReshapePriority::Balanced.thresholds(), &over_balanced_cpu).tick(),
+        ReshapeThrottle::new(SyncPriority::Balanced, &over_balanced_cpu)
+            .tick()
+            .decision,
         ThrottleDecision::Decrease(0.7),
         "test premise broken: this sample must decelerate under Balanced for the bug to be \
          observable at all"
     );
     assert_eq!(
-        ReshapeThrottle::new(ReshapePriority::Max.thresholds(), &over_balanced_cpu).tick(),
-        ThrottleDecision::Hold,
-        "test premise broken: this same sample must hold under Max's own thresholds"
+        ReshapeThrottle::new(SyncPriority::Max, &over_balanced_cpu)
+            .tick()
+            .decision,
+        ThrottleDecision::Increase(1.2),
+        "test premise broken: this same sample must not brake under Max's own thresholds"
     );
 
     // A brand-new engine, built exactly like the CLI's `ReshapeThrottleTick`
@@ -2259,7 +2552,7 @@ fn tick_active_reshapes_uses_the_bands_own_persisted_priority_for_decision_thres
     let tick_engine = OrchestrationEngine::new(&runner, state_store)
         .with_confirm_sink(&ALWAYS_CONFIRM)
         .with_metrics_sampler(&over_balanced_cpu);
-    let ticked = tick_engine.tick_active_reshapes().unwrap();
+    let ticked = tick_engine.tick_active_sync().unwrap();
     assert_eq!(ticked, 1);
 
     let cmds = &runner.get_recorded()[mark..];
@@ -3798,12 +4091,7 @@ fn state_with_md_numbers(numbers: impl IntoIterator<Item = u32>) -> StateFile {
             md_uuid: None,
             member_partitions: vec![],
             usable_bytes: 0,
-            resize_pending: false,
-            last_smart_reallocated: None,
-            last_scrub: None,
-            scrub_in_progress: false,
-            pending_member_removal: None,
-            reshape_priority: None,
+            ..Default::default()
         })
         .collect();
     StateFile::new(vec![ArrayState {
@@ -4420,13 +4708,13 @@ fn scrub_start_without_a_priority_touches_no_kernel_speed_limit() {
 /// behind) can be told to run at a profile's speed. The write has to land
 /// BEFORE the `check` write, or the first stripes are read under the old cap.
 #[test]
-fn scrub_start_with_a_priority_writes_that_ceiling_before_starting_the_check() {
+fn scrub_start_with_a_priority_writes_both_limits_before_starting_the_check() {
     let dir = tempdir().unwrap();
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::with_speed_limit(200_000);
     let engine = seeded_engine(&runner, state_store.clone(), three_disks());
 
-    engine.scrub_start(None, Some(ReshapePriority::Max)).unwrap();
+    engine.scrub_start(None, Some(SyncPriority::Max)).unwrap();
 
     let cmds = runner.get_recorded();
     let speed_pos = cmds
@@ -4438,22 +4726,24 @@ fn scrub_start_with_a_priority_writes_that_ceiling_before_starting_the_check() {
         .position(|c| c == "sh -c echo check > /sys/block/md0/md/sync_action")
         .expect("the scrub itself must still be started");
     assert!(
-        cmds[speed_pos].contains(&RESHAPE_SPEED_CEILING_KB.to_string()),
-        "must write MAX's own ceiling: {:?}",
+        cmds[speed_pos].contains(&UNBOUNDED_SPEED_KB.to_string()),
+        "must write MAX's own unbounded sentinel: {:?}",
         cmds[speed_pos]
     );
     assert!(
         speed_pos < check_pos,
         "the ceiling must be in place before the check starts: {cmds:?}"
     );
-    // Only `speed_limit_max`. Raising `speed_limit_min` would take bandwidth
-    // from everyday file access under contention rather than merely
-    // permitting the scrub to use more when the disks are free.
+    // D1: the floor too. The kernel reduces the sync rate toward
+    // `speed_limit_min` whenever non-sync IO touches the members, so writing
+    // only a ceiling is why `--priority max` was throttled anyway.
+    let floor_pos = cmds
+        .iter()
+        .position(|c| c.starts_with("sh -c") && c.contains("speed_limit_min"))
+        .expect("--priority must write the floor as well as the ceiling");
     assert!(
-        !cmds
-            .iter()
-            .any(|c| c.starts_with("sh -c") && c.contains("speed_limit_min")),
-        "a scrub priority must not raise the floor, only the ceiling: {cmds:?}"
+        cmds[floor_pos].contains(&UNBOUNDED_SPEED_KB.to_string()) && floor_pos < check_pos,
+        "max's floor must be the same sentinel, in place before the check starts: {cmds:?}"
     );
     assert_eq!(
         state_store.load().unwrap().unwrap().saved_speed_limit_max_kb,
@@ -4479,7 +4769,7 @@ fn a_later_operation_never_overwrites_an_already_saved_speed_limit() {
     state.saved_speed_limit_max_kb = Some(250_000);
     state_store.save(&state).unwrap();
 
-    engine.scrub_start(None, Some(ReshapePriority::Max)).unwrap();
+    engine.scrub_start(None, Some(SyncPriority::Max)).unwrap();
 
     assert_eq!(
         state_store.load().unwrap().unwrap().saved_speed_limit_max_kb,
@@ -4865,10 +5155,13 @@ fn reconcile_does_not_probe_scrub_status_for_a_group_that_was_never_scrubbed() {
     let state_store = Arc::new(StateStore::new(dir.path().join("state.toml")));
     let runner = FailingRunner::healthy();
     let engine = seeded_engine(&runner, state_store, three_disks());
+    // From here on only, so `create`'s own "is this band's post-create
+    // resync running" read isn't counted as a reconcile probe.
+    let mark = runner.get_recorded().len();
 
     engine.reconcile().unwrap();
 
-    let cmds = runner.get_recorded();
+    let cmds = &runner.get_recorded()[mark..];
     assert!(
         !cmds
             .iter()
@@ -7052,7 +7345,13 @@ fn destroy_removes_only_the_target_groups_scrub_unit_leaving_other_groups_units_
     // function (`scrub_unit_paths`) `write_scrub_timer_units` uses, not a
     // second, independently-hand-rolled naming scheme that could drift.
     let state = state_store.load().unwrap().unwrap();
-    write_scrub_timer_units(&unit_dir, &state, std::path::Path::new("/usr/local/bin/shr-rs")).unwrap();
+    write_scrub_timer_units(
+        &unit_dir,
+        &state,
+        std::path::Path::new("/usr/local/bin/shr-rs"),
+        None,
+    )
+    .unwrap();
     let (shr1_service, shr1_timer) = scrub_unit_paths(&unit_dir, "shr1");
     let (shr2_service, shr2_timer) = scrub_unit_paths(&unit_dir, "shr2");
     assert!(shr1_service.exists() && shr1_timer.exists() && shr2_service.exists() && shr2_timer.exists());
@@ -7535,7 +7834,7 @@ fn enoent_from_a_different_program_still_aborts_the_tick() {
     let runner = NonCatEnoentRunner::new();
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
-    let err = engine.tick_active_reshapes().unwrap_err();
+    let err = engine.tick_active_sync().unwrap_err();
     assert!(
         format!("{err}").contains("No such file or directory"),
         "an ENOENT-shaped message from a non-cat program must still be reported, not silently skipped: {err}"
@@ -7570,7 +7869,7 @@ fn a_missing_arrays_band_is_skipped_and_a_later_reshaping_bands_band_is_still_ti
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
     let ticked = engine
-        .tick_active_reshapes()
+        .tick_active_sync()
         .expect("a missing array on one band must not abort the whole throttle tick");
 
     assert_eq!(
@@ -7615,7 +7914,7 @@ fn a_non_enoent_sync_action_failure_still_aborts_the_tick_instead_of_being_swall
     let runner = PermissionDeniedRunner::new();
     let engine = OrchestrationEngine::new(&runner, state_store).with_confirm_sink(&ALWAYS_CONFIRM);
 
-    let err = engine.tick_active_reshapes().unwrap_err();
+    let err = engine.tick_active_sync().unwrap_err();
     assert!(
         format!("{err}").to_lowercase().contains("permission denied"),
         "a genuine, non-ENOENT sync_action failure must still be reported, not silently skipped: {err}"
@@ -7910,7 +8209,7 @@ fn degraded_unparseable_is_not_reported_as_array_not_assembled() {
 /// not be swallowed into "not assembled" -- the twin of the guard
 /// above (`a_non_enoent_sync_action_failure_still_aborts_the_tick_
 /// instead_of_being_swallowed`), applied to `scrub_start` instead of
-/// `tick_active_reshapes`.
+/// `tick_active_sync`.
 #[test]
 fn sync_action_permission_denied_is_not_reported_as_array_not_assembled() {
     let dir = tempdir().unwrap();
